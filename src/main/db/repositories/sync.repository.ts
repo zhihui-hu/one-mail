@@ -1,0 +1,167 @@
+import { getDatabase, toNumber, toOptionalString } from '../connection'
+import type { SyncStatus } from '../../ipc/types'
+import { syncAccountMailbox } from '../../mail/imap-sync'
+
+type SyncRunRow = {
+  account_id: number | null
+  started_at: string
+}
+
+export type AccountSyncResult = {
+  accountId: number
+  scannedCount: number
+  insertedCount: number
+  updatedCount: number
+}
+
+const activeAccountSyncs = new Map<number, Promise<AccountSyncResult>>()
+
+export async function startSync(accountIds: number[]): Promise<SyncStatus> {
+  const db = getDatabase()
+  const startedAt = new Date().toISOString()
+  markStaleRunningSyncsFailed()
+
+  if (accountIds.length === 0) {
+    const rows = db
+      .prepare<{
+        account_id: number
+      }>('SELECT account_id FROM onemail_mail_accounts WHERE sync_enabled = 1')
+      .all()
+    const results = await Promise.allSettled(
+      rows.map((row) => syncAccountNow(toNumber(row.account_id), startedAt))
+    )
+    const failures = results.filter((result) => result.status === 'rejected')
+    if (failures.length === rows.length && failures.length > 0) {
+      throw formatSyncFailure(failures[0].reason)
+    }
+  } else {
+    await Promise.all(accountIds.map((accountId) => syncAccountNow(accountId, startedAt)))
+  }
+
+  return getSyncStatus()
+}
+
+export function syncAccountNow(
+  accountId: number,
+  startedAt = new Date().toISOString()
+): Promise<AccountSyncResult> {
+  const existingSync = activeAccountSyncs.get(accountId)
+  if (existingSync) return existingSync
+
+  const syncPromise = syncSingleAccount(accountId, startedAt).finally(() => {
+    if (activeAccountSyncs.get(accountId) === syncPromise) {
+      activeAccountSyncs.delete(accountId)
+    }
+  })
+  activeAccountSyncs.set(accountId, syncPromise)
+
+  return syncPromise
+}
+
+function formatSyncFailure(error: unknown): Error {
+  return error instanceof Error ? error : new Error('同步账号失败。')
+}
+
+export function getSyncStatus(): SyncStatus {
+  markStaleRunningSyncsFailed()
+  const rows = getDatabase()
+    .prepare<SyncRunRow>(
+      `
+      SELECT account_id, started_at
+      FROM onemail_sync_runs
+      WHERE status = 'running'
+      ORDER BY started_at DESC
+      `
+    )
+    .all()
+
+  const accountIds = rows
+    .map((row) => (row.account_id === null ? undefined : toNumber(row.account_id)))
+    .filter((accountId): accountId is number => accountId !== undefined)
+
+  return {
+    running: rows.length > 0,
+    accountIds,
+    lastStartedAt: toOptionalString(rows[0]?.started_at)
+  }
+}
+
+function markStaleRunningSyncsFailed(): void {
+  getDatabase()
+    .prepare(
+      `
+      UPDATE onemail_sync_runs
+      SET status = 'failed',
+          error_count = CASE WHEN error_count = 0 THEN 1 ELSE error_count END,
+          error_message = COALESCE(error_message, '同步被新的同步任务重置。'),
+          finished_at = COALESCE(finished_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      WHERE status = 'running'
+        AND datetime(started_at) < datetime('now', '-5 minutes')
+      `
+    )
+    .run()
+}
+
+async function syncSingleAccount(accountId: number, startedAt: string): Promise<AccountSyncResult> {
+  const db = getDatabase()
+  const result = db
+    .prepare(
+      `
+      INSERT INTO onemail_sync_runs (account_id, sync_kind, status, started_at)
+      VALUES (:accountId, 'message_headers', 'running', :startedAt)
+      `
+    )
+    .run({ accountId, startedAt })
+  const syncRunId = Number(result.lastInsertRowid)
+
+  db.prepare(
+    `
+    UPDATE onemail_mail_accounts
+    SET status = 'syncing', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE account_id = :accountId
+    `
+  ).run({ accountId })
+
+  try {
+    const stats = await syncAccountMailbox(accountId)
+    db.prepare(
+      `
+      UPDATE onemail_sync_runs
+      SET status = 'success',
+          scanned_count = :scannedCount,
+          inserted_count = :insertedCount,
+          updated_count = :updatedCount,
+          finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE sync_run_id = :syncRunId
+      `
+    ).run({
+      syncRunId,
+      scannedCount: stats.scannedCount,
+      insertedCount: stats.insertedCount,
+      updatedCount: stats.updatedCount
+    })
+    return { accountId, ...stats }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '同步账号失败。'
+    db.prepare(
+      `
+      UPDATE onemail_sync_runs
+      SET status = 'failed',
+          error_count = 1,
+          error_message = :message,
+          finished_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE sync_run_id = :syncRunId
+      `
+    ).run({ syncRunId, message })
+    db.prepare(
+      `
+      UPDATE onemail_mail_accounts
+      SET status = 'sync_error',
+          last_error = :message,
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE account_id = :accountId
+    `
+    ).run({ accountId, message })
+    throw error
+  }
+}
