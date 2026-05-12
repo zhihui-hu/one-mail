@@ -8,6 +8,7 @@ export type AccountStatus =
 export type AuthType = 'oauth2' | 'app_password' | 'password' | 'bridge' | 'manual'
 export type ImapSecurity = 'ssl_tls' | 'starttls' | 'none'
 export type CredentialState = 'pending' | 'stored' | 'invalid' | 'expired' | 'revoked'
+export type OAuthAuthorizationMode = 'internal_browser' | 'copy_link'
 
 export type MailAccount = {
   accountId: number
@@ -32,6 +33,7 @@ export type AccountCreateInput = {
   password?: string
   accountLabel?: string
   authType: AuthType
+  oauthAuthorizationMode?: OAuthAuthorizationMode
   imapHost: string
   imapPort: number
   imapSecurity: ImapSecurity

@@ -1,5 +1,5 @@
-appId: com.huzhihui.app
-productName: onemail
+appId: com.huzhihui.onemail
+productName: OneMail
 directories:
   buildResources: build
 files:
@@ -12,7 +12,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: onemail
+  executableName: OneMail
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
@@ -33,11 +33,13 @@ linux:
     - AppImage
     - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: huzhihui.com
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: zhihui-hu
+  repo: one-mail
+  releaseType: release

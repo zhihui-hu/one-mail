@@ -24,7 +24,7 @@ export function registerAccountIpc(): void {
     let oauthToken: Awaited<ReturnType<typeof authorizeMicrosoftAccount>>['token'] | undefined
 
     if (input.authType === 'oauth2') {
-      const authorization = await authorizeMicrosoftAccount()
+      const authorization = await authorizeMicrosoftAccount(input.oauthAuthorizationMode)
       oauthToken = authorization.token
       nextInput = {
         ...input,

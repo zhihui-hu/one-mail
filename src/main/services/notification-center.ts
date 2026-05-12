@@ -1,4 +1,4 @@
-import { BrowserWindow, Notification } from 'electron'
+import { BrowserWindow, Notification, shell } from 'electron'
 import { getAccount } from '../db/repositories/account.repository'
 import { listRecentNotificationMessages } from '../db/repositories/message.repository'
 import type { MailboxChangedEvent, NewMailNotification, NotificationStatus } from '../ipc/types'
@@ -38,8 +38,13 @@ export function notifyNewMail({
     notifiedAt: new Date().toISOString()
   }
 
+  playNotificationSound()
   broadcastNewMail(notification)
   showDesktopNotification(notification)
+}
+
+function playNotificationSound(): void {
+  shell.beep()
 }
 
 function broadcastNewMail(notification: NewMailNotification): void {

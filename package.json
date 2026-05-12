@@ -1,9 +1,19 @@
 {
   "name": "onemail",
-  "version": "1.0.0",
-  "description": "An Electron application with React and TypeScript",
+  "version": "26.512.1857",
+  "description": "本地优先的多账号桌面邮件客户端，支持 IMAP 同步、安全 HTML 预览、附件下载与 SQLite 备份。",
+  "keywords": [
+    "OneMail",
+    "email",
+    "mail-client",
+    "desktop-email",
+    "imap",
+    "sqlite",
+    "本地邮件客户端",
+    "桌面邮件客户端"
+  ],
   "main": "./out/main/index.js",
-  "author": "example.com",
+  "author": "Huzhihui",
   "homepage": "https://onemail.huzhihui.com",
   "scripts": {
     "format": "prettier --write .",

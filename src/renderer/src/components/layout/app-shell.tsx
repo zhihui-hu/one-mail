@@ -213,7 +213,9 @@ export function AppShell(): React.JSX.Element {
       startedAt,
       message:
         input.authType === 'oauth2'
-          ? '正在打开 Microsoft 授权...'
+          ? input.oauthAuthorizationMode === 'copy_link'
+            ? 'Microsoft 授权链接已复制，请在浏览器中打开并完成授权...'
+            : '正在打开 OneMail 内置 Microsoft 授权窗口...'
           : `正在验证并保存 ${accountLabel}...`
     })
     try {
@@ -519,29 +521,26 @@ export function AppShell(): React.JSX.Element {
     [downloadingAttachmentIds]
   )
 
-  const markMessageReadOnOpen = React.useCallback(
-    (message: Message): void => {
-      if (!message.unread || markingReadMessageIdsRef.current.has(message.id)) return
+  const markMessageReadOnOpen = React.useCallback((message: Message): void => {
+    if (!message.unread || markingReadMessageIdsRef.current.has(message.id)) return
 
-      markingReadMessageIdsRef.current.add(message.id)
-      setError(null)
+    markingReadMessageIdsRef.current.add(message.id)
+    setError(null)
 
-      void setMessageReadState(message.messageId, true)
-        .then(async () => {
-          setMessages((current) =>
-            current.map((item) => (item.id === message.id ? { ...item, unread: false } : item))
-          )
-          await refreshVisibleMailbox(message.accountId)
-        })
-        .catch((readStateError) => {
-          setError(readStateError instanceof Error ? readStateError.message : '同步已读状态失败。')
-        })
-        .finally(() => {
-          markingReadMessageIdsRef.current.delete(message.id)
-        })
-    },
-    [refreshVisibleMailbox]
-  )
+    void setMessageReadState(message.messageId, true)
+      .then(() => {
+        setMessages((current) =>
+          current.map((item) => (item.id === message.id ? { ...item, unread: false } : item))
+        )
+        setAccounts((current) => decrementUnreadCount(current, message.accountId))
+      })
+      .catch((readStateError) => {
+        setError(readStateError instanceof Error ? readStateError.message : '同步已读状态失败。')
+      })
+      .finally(() => {
+        markingReadMessageIdsRef.current.delete(message.id)
+      })
+  }, [])
 
   function handleSelectMessage(messageId: string): void {
     setSelectedMessageId(messageId)
@@ -552,6 +551,8 @@ export function AppShell(): React.JSX.Element {
 
   React.useEffect(() => {
     if (!selectedMessage || loading) return
+
+    markMessageReadOnOpen(selectedMessage)
 
     const timer = window.setTimeout(() => {
       if (!selectedMessage.detailLoaded) {
@@ -571,6 +572,7 @@ export function AppShell(): React.JSX.Element {
     loading,
     loadingBodyMessageId,
     loadingMessageId,
+    markMessageReadOnOpen,
     selectedMessage
   ])
 
@@ -737,6 +739,16 @@ function getNextSelectedAccountId(
     return currentAccountId
   }
   return accounts.find((account) => account.id === 'all')?.id ?? accounts[0]?.id ?? ''
+}
+
+function decrementUnreadCount(accounts: Account[], accountId: number): Account[] {
+  return accounts.map((account) => {
+    if (account.id !== 'all' && account.accountId !== accountId) return account
+    return {
+      ...account,
+      unread: Math.max(0, account.unread - 1)
+    }
+  })
 }
 
 function NoAccountsBody({

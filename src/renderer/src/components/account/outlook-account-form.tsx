@@ -16,8 +16,8 @@ export function OutlookAccountForm({ form }: OutlookAccountFormProps): React.JSX
       <Alert>
         <AlertTitle>使用 Microsoft 登录</AlertTitle>
         <AlertDescription>
-          点击下方按钮后会打开浏览器完成 Microsoft 授权，OneMail 会自动读取授权账号邮箱并使用 OAuth2
-          + IMAP XOAUTH2 访问邮箱。
+          点击下方按钮后会打开 OneMail 内置授权窗口；也可以复制授权链接，自己打开浏览器完成
+          Microsoft 授权。OneMail 会自动读取授权账号邮箱并使用 OAuth2 + IMAP XOAUTH2 访问邮箱。
         </AlertDescription>
       </Alert>
 

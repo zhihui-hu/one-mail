@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { closeDatabase, initializeDatabase } from './db/connection'
 import { registerIpcHandlers } from './ipc'
+import { startAutoUpdateChecks, stopAutoUpdateChecks } from './services/auto-update'
 import { startMailboxWatchers, stopMailboxWatchers } from './services/mailbox-watch'
 
 function createWindow(): void {
@@ -13,6 +14,7 @@ function createWindow(): void {
     height: 760,
     minWidth: 920,
     minHeight: 620,
+    title: 'OneMail',
     show: false,
     autoHideMenuBar: true,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
@@ -47,10 +49,11 @@ function createWindow(): void {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('com.huzhihui.onemail')
   initializeDatabase()
   registerIpcHandlers()
   startMailboxWatchers()
+  startAutoUpdateChecks()
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
@@ -78,6 +81,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  stopAutoUpdateChecks()
   stopMailboxWatchers()
   closeDatabase()
 })

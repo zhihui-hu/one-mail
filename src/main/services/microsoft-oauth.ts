@@ -1,9 +1,10 @@
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow, clipboard } from 'electron'
 import { createHash, randomBytes } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import http from 'node:http'
 import { join } from 'node:path'
 import { URLSearchParams } from 'node:url'
+import type { OAuthAuthorizationMode } from '../../shared/types'
 import { saveOAuthToken, readOAuthToken, type OAuthTokenPayload } from './oauth-token-store'
 
 type MicrosoftTokenResponse = {
@@ -30,12 +31,14 @@ const MICROSOFT_AUTHORITY = 'https://login.microsoftonline.com/common/oauth2/v2.
 const MICROSOFT_SCOPES = ['offline_access', 'https://outlook.office.com/IMAP.AccessAsUser.All']
 const TOKEN_REFRESH_SKEW_MS = 2 * 60 * 1000
 
-export async function authorizeMicrosoftAccount(): Promise<MicrosoftAuthorizationSession> {
+export async function authorizeMicrosoftAccount(
+  mode: OAuthAuthorizationMode = 'internal_browser'
+): Promise<MicrosoftAuthorizationSession> {
   const clientId = getMicrosoftClientId()
   const verifier = base64Url(randomBytes(48))
   const challenge = base64Url(createHash('sha256').update(verifier).digest())
   const state = base64Url(randomBytes(24))
-  const authorization = await waitForMicrosoftAuthorization(clientId, challenge, state)
+  const authorization = await waitForMicrosoftAuthorization(clientId, challenge, state, mode)
   const token = await requestMicrosoftToken({
     clientId,
     code: authorization.code,
@@ -91,10 +94,28 @@ function readLocalEnvClientId(): string | undefined {
 function waitForMicrosoftAuthorization(
   clientId: string,
   codeChallenge: string,
-  state: string
+  state: string,
+  mode: OAuthAuthorizationMode
 ): Promise<AuthorizationResult> {
   return new Promise((resolve, reject) => {
     let redirectUri = ''
+    let authWindow: BrowserWindow | undefined
+    let settled = false
+
+    function settleReject(error: Error): void {
+      if (settled) return
+      settled = true
+      cleanup()
+      reject(error)
+    }
+
+    function settleResolve(result: AuthorizationResult): void {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve(result)
+    }
+
     const server = http.createServer((request, response) => {
       const host = request.headers.host
       const url = new URL(request.url ?? '/', `http://${host}`)
@@ -109,16 +130,14 @@ function waitForMicrosoftAuthorization(
       if (error) {
         response.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' })
         response.end('<h1>OneMail Microsoft 登录失败</h1><p>可以关闭此窗口。</p>')
-        cleanup()
-        reject(new Error(url.searchParams.get('error_description') ?? error))
+        settleReject(new Error(url.searchParams.get('error_description') ?? error))
         return
       }
 
       if (url.searchParams.get('state') !== state) {
         response.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' })
         response.end('<h1>OneMail Microsoft 登录失败</h1><p>state 校验失败。</p>')
-        cleanup()
-        reject(new Error('Microsoft OAuth state 校验失败。'))
+        settleReject(new Error('Microsoft OAuth state 校验失败。'))
         return
       }
 
@@ -126,21 +145,18 @@ function waitForMicrosoftAuthorization(
       if (!code) {
         response.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' })
         response.end('<h1>OneMail Microsoft 登录失败</h1><p>没有收到授权码。</p>')
-        cleanup()
-        reject(new Error('Microsoft OAuth 未返回授权码。'))
+        settleReject(new Error('Microsoft OAuth 未返回授权码。'))
         return
       }
 
       response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
       response.end('<h1>OneMail Microsoft 登录成功</h1><p>可以关闭此窗口并返回 OneMail。</p>')
-      cleanup()
-      resolve({ code, redirectUri })
+      settleResolve({ code, redirectUri })
     })
 
     const timeout = setTimeout(
       () => {
-        cleanup()
-        reject(new Error('Microsoft 登录超时，请重试。'))
+        settleReject(new Error('Microsoft 登录超时，请重试。'))
       },
       5 * 60 * 1000
     )
@@ -148,6 +164,10 @@ function waitForMicrosoftAuthorization(
     function cleanup(): void {
       clearTimeout(timeout)
       server.close()
+      if (authWindow && !authWindow.isDestroyed()) {
+        authWindow.close()
+      }
+      authWindow = undefined
     }
 
     server.listen(0, '127.0.0.1', () => {
@@ -164,17 +184,47 @@ function waitForMicrosoftAuthorization(
       })
       const authorizationUrl = `${MICROSOFT_AUTHORITY}/authorize?${params.toString()}`
 
-      void shell.openExternal(authorizationUrl).catch(() => {
-        const window = new BrowserWindow({ width: 980, height: 720, show: true })
-        void window.loadURL(authorizationUrl)
+      if (mode === 'copy_link') {
+        clipboard.writeText(authorizationUrl)
+        return
+      }
+
+      authWindow = createMicrosoftAuthorizationWindow()
+      authWindow.on('closed', () => {
+        authWindow = undefined
+        settleReject(new Error('Microsoft 授权窗口已关闭。'))
       })
+      void authWindow.loadURL(authorizationUrl)
     })
 
     server.on('error', (error) => {
-      cleanup()
-      reject(error)
+      settleReject(error)
     })
   })
+}
+
+function createMicrosoftAuthorizationWindow(): BrowserWindow {
+  const authWindow = new BrowserWindow({
+    width: 980,
+    height: 720,
+    minWidth: 720,
+    minHeight: 560,
+    show: true,
+    autoHideMenuBar: true,
+    title: 'Microsoft 授权 - OneMail',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true
+    }
+  })
+
+  authWindow.webContents.setWindowOpenHandler(({ url }) => {
+    void authWindow.loadURL(url)
+    return { action: 'deny' }
+  })
+
+  return authWindow
 }
 
 async function requestMicrosoftToken({
