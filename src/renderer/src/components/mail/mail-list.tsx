@@ -1,15 +1,19 @@
 import * as React from 'react'
-import { Paperclip, Star } from 'lucide-react'
+import { Paperclip, Search, Star, X } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { formatAbsoluteTime, formatRelativeTime } from '@renderer/components/mail/date-format'
+import { EllipsisTooltip } from '@renderer/components/mail/ellipsis-tooltip'
 import { MailFilterTags } from '@renderer/components/mail/mail-filter-tags'
 import type { Account, MailFilterTag, Message } from '@renderer/components/mail/types'
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from '@renderer/components/ui/tooltip'
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput
+} from '@renderer/components/ui/input-group'
+import { Spinner } from '@renderer/components/ui/spinner'
+import { TooltipProvider } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
 
 type MailListProps = {
@@ -17,10 +21,15 @@ type MailListProps = {
   messages: Message[]
   selectedMessageId: string
   filters: MailFilterTag[]
+  searchKeyword: string
   loading?: boolean
+  loadingMore?: boolean
+  hasMore?: boolean
   error?: string | null
   onSelectMessage: (messageId: string) => void
   onChangeFilters: (filters: MailFilterTag[]) => void
+  onChangeSearchKeyword: (keyword: string) => void
+  onLoadMore: () => void
 }
 
 export function MailList({
@@ -28,13 +37,40 @@ export function MailList({
   messages,
   selectedMessageId,
   filters,
+  searchKeyword,
   loading = false,
+  loadingMore = false,
+  hasMore = false,
   error,
   onSelectMessage,
-  onChangeFilters
+  onChangeFilters,
+  onChangeSearchKeyword,
+  onLoadMore
 }: MailListProps): React.JSX.Element {
+  const scrollContainerRef = React.useRef<HTMLDivElement | null>(null)
   const messageCount =
-    filters.length > 0 ? messages.length : (account.messageCount ?? messages.length)
+    filters.length > 0 || searchKeyword.trim()
+      ? messages.length
+      : (account.messageCount ?? messages.length)
+
+  const handleScroll = React.useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      if (loading || loadingMore || !hasMore) return
+
+      const element = event.currentTarget
+      const remaining = element.scrollHeight - element.scrollTop - element.clientHeight
+      if (remaining <= 240) onLoadMore()
+    },
+    [hasMore, loading, loadingMore, onLoadMore]
+  )
+
+  React.useEffect(() => {
+    const element = scrollContainerRef.current
+    if (!element || loading || loadingMore || !hasMore || messages.length === 0) return
+
+    const canScroll = element.scrollHeight > element.clientHeight
+    if (!canScroll) onLoadMore()
+  }, [hasMore, loading, loadingMore, messages.length, onLoadMore])
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col bg-background">
@@ -47,12 +83,39 @@ export function MailList({
             </p>
           </div>
         </div>
-        <div className="app-no-drag px-4 pb-1.5">
+        <div className="app-no-drag flex flex-col gap-2 px-4 pb-2">
+          <InputGroup>
+            <InputGroupAddon>
+              <Search aria-hidden="true" />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              value={searchKeyword}
+              onChange={(event) => onChangeSearchKeyword(event.target.value)}
+              placeholder="搜索邮件"
+              aria-label="搜索邮件"
+            />
+            {searchKeyword ? (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  size="icon-xs"
+                  aria-label="清空搜索"
+                  onClick={() => onChangeSearchKeyword('')}
+                >
+                  <X aria-hidden="true" />
+                </InputGroupButton>
+              </InputGroupAddon>
+            ) : null}
+          </InputGroup>
           <MailFilterTags value={filters} onValueChange={onChangeFilters} />
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div
+        ref={scrollContainerRef}
+        className="min-h-0 flex-1 overflow-auto"
+        onScroll={handleScroll}
+      >
         <TooltipProvider>
           {loading ? (
             <ListState>正在加载本地邮箱数据...</ListState>
@@ -68,14 +131,44 @@ export function MailList({
                   onSelect={() => onSelectMessage(message.id)}
                 />
               ))}
+              <LoadMoreState loading={loadingMore} hasMore={hasMore} />
             </div>
           ) : (
-            <ListState>当前邮箱暂无邮件。</ListState>
+            <ListState>
+              {searchKeyword.trim() ? '没有找到匹配的邮件。' : '当前邮箱暂无邮件。'}
+            </ListState>
           )}
         </TooltipProvider>
       </div>
     </div>
   )
+}
+
+function LoadMoreState({
+  loading,
+  hasMore
+}: {
+  loading: boolean
+  hasMore: boolean
+}): React.JSX.Element {
+  if (loading) {
+    return (
+      <div className="flex h-12 items-center justify-center gap-2 border-b px-4 text-xs text-muted-foreground">
+        <Spinner aria-hidden="true" />
+        <span>正在加载更多邮件...</span>
+      </div>
+    )
+  }
+
+  if (!hasMore) {
+    return (
+      <div className="flex h-10 items-center justify-center border-b px-4 text-xs text-muted-foreground">
+        已加载全部邮件
+      </div>
+    )
+  }
+
+  return <div className="h-4 border-b" aria-hidden="true" />
 }
 
 function MessageListItem({
@@ -92,13 +185,50 @@ function MessageListItem({
     message.fromAddress && message.fromAddress !== message.from
       ? `${message.from} · ${message.fromAddress}`
       : message.from
+  const preview = message.preview || '暂无预览。'
+  const verificationLabel = message.verificationCode
+    ? `验证码 ${message.verificationCode}`
+    : undefined
+  const secondLineTooltip = verificationLabel
+    ? `${verificationLabel} - ${message.subject}${message.preview ? ` - ${message.preview}` : ''}`
+    : `${message.subject}${message.preview ? ` - ${message.preview}` : ''}`
+
+  function handleSelectClick(event: React.MouseEvent<HTMLDivElement>): void {
+    if (hasSelectionInside(event.currentTarget)) return
+
+    onSelect()
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>): void {
+    if (event.target !== event.currentTarget) return
+    if (event.key !== 'Enter' && event.key !== ' ') return
+
+    event.preventDefault()
+    onSelect()
+  }
+
+  function handleCopyVerificationCode(event: React.MouseEvent<HTMLButtonElement>): void {
+    event.stopPropagation()
+    if (!message.verificationCode) return
+
+    void copyText(message.verificationCode)
+      .then(() => {
+        toast.success('验证码已复制')
+      })
+      .catch(() => {
+        toast.error('复制验证码失败')
+      })
+  }
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleSelectClick}
+      onKeyDown={handleKeyDown}
+      aria-selected={selected}
       className={cn(
-        'grid w-full grid-cols-[10px_minmax(0,1fr)] gap-2 border-b px-4 py-2 text-left outline-none transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring',
+        'grid w-full cursor-default grid-cols-[10px_minmax(0,1fr)] gap-2 border-b px-4 py-2 text-left outline-none transition-colors select-text hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring',
         selected && 'bg-secondary text-secondary-foreground'
       )}
     >
@@ -108,11 +238,11 @@ function MessageListItem({
           message.unread ? 'bg-primary' : 'bg-transparent'
         )}
       />
-      <span className="min-w-0">
+      <span className="min-w-0 select-text">
         <span className="flex min-w-0 items-center gap-1.5 text-xs">
           <EllipsisTooltip
             className={cn(
-              'min-w-0 flex-1 truncate text-foreground',
+              'min-w-0 flex-1 truncate text-foreground select-text',
               message.unread && 'font-semibold'
             )}
             tooltip={fromLabel}
@@ -129,78 +259,92 @@ function MessageListItem({
             {formatRelativeTime(message.receivedAt)}
           </span>
         </span>
-        <span className="mt-0.5 flex min-w-0 items-center gap-1 text-xs">
-          <EllipsisTooltip
-            className={cn('min-w-0 truncate font-medium', message.unread && 'font-semibold')}
-            tooltip={message.subject}
-          >
-            {message.subject}
-          </EllipsisTooltip>
-          <span className="shrink-0 text-muted-foreground">-</span>
-          <EllipsisTooltip
-            className="min-w-0 flex-1 truncate text-muted-foreground"
-            tooltip={message.preview || '暂无预览。'}
-          >
-            {message.preview || '暂无预览。'}
-          </EllipsisTooltip>
-        </span>
+        {verificationLabel ? (
+          <span className="mt-0.5 flex min-w-0 items-center gap-1 text-xs">
+            <span
+              className={cn('shrink-0 font-medium select-text', message.unread && 'font-semibold')}
+            >
+              验证码{' '}
+              <button
+                type="button"
+                className="cursor-copy bg-transparent p-0 text-foreground underline underline-offset-2 outline-none select-text hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                title="复制验证码"
+                aria-label={`复制验证码 ${message.verificationCode}`}
+                onClick={handleCopyVerificationCode}
+              >
+                {message.verificationCode}
+              </button>
+            </span>
+            <span className="shrink-0 text-muted-foreground">-</span>
+            <EllipsisTooltip
+              className={cn(
+                'min-w-0 flex-1 truncate text-muted-foreground select-text',
+                message.unread && 'font-semibold'
+              )}
+              tooltip={secondLineTooltip}
+            >
+              {message.subject}
+            </EllipsisTooltip>
+          </span>
+        ) : (
+          <span className="mt-0.5 flex min-w-0 items-center gap-1 text-xs">
+            <EllipsisTooltip
+              className={cn(
+                'min-w-0 truncate font-medium select-text',
+                message.unread && 'font-semibold'
+              )}
+              tooltip={message.subject}
+            >
+              {message.subject}
+            </EllipsisTooltip>
+            <span className="shrink-0 text-muted-foreground">-</span>
+            <EllipsisTooltip
+              className="min-w-0 flex-1 truncate text-muted-foreground select-text"
+              tooltip={preview}
+            >
+              {preview}
+            </EllipsisTooltip>
+          </span>
+        )}
       </span>
-    </button>
+    </div>
   )
 }
 
-function EllipsisTooltip({
-  children,
-  className,
-  tooltip
-}: {
-  children: React.ReactNode
-  className?: string
-  tooltip: string
-}): React.JSX.Element {
-  const textRef = React.useRef<HTMLSpanElement>(null)
-  const [isTruncated, setIsTruncated] = React.useState(false)
+function hasSelectionInside(element: HTMLElement): boolean {
+  const selection = window.getSelection()
+  if (!selection || selection.isCollapsed) return false
 
-  React.useEffect(() => {
-    const element = textRef.current
-    if (!element) return
-
-    let animationFrame = 0
-    const updateTruncation = (): void => {
-      animationFrame = 0
-      setIsTruncated(element.scrollWidth > element.clientWidth)
-    }
-    const scheduleUpdate = (): void => {
-      if (animationFrame) return
-      animationFrame = window.requestAnimationFrame(updateTruncation)
-    }
-    const resizeObserver = new ResizeObserver(scheduleUpdate)
-
-    resizeObserver.observe(element)
-    window.addEventListener('resize', scheduleUpdate)
-    scheduleUpdate()
-
-    return () => {
-      if (animationFrame) window.cancelAnimationFrame(animationFrame)
-      resizeObserver.disconnect()
-      window.removeEventListener('resize', scheduleUpdate)
-    }
-  }, [tooltip, children])
-
-  const text = (
-    <span ref={textRef} className={className}>
-      {children}
-    </span>
-  )
-
-  if (!isTruncated) return text
+  const anchorNode = selection.anchorNode
+  const focusNode = selection.focusNode
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>{text}</TooltipTrigger>
-      <TooltipContent className="max-w-80 whitespace-normal break-words">{tooltip}</TooltipContent>
-    </Tooltip>
+    (anchorNode !== null && element.contains(anchorNode)) ||
+    (focusNode !== null && element.contains(focusNode))
   )
+}
+
+async function copyText(value: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = value
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+
+  try {
+    if (!document.execCommand('copy')) {
+      throw new Error('Copy command failed.')
+    }
+  } finally {
+    document.body.removeChild(textarea)
+  }
 }
 
 function ListState({

@@ -237,6 +237,7 @@ function ProviderLogo({
     <span
       className={cn(
         'flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-md bg-background text-muted-foreground [&_img]:size-4 [&_img]:object-contain [&_svg]:size-4',
+        isUnifiedInbox && 'bg-transparent [&_img]:size-5 [&_img]:rounded-md [&_img]:object-cover',
         selected && 'text-foreground'
       )}
     >

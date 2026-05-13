@@ -1,11 +1,9 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Clipboard } from 'lucide-react'
 import * as React from 'react'
 import { useForm } from 'react-hook-form'
 
 import { ResponsiveDialog } from '@renderer/components/responsive-dialog'
 import { Button } from '@renderer/components/ui/button'
-import { ButtonGroup } from '@renderer/components/ui/button-group'
 import { FieldError, FieldGroup } from '@renderer/components/ui/field'
 import {
   Select,
@@ -15,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@renderer/components/ui/select'
-import type { AccountCreateInput, OAuthAuthorizationMode } from '../../../../shared/types'
+import type { AccountCreateInput } from '../../../../shared/types'
 import {
   accountSchema,
   defaultAccountFormValues,
@@ -37,14 +35,22 @@ type AddAccountDialogProps = {
   onSubmit: (input: AccountCreateInput) => Promise<void>
 }
 
-export function AddAccountDialog({
-  open,
-  onOpenChange,
-  onSubmit
-}: AddAccountDialogProps): React.JSX.Element {
+type AddAccountFormProps = {
+  onSubmit: (input: AccountCreateInput) => Promise<void>
+  onCancel: () => void
+  className?: string
+  bodyClassName?: string
+  footerClassName?: string
+}
+
+export function AddAccountForm({
+  onSubmit,
+  onCancel,
+  className = 'flex min-h-0 flex-col gap-3',
+  bodyClassName = 'flex flex-col gap-3',
+  footerClassName = 'flex flex-col-reverse gap-2 sm:flex-row sm:justify-end'
+}: AddAccountFormProps): React.JSX.Element {
   const [pending, setPending] = React.useState(false)
-  const [oauthMode, setOauthMode] = React.useState<OAuthAuthorizationMode>('internal_browser')
-  const oauthModeRef = React.useRef<OAuthAuthorizationMode>('internal_browser')
   const [error, setError] = React.useState<string | null>(null)
   const [kind, setKind] = React.useState<AccountKind>(defaultAccountFormValues.kind)
   const form = useForm<AccountFormValues>({
@@ -52,27 +58,6 @@ export function AddAccountDialog({
     defaultValues: defaultAccountFormValues,
     mode: 'onSubmit'
   })
-
-  React.useEffect(() => {
-    if (open) return
-    form.reset(defaultAccountFormValues)
-  }, [form, open])
-
-  function setOAuthAuthorizationMode(mode: OAuthAuthorizationMode): void {
-    oauthModeRef.current = mode
-    setOauthMode(mode)
-  }
-
-  function handleOpenChange(nextOpen: boolean): void {
-    if (pending && !nextOpen) return
-
-    if (!nextOpen) {
-      setError(null)
-      setOAuthAuthorizationMode('internal_browser')
-      setKind(defaultAccountFormValues.kind)
-    }
-    onOpenChange(nextOpen)
-  }
 
   function handleKindChange(nextKind: string): void {
     const preset = getProviderPreset(nextKind as AccountKind)
@@ -101,14 +86,13 @@ export function AddAccountDialog({
         password: values.password ? normalizePassword(values.password, preset.authType) : undefined,
         accountLabel: optionalText(values.accountLabel),
         authType: preset.authType,
-        oauthAuthorizationMode: preset.authType === 'oauth2' ? oauthModeRef.current : undefined,
+        oauthAuthorizationMode: preset.authType === 'oauth2' ? 'internal_browser' : undefined,
         imapHost:
           values.kind === 'custom' ? values.imapHost?.trim() || preset.imapHost : preset.imapHost,
         imapPort: values.kind === 'custom' ? values.imapPort : preset.imapPort,
         imapSecurity: values.kind === 'custom' ? values.imapSecurity : preset.imapSecurity
       })
       form.reset(defaultAccountFormValues)
-      setOAuthAuthorizationMode('internal_browser')
       setKind(defaultAccountFormValues.kind)
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : '保存账号失败。')
@@ -118,51 +102,12 @@ export function AddAccountDialog({
   }
 
   return (
-    <ResponsiveDialog
-      open={open}
-      onOpenChange={handleOpenChange}
-      title="添加账号"
-      contentClassName="max-h-[82vh] gap-3 p-4 sm:max-w-md"
-      bodyClassName="min-h-0 overflow-auto"
-      footer={
-        <>
-          <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={pending}>
-            取消
-          </Button>
-          {kind === 'outlook' ? (
-            <ButtonGroup>
-              <Button
-                type="submit"
-                form="add-account-form"
-                disabled={pending}
-                onClick={() => setOAuthAuthorizationMode('internal_browser')}
-              >
-                {pending ? '等待授权...' : '使用 Microsoft 登录'}
-              </Button>
-              <Button
-                type="submit"
-                form="add-account-form"
-                variant="outline"
-                disabled={pending}
-                onClick={() => setOAuthAuthorizationMode('copy_link')}
-              >
-                <Clipboard data-icon="inline-start" />
-                {pending && oauthMode === 'copy_link' ? '已复制，等待授权...' : '复制链接'}
-              </Button>
-            </ButtonGroup>
-          ) : (
-            <Button type="submit" form="add-account-form" disabled={pending}>
-              {pending ? '测试中...' : '保存账号'}
-            </Button>
-          )}
-        </>
-      }
+    <form
+      id="add-account-form"
+      className={className}
+      onSubmit={form.handleSubmit((values) => handleSubmit(values))}
     >
-      <form
-        id="add-account-form"
-        className="flex flex-col gap-3"
-        onSubmit={form.handleSubmit(handleSubmit)}
-      >
+      <div className={bodyClassName}>
         <AccountFormField id="account-kind" label="邮箱类型" required>
           <Select value={kind} onValueChange={handleKindChange} required>
             <SelectTrigger id="account-kind" aria-label="邮箱类型" className="w-full">
@@ -183,7 +128,49 @@ export function AddAccountDialog({
         <FieldGroup className="gap-2.5">{renderProviderForm(kind, form)}</FieldGroup>
 
         {error ? <FieldError>{error}</FieldError> : null}
-      </form>
+      </div>
+
+      <div className={footerClassName}>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
+          取消
+        </Button>
+        <Button type="submit" disabled={pending}>
+          {pending
+            ? kind === 'outlook'
+              ? '等待授权...'
+              : '测试中...'
+            : kind === 'outlook'
+              ? '使用 Microsoft 登录'
+              : '保存账号'}
+        </Button>
+      </div>
+    </form>
+  )
+}
+
+export function AddAccountDialog({
+  open,
+  onOpenChange,
+  onSubmit
+}: AddAccountDialogProps): React.JSX.Element {
+  function handleOpenChange(nextOpen: boolean): void {
+    onOpenChange(nextOpen)
+  }
+
+  return (
+    <ResponsiveDialog
+      open={open}
+      onOpenChange={handleOpenChange}
+      title="添加账号"
+      contentClassName="max-h-[82vh] gap-3 p-4 sm:max-w-md"
+      bodyClassName="min-h-0"
+    >
+      <AddAccountForm
+        key={open ? 'open' : 'closed'}
+        onSubmit={onSubmit}
+        onCancel={() => handleOpenChange(false)}
+        bodyClassName="min-h-0 overflow-auto"
+      />
     </ResponsiveDialog>
   )
 }

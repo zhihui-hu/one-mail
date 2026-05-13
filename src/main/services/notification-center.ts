@@ -59,14 +59,19 @@ function showDesktopNotification(notification: NewMailNotification): void {
   if (!Notification.isSupported()) return
 
   const firstMessage = notification.messages[0]
-  const sender = firstMessage?.fromName ?? firstMessage?.fromEmail ?? notification.accountLabel
+  const verificationMessage = notification.messages.find((message) => message.verificationCode)
+  const displayMessage = verificationMessage ?? firstMessage
+  const sender = displayMessage?.fromName ?? displayMessage?.fromEmail ?? notification.accountLabel
+  const verificationCode = verificationMessage?.verificationCode
   const title =
     notification.messageCount === 1
       ? firstMessage?.subject || '收到新邮件'
       : `收到 ${notification.messageCount} 封新邮件`
   const body =
-    notification.messageCount === 1
-      ? [sender, firstMessage?.snippet].filter(Boolean).join(' - ')
+    verificationCode
+      ? [sender, `验证码 ${verificationCode}`].filter(Boolean).join(' - ')
+      : notification.messageCount === 1
+        ? [sender, firstMessage?.snippet].filter(Boolean).join(' - ')
       : notification.accountLabel || notification.accountEmail || 'OneMail'
 
   new Notification({

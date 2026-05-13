@@ -15,11 +15,12 @@ type PasswordPayload = {
 }
 
 export function saveAccountPassword(accountId: number, input: AccountCreateInput): void {
-  if (!input.password) {
+  const password = normalizeAccountPassword(input)
+  if (!password) {
     throw new Error('请输入邮箱授权码或密码。')
   }
 
-  const encryptedPassword = encryptPassword(input.password)
+  const encryptedPassword = encryptPassword(password)
 
   getDatabase()
     .prepare(
@@ -33,6 +34,11 @@ export function saveAccountPassword(accountId: number, input: AccountCreateInput
       `
     )
     .run({ accountId, encryptedPassword })
+}
+
+function normalizeAccountPassword(input: AccountCreateInput): string {
+  const password = input.password?.trim() ?? ''
+  return input.authType === 'app_password' ? password.replace(/\s+/g, '') : password
 }
 
 export function readAccountPassword(accountId: number): string {

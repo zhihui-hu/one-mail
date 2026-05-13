@@ -6,6 +6,13 @@ const api = {
   accounts: {
     list: () => ipcRenderer.invoke('accounts/list'),
     create: (input) => ipcRenderer.invoke('accounts/create', input),
+    onCreated: (callback): (() => void) => {
+      const listener = (_event, event): void => callback(event)
+      ipcRenderer.on('accounts/created', listener)
+      return () => ipcRenderer.off('accounts/created', listener)
+    },
+    openAddWindow: () => ipcRenderer.invoke('accounts/openAddWindow'),
+    closeAddWindow: () => ipcRenderer.invoke('accounts/closeAddWindow'),
     update: (input) => ipcRenderer.invoke('accounts/update', input),
     disable: (accountId) => ipcRenderer.invoke('accounts/disable', accountId),
     remove: (accountId) => ipcRenderer.invoke('accounts/remove', accountId)
@@ -24,8 +31,8 @@ const api = {
       ipcRenderer.invoke('messages/downloadAttachment', attachmentId)
   },
   sync: {
-    startAll: () => ipcRenderer.invoke('sync/startAll'),
-    startAccount: (accountId) => ipcRenderer.invoke('sync/startAccount', accountId),
+    startAll: (mode) => ipcRenderer.invoke('sync/startAll', mode),
+    startAccount: (accountId, mode) => ipcRenderer.invoke('sync/startAccount', accountId, mode),
     status: () => ipcRenderer.invoke('sync/status'),
     onMailboxChanged: (callback): (() => void) => {
       const listener = (_event, event): void => callback(event)

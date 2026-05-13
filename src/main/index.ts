@@ -1,13 +1,19 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
+import appIcon from '../../resources/icon.png?asset'
+import windowsIcon from '../../resources/icon.ico?asset'
 import { closeDatabase, initializeDatabase } from './db/connection'
 import { registerIpcHandlers } from './ipc'
+import { installRuntimeErrorGuards } from './runtime-errors'
 import { startAutoUpdateChecks, stopAutoUpdateChecks } from './services/auto-update'
 import { startMailboxWatchers, stopMailboxWatchers } from './services/mailbox-watch'
 
+installRuntimeErrorGuards()
+
 function createWindow(): void {
+  const windowIcon = process.platform === 'win32' ? windowsIcon : appIcon
+
   // Create the browser window.
   const mainWindow = new BrowserWindow({
     width: 1180,
@@ -18,8 +24,8 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
-    trafficLightPosition: { x: 16, y: 16 },
-    ...(process.platform === 'linux' ? { icon } : {}),
+    trafficLightPosition: { x: 16, y: 14 },
+    ...(process.platform !== 'darwin' ? { icon: windowIcon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -50,6 +56,9 @@ function createWindow(): void {
 app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.huzhihui.onemail')
+  if (process.platform === 'darwin') {
+    app.dock?.setIcon(appIcon)
+  }
   initializeDatabase()
   registerIpcHandlers()
   startMailboxWatchers()

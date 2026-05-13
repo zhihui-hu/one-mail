@@ -9,6 +9,7 @@ import { saveOAuthToken, readOAuthToken, type OAuthTokenPayload } from './oauth-
 
 type MicrosoftTokenResponse = {
   access_token?: string
+  id_token?: string
   refresh_token?: string
   token_type?: string
   expires_in?: number
@@ -27,8 +28,26 @@ type MicrosoftAuthorizationSession = {
   token: OAuthTokenPayload
 }
 
+export type MicrosoftAccessTokenResult = {
+  accessToken: string
+  loginHints: string[]
+}
+
 const MICROSOFT_AUTHORITY = 'https://login.microsoftonline.com/common/oauth2/v2.0'
-const MICROSOFT_SCOPES = ['offline_access', 'https://outlook.office.com/IMAP.AccessAsUser.All']
+const MICROSOFT_SCOPES = [
+  'openid',
+  'profile',
+  'email',
+  'offline_access',
+  'https://outlook.office.com/IMAP.AccessAsUser.All'
+]
+const MICROSOFT_OUTLOOK_RESOURCES = new Set([
+  'https://outlook.office.com',
+  'https://outlook.office365.com',
+  '00000002-0000-0ff1-ce00-000000000000'
+])
+const MICROSOFT_REQUIRED_RESOURCE_SCOPE = 'https://outlook.office.com/IMAP.AccessAsUser.All'
+const MICROSOFT_REQUIRED_SCOPE_NAME = 'IMAP.AccessAsUser.All'
 const TOKEN_REFRESH_SKEW_MS = 2 * 60 * 1000
 
 export async function authorizeMicrosoftAccount(
@@ -47,7 +66,7 @@ export async function authorizeMicrosoftAccount(
   })
 
   return {
-    email: getEmailFromAccessToken(token.accessToken),
+    email: getMailboxEmailFromToken(token),
     token
   }
 }
@@ -56,17 +75,45 @@ export function saveMicrosoftAuthorization(accountId: number, token: OAuthTokenP
   saveOAuthToken(accountId, 'outlook', token, MICROSOFT_SCOPES)
 }
 
-export async function getMicrosoftAccessToken(accountId: number): Promise<string> {
+export async function getMicrosoftAccessToken(
+  accountId: number
+): Promise<MicrosoftAccessTokenResult> {
   const token = readOAuthToken(accountId)
-  if (!shouldRefreshToken(token)) return token.accessToken
+  if (!shouldRefreshToken(token)) {
+    return {
+      accessToken: token.accessToken,
+      loginHints: getMicrosoftLoginHints(token)
+    }
+  }
 
+  return refreshStoredMicrosoftAccessToken(accountId, token)
+}
+
+export async function refreshMicrosoftAccessToken(
+  accountId: number
+): Promise<MicrosoftAccessTokenResult> {
+  return refreshStoredMicrosoftAccessToken(accountId, readOAuthToken(accountId))
+}
+
+async function refreshStoredMicrosoftAccessToken(
+  accountId: number,
+  token: OAuthTokenPayload
+): Promise<MicrosoftAccessTokenResult> {
   if (!token.refreshToken) {
     throw new Error('Microsoft OAuth refresh token 不存在，请重新登录 Outlook。')
   }
 
   const refreshed = await refreshMicrosoftToken(getMicrosoftClientId(), token.refreshToken)
-  saveOAuthToken(accountId, 'outlook', refreshed, MICROSOFT_SCOPES)
-  return refreshed.accessToken
+  const nextToken = {
+    ...refreshed,
+    refreshToken: refreshed.refreshToken ?? token.refreshToken,
+    idToken: refreshed.idToken ?? token.idToken
+  }
+  saveOAuthToken(accountId, 'outlook', nextToken, MICROSOFT_SCOPES)
+  return {
+    accessToken: nextToken.accessToken,
+    loginHints: getMicrosoftLoginHints(nextToken)
+  }
 }
 
 function getMicrosoftClientId(): string {
@@ -180,7 +227,8 @@ function waitForMicrosoftAuthorization(
         scope: MICROSOFT_SCOPES.join(' '),
         state,
         code_challenge: codeChallenge,
-        code_challenge_method: 'S256'
+        code_challenge_method: 'S256',
+        prompt: 'consent'
       })
       const authorizationUrl = `${MICROSOFT_AUTHORITY}/authorize?${params.toString()}`
 
@@ -189,12 +237,24 @@ function waitForMicrosoftAuthorization(
         return
       }
 
-      authWindow = createMicrosoftAuthorizationWindow()
-      authWindow.on('closed', () => {
+      const nextAuthWindow = createMicrosoftAuthorizationWindow()
+      authWindow = nextAuthWindow
+      nextAuthWindow.on('closed', () => {
         authWindow = undefined
         settleReject(new Error('Microsoft 授权窗口已关闭。'))
       })
-      void authWindow.loadURL(authorizationUrl)
+      void clearMicrosoftAuthorizationSession(nextAuthWindow)
+        .then(() => {
+          if (!nextAuthWindow.isDestroyed()) {
+            return nextAuthWindow.loadURL(authorizationUrl)
+          }
+          return undefined
+        })
+        .catch((error: unknown) => {
+          settleReject(
+            error instanceof Error ? error : new Error('Microsoft 授权窗口缓存清理失败，请重试。')
+          )
+        })
     })
 
     server.on('error', (error) => {
@@ -215,7 +275,8 @@ function createMicrosoftAuthorizationWindow(): BrowserWindow {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true
+      sandbox: true,
+      partition: `microsoft-oauth-${Date.now()}-${randomBytes(8).toString('hex')}`
     }
   })
 
@@ -225,6 +286,12 @@ function createMicrosoftAuthorizationWindow(): BrowserWindow {
   })
 
   return authWindow
+}
+
+async function clearMicrosoftAuthorizationSession(authWindow: BrowserWindow): Promise<void> {
+  const authSession = authWindow.webContents.session
+  await authSession.clearStorageData()
+  await authSession.clearCache()
 }
 
 async function requestMicrosoftToken({
@@ -284,8 +351,13 @@ function mapTokenResponse(body: MicrosoftTokenResponse): OAuthTokenPayload {
     throw new Error('Microsoft OAuth 未返回 access token。')
   }
 
+  const accessPayload = decodeJwtPayloadSafe(body.access_token)
+  assertMicrosoftImapScopeGranted(body.scope, accessPayload)
+  assertMicrosoftImapAccessTokenAudience(accessPayload)
+
   return {
     accessToken: body.access_token,
+    idToken: body.id_token,
     refreshToken: body.refresh_token,
     tokenType: body.token_type ?? 'Bearer',
     expiresAt:
@@ -295,23 +367,94 @@ function mapTokenResponse(body: MicrosoftTokenResponse): OAuthTokenPayload {
   }
 }
 
-function getEmailFromAccessToken(accessToken: string): string {
-  const payload = decodeJwtPayload(accessToken)
-  const email =
-    readStringClaim(payload, 'preferred_username') ??
-    readStringClaim(payload, 'email') ??
-    readStringClaim(payload, 'upn')
+function assertMicrosoftImapScopeGranted(
+  scope: string | undefined,
+  accessPayload: Record<string, unknown>
+): void {
+  const grantedScopes = new Set([
+    ...parseScopeValues(scope),
+    ...parseScopeValues(readStringClaim(accessPayload, 'scp'))
+  ])
+  if (grantedScopes.size === 0) return
+
+  if (
+    grantedScopes.has(normalizeScope(MICROSOFT_REQUIRED_RESOURCE_SCOPE)) ||
+    grantedScopes.has(normalizeScope(MICROSOFT_REQUIRED_SCOPE_NAME))
+  ) {
+    return
+  }
+
+  throw new Error(
+    'Microsoft OAuth 未授予 Outlook IMAP 权限。请重新登录并在授权页同意 OneMail 访问邮箱。'
+  )
+}
+
+function assertMicrosoftImapAccessTokenAudience(accessPayload: Record<string, unknown>): void {
+  const audience = readStringClaim(accessPayload, 'aud')
+  if (!audience) return
+
+  if (MICROSOFT_OUTLOOK_RESOURCES.has(normalizeResourceAudience(audience))) return
+
+  throw new Error(
+    'Microsoft OAuth 返回的 access token 不是 Outlook IMAP 可用的 token。请重新登录并确认授权的是 Outlook IMAP 权限。'
+  )
+}
+
+function parseScopeValues(scope: string | undefined): string[] {
+  return scope?.split(/\s+/).filter(Boolean).map(normalizeScope) ?? []
+}
+
+function normalizeScope(scope: string): string {
+  try {
+    return decodeURIComponent(scope).trim().toLowerCase()
+  } catch {
+    return scope.trim().toLowerCase()
+  }
+}
+
+function normalizeResourceAudience(audience: string): string {
+  return normalizeScope(audience).replace(/\/+$/, '')
+}
+
+function getMailboxEmailFromToken(token: OAuthTokenPayload): string {
+  const email = getMicrosoftLoginHints(token)[0]
 
   if (!email) {
-    throw new Error('Microsoft OAuth 未返回邮箱地址，请确认授权账号有效。')
+    throw new Error(
+      'Microsoft OAuth 未返回可用于 Outlook IMAP 登录的邮箱地址，请确认授权账号有效。'
+    )
   }
 
   return email
 }
 
-function decodeJwtPayload(token: string): Record<string, unknown> {
+function getMicrosoftLoginHints(token: OAuthTokenPayload): string[] {
+  const accessPayload = decodeJwtPayloadSafe(token.accessToken)
+  const idPayload = decodeJwtPayloadSafe(token.idToken)
+  return uniqueStrings([
+    readStringClaim(accessPayload, 'upn'),
+    readStringClaim(accessPayload, 'preferred_username'),
+    readStringClaim(accessPayload, 'unique_name'),
+    readStringClaim(accessPayload, 'email'),
+    idPayload ? readStringClaim(idPayload, 'preferred_username') : undefined,
+    idPayload ? readStringClaim(idPayload, 'email') : undefined,
+    idPayload ? readStringClaim(idPayload, 'upn') : undefined
+  ]).filter(isEmailAddress)
+}
+
+function decodeJwtPayloadSafe(token: string | undefined): Record<string, unknown> {
+  if (!token) return {}
+
+  try {
+    return decodeJwtPayload(token, 'token')
+  } catch {
+    return {}
+  }
+}
+
+function decodeJwtPayload(token: string, label: string): Record<string, unknown> {
   const payload = token.split('.')[1]
-  if (!payload) throw new Error('Microsoft OAuth access token 格式无效。')
+  if (!payload) throw new Error(`Microsoft OAuth ${label} 格式无效。`)
 
   try {
     return JSON.parse(Buffer.from(fromBase64Url(payload), 'base64').toString('utf8')) as Record<
@@ -319,13 +462,25 @@ function decodeJwtPayload(token: string): Record<string, unknown> {
       unknown
     >
   } catch {
-    throw new Error('Microsoft OAuth access token 解析失败。')
+    throw new Error(`Microsoft OAuth ${label} 解析失败。`)
   }
 }
 
 function readStringClaim(payload: Record<string, unknown>, key: string): string | undefined {
   const value = payload[key]
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function isEmailAddress(value: string | undefined): value is string {
+  return typeof value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+}
+
+function uniqueStrings(values: Array<string | undefined>): string[] {
+  return Array.from(new Set(values.map((value) => value?.trim()).filter(isNonEmptyString)))
+}
+
+function isNonEmptyString(value: string | undefined): value is string {
+  return typeof value === 'string' && value.length > 0
 }
 
 function shouldRefreshToken(token: OAuthTokenPayload): boolean {

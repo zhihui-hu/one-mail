@@ -15,7 +15,17 @@ export function registerMessageIpc(): void {
   ipcMain.handle('messages/stats', () => listAccountMailboxStats())
   ipcMain.handle('messages/get', (_event, messageId: number) => getMessage(messageId))
   ipcMain.handle('messages/loadBody', async (_event, messageId: number) => {
-    return loadMessageBody(messageId) ?? (await loadMessageBodyFromImap(messageId))
+    const cachedBody = loadMessageBody(messageId)
+    if (cachedBody) return { body: cachedBody }
+
+    try {
+      return { body: await loadMessageBodyFromImap(messageId) }
+    } catch (error) {
+      return {
+        body: null,
+        error: error instanceof Error ? error.message : '加载邮件正文失败。'
+      }
+    }
   })
   ipcMain.handle('messages/setReadState', (_event, messageId: number, isRead: boolean) =>
     syncMessageReadState(messageId, isRead)

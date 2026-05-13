@@ -1,6 +1,7 @@
 import { getDatabase, toNumber, toOptionalString } from '../connection'
 import type { SyncStatus } from '../../ipc/types'
-import { syncAccountMailbox } from '../../mail/imap-sync'
+import { syncAccountMailbox, type AccountMailboxSyncMode } from '../../mail/imap-sync'
+import { isImapAuthErrorMessage, isImapNetworkErrorMessage } from '../../mail/imap-errors'
 
 type SyncRunRow = {
   account_id: number | null
@@ -16,7 +17,10 @@ export type AccountSyncResult = {
 
 const activeAccountSyncs = new Map<number, Promise<AccountSyncResult>>()
 
-export async function startSync(accountIds: number[]): Promise<SyncStatus> {
+export async function startSync(
+  accountIds: number[],
+  mode: AccountMailboxSyncMode = 'refresh'
+): Promise<SyncStatus> {
   const db = getDatabase()
   const startedAt = new Date().toISOString()
   markStaleRunningSyncsFailed()
@@ -28,14 +32,14 @@ export async function startSync(accountIds: number[]): Promise<SyncStatus> {
       }>('SELECT account_id FROM onemail_mail_accounts WHERE sync_enabled = 1')
       .all()
     const results = await Promise.allSettled(
-      rows.map((row) => syncAccountNow(toNumber(row.account_id), startedAt))
+      rows.map((row) => syncAccountNow(toNumber(row.account_id), mode, startedAt))
     )
     const failures = results.filter((result) => result.status === 'rejected')
     if (failures.length === rows.length && failures.length > 0) {
       throw formatSyncFailure(failures[0].reason)
     }
   } else {
-    await Promise.all(accountIds.map((accountId) => syncAccountNow(accountId, startedAt)))
+    await Promise.all(accountIds.map((accountId) => syncAccountNow(accountId, mode, startedAt)))
   }
 
   return getSyncStatus()
@@ -43,12 +47,13 @@ export async function startSync(accountIds: number[]): Promise<SyncStatus> {
 
 export function syncAccountNow(
   accountId: number,
+  mode: AccountMailboxSyncMode = 'refresh',
   startedAt = new Date().toISOString()
 ): Promise<AccountSyncResult> {
   const existingSync = activeAccountSyncs.get(accountId)
   if (existingSync) return existingSync
 
-  const syncPromise = syncSingleAccount(accountId, startedAt).finally(() => {
+  const syncPromise = syncSingleAccount(accountId, mode, startedAt).finally(() => {
     if (activeAccountSyncs.get(accountId) === syncPromise) {
       activeAccountSyncs.delete(accountId)
     }
@@ -102,7 +107,11 @@ function markStaleRunningSyncsFailed(): void {
     .run()
 }
 
-async function syncSingleAccount(accountId: number, startedAt: string): Promise<AccountSyncResult> {
+async function syncSingleAccount(
+  accountId: number,
+  mode: AccountMailboxSyncMode,
+  startedAt: string
+): Promise<AccountSyncResult> {
   const db = getDatabase()
   const result = db
     .prepare(
@@ -123,7 +132,7 @@ async function syncSingleAccount(accountId: number, startedAt: string): Promise<
   ).run({ accountId })
 
   try {
-    const stats = await syncAccountMailbox(accountId)
+    const stats = await syncAccountMailbox(accountId, mode)
     db.prepare(
       `
       UPDATE onemail_sync_runs
@@ -143,6 +152,12 @@ async function syncSingleAccount(accountId: number, startedAt: string): Promise<
     return { accountId, ...stats }
   } catch (error) {
     const message = error instanceof Error ? error.message : '同步账号失败。'
+    const accountStatus = isImapAuthErrorMessage(message)
+      ? 'auth_error'
+      : isImapNetworkErrorMessage(message)
+        ? 'network_error'
+        : 'sync_error'
+    const credentialState = accountStatus === 'auth_error' ? 'invalid' : undefined
     db.prepare(
       `
       UPDATE onemail_sync_runs
@@ -156,12 +171,13 @@ async function syncSingleAccount(accountId: number, startedAt: string): Promise<
     db.prepare(
       `
       UPDATE onemail_mail_accounts
-      SET status = 'sync_error',
+      SET status = :accountStatus,
+          credential_state = COALESCE(:credentialState, credential_state),
           last_error = :message,
           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE account_id = :accountId
     `
-    ).run({ accountId, message })
+    ).run({ accountId, accountStatus, credentialState: credentialState ?? null, message })
     throw error
   }
 }

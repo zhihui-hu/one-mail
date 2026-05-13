@@ -9,6 +9,7 @@ export type AuthType = 'oauth2' | 'app_password' | 'password' | 'bridge' | 'manu
 export type ImapSecurity = 'ssl_tls' | 'starttls' | 'none'
 export type CredentialState = 'pending' | 'stored' | 'invalid' | 'expired' | 'revoked'
 export type OAuthAuthorizationMode = 'internal_browser' | 'copy_link'
+export type SyncMode = 'initial' | 'refresh'
 
 export type MailAccount = {
   accountId: number
@@ -37,6 +38,11 @@ export type AccountCreateInput = {
   imapHost: string
   imapPort: number
   imapSecurity: ImapSecurity
+}
+
+export type AccountCreatedEvent = {
+  account: MailAccount
+  requestedSync: boolean
 }
 
 export type AccountUpdateInput = Partial<Omit<AccountCreateInput, 'email' | 'password'>> & {
@@ -72,6 +78,7 @@ export type MailMessageSummary = {
   isStarred: boolean
   hasAttachments: boolean
   bodyStatus: 'none' | 'loading' | 'ready' | 'error'
+  verificationCode?: string
 }
 
 export type AccountMailboxStats = {
@@ -99,6 +106,11 @@ export type MailMessageBody = {
   bodyText?: string
   bodyHtmlSanitized?: string
   externalImagesBlocked: boolean
+}
+
+export type MailMessageBodyLoadResult = {
+  body: MailMessageBody | null
+  error?: string
 }
 
 export type MailMessageDetail = MailMessageSummary & {
@@ -133,6 +145,7 @@ export type NewMailNotificationMessage = {
   fromEmail?: string
   receivedAt?: string
   snippet?: string
+  verificationCode?: string
 }
 
 export type NewMailNotification = {
@@ -177,6 +190,9 @@ export type OneMailApi = {
   accounts: {
     list: () => Promise<MailAccount[]>
     create: (input: AccountCreateInput) => Promise<MailAccount>
+    onCreated: (callback: (event: AccountCreatedEvent) => void) => () => void
+    openAddWindow: () => Promise<boolean>
+    closeAddWindow: () => Promise<boolean>
     update: (input: AccountUpdateInput) => Promise<MailAccount>
     disable: (accountId: number) => Promise<MailAccount>
     remove: (accountId: number) => Promise<boolean>
@@ -188,13 +204,13 @@ export type OneMailApi = {
     list: (query?: MessageListQuery) => Promise<MailMessageSummary[]>
     stats: () => Promise<AccountMailboxStats[]>
     get: (messageId: number) => Promise<MailMessageDetail | null>
-    loadBody: (messageId: number) => Promise<MailMessageBody | null>
+    loadBody: (messageId: number) => Promise<MailMessageBodyLoadResult>
     setReadState: (messageId: number, isRead: boolean) => Promise<MessageReadStateUpdate>
     downloadAttachment: (attachmentId: number) => Promise<AttachmentDownloadResult>
   }
   sync: {
-    startAll: () => Promise<SyncStatus>
-    startAccount: (accountId: number) => Promise<SyncStatus>
+    startAll: (mode?: SyncMode) => Promise<SyncStatus>
+    startAccount: (accountId: number, mode?: SyncMode) => Promise<SyncStatus>
     status: () => Promise<SyncStatus>
     onMailboxChanged: (callback: (event: MailboxChangedEvent) => void) => () => void
   }

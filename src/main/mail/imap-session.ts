@@ -1,19 +1,27 @@
 import { Socket, connect as connectTcp } from 'node:net'
 import { TLSSocket, connect as connectTls } from 'node:tls'
 import type { getAccount } from '../db/repositories/account.repository'
+import { toImapConnectionError } from './imap-errors'
 
 type TestSocket = Socket | TLSSocket
 type ImapAccount = NonNullable<ReturnType<typeof getAccount>>
 
 const CONNECTION_TIMEOUT_MS = 15000
+const BODY_FETCH_TIMEOUT_MS = 60000
 
 export class SimpleImapSession {
   private tagIndex = 1
+  private socketError: Error | undefined
+  private readonly socketErrorGuard = (error: Error): void => {
+    this.socketError = toImapConnectionError(error)
+  }
 
   private constructor(
     private socket: TestSocket,
     private readonly tagPrefix: string
-  ) {}
+  ) {
+    this.watchSocketErrors(socket)
+  }
 
   static async connect(account: ImapAccount, tagPrefix = 'A'): Promise<SimpleImapSession> {
     const socket =
@@ -34,7 +42,7 @@ export class SimpleImapSession {
 
     if (account.imapSecurity === 'starttls' && socket instanceof Socket) {
       await session.command('STARTTLS')
-      session.socket = await upgradeToTls(socket, account.imapHost)
+      session.replaceSocket(await upgradeToTls(socket, account.imapHost))
     }
 
     return session
@@ -53,11 +61,15 @@ export class SimpleImapSession {
   }
 
   async selectInbox(): Promise<void> {
-    await this.command('SELECT "INBOX"')
+    await this.selectMailbox('INBOX')
+  }
+
+  async selectMailbox(path: string): Promise<void> {
+    await this.command(`SELECT ${quoteAtom(path)}`)
   }
 
   async fetchRawMessage(uid: number): Promise<string> {
-    const response = await this.command(`UID FETCH ${uid} (BODY.PEEK[])`)
+    const response = await this.command(`UID FETCH ${uid} (BODY.PEEK[])`, BODY_FETCH_TIMEOUT_MS)
     return extractRawMessageLiteral(response)
   }
 
@@ -71,8 +83,12 @@ export class SimpleImapSession {
   }
 
   async logout(): Promise<void> {
-    await this.command('LOGOUT')
-    this.socket.destroy()
+    try {
+      await this.command('LOGOUT')
+    } finally {
+      this.socket.off('error', this.socketErrorGuard)
+      this.socket.destroy()
+    }
   }
 
   private async waitForGreeting(): Promise<void> {
@@ -85,10 +101,11 @@ export class SimpleImapSession {
     })
   }
 
-  private async command(command: string): Promise<string> {
+  private async command(command: string, timeoutMs = CONNECTION_TIMEOUT_MS): Promise<string> {
+    this.assertSocketHealthy()
     const tag = `${this.tagPrefix}${String(this.tagIndex++).padStart(4, '0')}`
     await writeLine(this.socket, `${tag} ${command}`)
-    const response = await readUntilTagged(this.socket, tag)
+    const response = await readUntilTagged(this.socket, tag, timeoutMs)
     const lastLine = response
       .trimEnd()
       .split(/\r?\n/)
@@ -99,6 +116,21 @@ export class SimpleImapSession {
     }
 
     return response
+  }
+
+  private replaceSocket(socket: TestSocket): void {
+    this.socket.off('error', this.socketErrorGuard)
+    this.socket = socket
+    this.socketError = undefined
+    this.watchSocketErrors(socket)
+  }
+
+  private watchSocketErrors(socket: TestSocket): void {
+    socket.on('error', this.socketErrorGuard)
+  }
+
+  private assertSocketHealthy(): void {
+    if (this.socketError) throw this.socketError
   }
 }
 
@@ -183,7 +215,7 @@ function upgradeToTls(socket: Socket, servername: string): Promise<TLSSocket> {
 
     function handleError(error: Error): void {
       cleanup()
-      reject(error)
+      reject(toImapConnectionError(error))
     }
 
     tlsSocket.once('secureConnect', handleSecureConnect)
@@ -227,7 +259,7 @@ function waitForLine(socket: TestSocket, isDone: (line: string) => boolean): Pro
 
     function handleError(error: Error): void {
       cleanup()
-      reject(error)
+      reject(toImapConnectionError(error))
     }
 
     function handleClose(): void {
@@ -241,13 +273,17 @@ function waitForLine(socket: TestSocket, isDone: (line: string) => boolean): Pro
   })
 }
 
-function readUntilTagged(socket: TestSocket, tag: string): Promise<string> {
+function readUntilTagged(
+  socket: TestSocket,
+  tag: string,
+  timeoutMs = CONNECTION_TIMEOUT_MS
+): Promise<string> {
   return new Promise((resolve, reject) => {
     let buffer = ''
-    const timeout = setTimeout(() => {
+    let timeout = setTimeout(() => {
       cleanup()
       reject(new Error('IMAP 服务器响应超时。'))
-    }, CONNECTION_TIMEOUT_MS)
+    }, timeoutMs)
 
     function cleanup(): void {
       clearTimeout(timeout)
@@ -256,18 +292,29 @@ function readUntilTagged(socket: TestSocket, tag: string): Promise<string> {
       socket.off('close', handleClose)
     }
 
+    function resetTimeout(): void {
+      clearTimeout(timeout)
+      timeout = setTimeout(() => {
+        cleanup()
+        reject(new Error('IMAP 服务器响应超时。'))
+      }, timeoutMs)
+    }
+
     function handleData(chunk: Buffer): void {
       buffer += chunk.toString('utf8')
 
       if (new RegExp(`(^|\\r?\\n)${tag}\\s+(OK|NO|BAD)\\b`, 'i').test(buffer)) {
         cleanup()
         resolve(buffer)
+        return
       }
+
+      resetTimeout()
     }
 
     function handleError(error: Error): void {
       cleanup()
-      reject(error)
+      reject(toImapConnectionError(error))
     }
 
     function handleClose(): void {
@@ -285,7 +332,7 @@ function writeLine(socket: TestSocket, line: string): Promise<void> {
   return new Promise((resolve, reject) => {
     socket.write(`${line}\r\n`, (error) => {
       if (error) {
-        reject(error)
+        reject(toImapConnectionError(error))
         return
       }
 

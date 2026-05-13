@@ -3,6 +3,7 @@ import { getDatabase, getDatabaseKey, type SqliteRow } from '../db/connection'
 
 export type OAuthTokenPayload = {
   accessToken: string
+  idToken?: string
   refreshToken?: string
   tokenType: string
   expiresAt?: string

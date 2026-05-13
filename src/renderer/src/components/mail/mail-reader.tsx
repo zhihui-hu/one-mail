@@ -2,6 +2,7 @@ import { Download, FileText, Image, Loader2, Paperclip, ShieldCheck } from 'luci
 import * as React from 'react'
 
 import { formatAbsoluteTime, formatRelativeTime } from '@renderer/components/mail/date-format'
+import { EllipsisTooltip } from '@renderer/components/mail/ellipsis-tooltip'
 import { prepareMailHtml, type PreparedMailHtml } from '@renderer/components/mail/mail-html'
 import type { Attachment, Message } from '@renderer/components/mail/types'
 import { Badge } from '@renderer/components/ui/badge'
@@ -15,6 +16,7 @@ import {
   TableHeader,
   TableRow
 } from '@renderer/components/ui/table'
+import { TooltipProvider } from '@renderer/components/ui/tooltip'
 
 type MailReaderProps = {
   message: Message
@@ -109,14 +111,16 @@ export function MailReader({
                 <h2 className="text-base font-semibold leading-snug tracking-normal">
                   {message.subject}
                 </h2>
-                <div className="mt-2 flex flex-col gap-0.5 text-xs text-muted-foreground">
-                  <MetaLine
-                    label="发件人"
-                    value={formatAddress(message.from, message.fromAddress)}
-                  />
-                  <MetaLine label="收件人" value={recipientAddress} />
-                  {message.cc ? <MetaLine label="抄送" value={message.cc} /> : null}
-                </div>
+                <TooltipProvider>
+                  <div className="mt-2 flex flex-col gap-0.5 text-xs text-muted-foreground">
+                    <MetaLine
+                      label="发件人"
+                      value={formatAddress(message.from, message.fromAddress)}
+                    />
+                    <MetaLine label="收件人" value={recipientAddress} />
+                    {message.cc ? <MetaLine label="抄送" value={message.cc} /> : null}
+                  </div>
+                </TooltipProvider>
               </div>
               <div
                 className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
@@ -194,14 +198,14 @@ function MessageBody({
   }
 
   return (
-    <section className="prose-mail flex min-w-0 flex-col text-sm leading-6 text-foreground">
+    <section className="prose-mail flex min-w-0 flex-col select-text text-sm leading-6 text-foreground">
       {canShowHtml ? (
         <div
-          className="mail-html min-h-40 bg-background"
+          className="mail-html min-h-40 select-text bg-background"
           dangerouslySetInnerHTML={{ __html: preparedHtml?.html ?? '' }}
         />
       ) : (
-        <div className="mail-text min-h-40 w-full max-w-full">
+        <div className="mail-text min-h-40 w-full max-w-full select-text">
           {message.body.map((paragraph) => (
             <p key={paragraph}>{paragraph}</p>
           ))}
@@ -313,7 +317,9 @@ function MetaLine({ label, value }: { label: string; value: string }): React.JSX
   return (
     <div className="grid min-w-0 grid-cols-[52px_minmax(0,1fr)] gap-3">
       <span>{label}:</span>
-      <span className="truncate text-foreground">{value}</span>
+      <EllipsisTooltip className="min-w-0 truncate text-foreground" tooltip={value}>
+        {value}
+      </EllipsisTooltip>
     </div>
   )
 }

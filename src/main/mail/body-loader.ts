@@ -8,6 +8,7 @@ import { authenticateImapSession } from './imap-auth'
 type MessageLocator = {
   message_id: number
   account_id: number
+  folder_path: string
   uid: number
 }
 
@@ -56,7 +57,7 @@ export async function loadMessageBodyFromImap(messageId: number): Promise<MailMe
   try {
     await authenticateImapSession(account, client)
     await client.identifyClient()
-    await client.selectInbox()
+    await client.selectMailbox(locator.folder_path)
     const rawMessage = await client.fetchRawMessage(locator.uid)
     const parsed = parseMimeMessage(rawMessage)
     const body = persistMessageBody(messageId, parsed)
@@ -84,9 +85,14 @@ function getMessageLocator(messageId: number): MessageLocator | null {
   const row = getDatabase()
     .prepare<MessageLocator>(
       `
-      SELECT message_id, account_id, uid
-      FROM onemail_mail_messages
-      WHERE message_id = :messageId
+      SELECT
+        m.message_id,
+        m.account_id,
+        f.path AS folder_path,
+        m.uid
+      FROM onemail_mail_messages m
+      JOIN onemail_mail_folders f ON f.folder_id = m.folder_id
+      WHERE m.message_id = :messageId
       `
     )
     .get({ messageId })
@@ -178,12 +184,94 @@ function persistMessageBody(messageId: number, parsed: ParsedMessageBody): MailM
     hasAttachments: parsed.attachments.length > 0 ? 1 : 0
   })
 
+  updateMessageSearchIndex(messageId, bodyText ?? htmlToSearchText(bodyHtml) ?? '')
+
   return {
     messageId,
     bodyText,
     bodyHtmlSanitized: bodyHtml,
     externalImagesBlocked: true
   }
+}
+
+function updateMessageSearchIndex(messageId: number, bodyText: string): void {
+  const db = getDatabase()
+  const row = db
+    .prepare<{
+      account_id: number
+      folder_id: number
+      subject: string | null
+      from_name: string | null
+      from_email: string | null
+      snippet: string | null
+    }>(
+      `
+      SELECT
+        account_id,
+        folder_id,
+        subject,
+        from_name,
+        from_email,
+        snippet
+      FROM onemail_mail_messages
+      WHERE message_id = :messageId
+      `
+    )
+    .get({ messageId })
+
+  if (!row) return
+
+  db.prepare('DELETE FROM onemail_message_search WHERE message_id = :messageId').run({
+    messageId
+  })
+  db.prepare(
+    `
+    INSERT INTO onemail_message_search (
+      message_id,
+      account_id,
+      folder_id,
+      subject,
+      from_name,
+      from_email,
+      snippet,
+      body_text
+    )
+    VALUES (
+      :messageId,
+      :accountId,
+      :folderId,
+      :subject,
+      :fromName,
+      :fromEmail,
+      :snippet,
+      :bodyText
+    )
+    `
+  ).run({
+    messageId,
+    accountId: row.account_id,
+    folderId: row.folder_id,
+    subject: row.subject ?? '',
+    fromName: row.from_name ?? '',
+    fromEmail: row.from_email ?? '',
+    snippet: row.snippet ?? '',
+    bodyText
+  })
+}
+
+function htmlToSearchText(value?: string): string | undefined {
+  const text = value
+    ?.replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return text || undefined
 }
 
 function parseMimeMessage(rawMessage: string): ParsedMessageBody {

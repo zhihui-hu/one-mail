@@ -1,5 +1,6 @@
 import type {
   AccountMailboxStats,
+  AccountCreatedEvent,
   AccountCreateInput,
   AccountUpdateInput,
   AppSettings,
@@ -13,6 +14,7 @@ import type {
   MessageFilterTag,
   MessageListQuery,
   SettingsUpdateInput,
+  SyncMode,
   SyncStatus,
   SystemInfo
 } from '../../../shared/types'
@@ -24,6 +26,8 @@ const platformLabel: Partial<Record<NodeJS.Platform, string>> = {
   win32: 'Windows',
   linux: 'Linux'
 }
+
+export const MESSAGE_LIST_PAGE_SIZE = 100
 
 export async function loadInitialData(): Promise<{
   accounts: Account[]
@@ -41,7 +45,9 @@ export async function loadInitialData(): Promise<{
   const accounts = toAccountList(mailAccounts, accountStats)
   const selectedAccountId = getDefaultSelectedAccountId(accounts)
   const messages = selectedAccountId
-    ? await window.api.messages.list(toMessageQuery(selectedAccountId, []))
+    ? await window.api.messages.list(
+        toMessageQuery(selectedAccountId, [], { limit: MESSAGE_LIST_PAGE_SIZE, offset: 0 })
+      )
     : []
 
   return {
@@ -57,6 +63,14 @@ export async function createAccount(input: AccountCreateInput): Promise<MailAcco
   return window.api.accounts.create(input)
 }
 
+export async function openAddAccountWindow(): Promise<boolean> {
+  return window.api.accounts.openAddWindow()
+}
+
+export function onAccountCreated(callback: (event: AccountCreatedEvent) => void): () => void {
+  return window.api.accounts.onCreated(callback)
+}
+
 export async function updateAccount(input: AccountUpdateInput): Promise<MailAccount> {
   return window.api.accounts.update(input)
 }
@@ -65,12 +79,15 @@ export async function removeAccount(accountId: number): Promise<boolean> {
   return window.api.accounts.remove(accountId)
 }
 
-export async function syncAccount(accountId: number): Promise<SyncStatus> {
-  return window.api.sync.startAccount(accountId)
+export async function syncAccount(
+  accountId: number,
+  mode: SyncMode = 'refresh'
+): Promise<SyncStatus> {
+  return window.api.sync.startAccount(accountId, mode)
 }
 
-export async function syncAllAccounts(): Promise<SyncStatus> {
-  return window.api.sync.startAll()
+export async function syncAllAccounts(mode: SyncMode = 'refresh'): Promise<SyncStatus> {
+  return window.api.sync.startAll(mode)
 }
 
 export async function saveSettings(input: SettingsUpdateInput): Promise<AppSettings> {
@@ -113,13 +130,18 @@ export async function loadMessageDetail(messageId: number): Promise<Message | nu
 }
 
 export async function loadMessageBody(message: Message): Promise<Message> {
-  const body = await window.api.messages.loadBody(message.messageId)
-  if (!body) return message
+  const result = await window.api.messages.loadBody(message.messageId)
+  if (!result.body) {
+    return {
+      ...message,
+      bodyStatus: result.error ? 'error' : message.bodyStatus
+    }
+  }
 
   const detail = await window.api.messages.get(message.messageId)
   if (detail) return toMessage(detail)
 
-  return mergeMessageBody(message, body)
+  return mergeMessageBody(message, result.body)
 }
 
 export async function setMessageReadState(
@@ -158,6 +180,7 @@ function toAccountList(accounts: MailAccount[], accountStats: AccountMailboxStat
       id: String(account.accountId),
       accountId: account.accountId,
       providerKey: account.providerKey,
+      authType: account.authType,
       name: formatAccountName(account),
       address: account.email,
       unread: stats?.unreadCount ?? 0,
@@ -176,6 +199,7 @@ function toAccountList(accounts: MailAccount[], accountStats: AccountMailboxStat
     {
       id: 'all',
       providerKey: 'all',
+      authType: 'manual',
       name: '全部账号',
       address: '统一收件箱',
       unread: totalUnread,
@@ -215,6 +239,7 @@ function toMessage(message: MailMessageSummary | MailMessageDetail): Message {
     fromAddress: fromEmail,
     subject,
     preview: snippet,
+    verificationCode: normalizeMailDisplayText(message.verificationCode),
     body: bodyTextToParagraphs(bodyText),
     html: body?.bodyHtmlSanitized,
     bodyStatus: message.bodyStatus,
@@ -299,11 +324,17 @@ function formatMessageDate(value?: string): string {
 
 export function toMessageQuery(
   selectedAccountId: string,
-  filters: MessageFilterTag[]
+  filters: MessageFilterTag[],
+  pagination?: Pick<MessageListQuery, 'limit' | 'offset'>,
+  searchKeyword?: string
 ): MessageListQuery {
+  const keyword = searchKeyword?.trim()
+
   return {
     accountId: selectedAccountId === 'all' ? undefined : Number(selectedAccountId),
     filters,
-    limit: 100
+    keyword: keyword || undefined,
+    limit: pagination?.limit ?? MESSAGE_LIST_PAGE_SIZE,
+    offset: pagination?.offset ?? 0
   }
 }

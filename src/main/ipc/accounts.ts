@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
 import {
   createAccount,
   disableAccount,
@@ -7,18 +7,23 @@ import {
   removeAccount,
   updateAccount
 } from '../db/repositories/account.repository'
-import { testImapConnection, testImapOAuthConnection } from '../services/imap-connection-test'
+import { testImapConnection } from '../services/imap-connection-test'
 import { refreshMailboxWatchers } from '../services/mailbox-watch'
-import type { AccountCreateInput, AccountUpdateInput } from './types'
+import type { AccountCreateInput, AccountCreatedEvent, AccountUpdateInput } from './types'
 import { saveAccountPassword, readAccountPassword } from '../services/credential-store'
-import {
-  authorizeMicrosoftAccount,
-  getMicrosoftAccessToken,
-  saveMicrosoftAuthorization
-} from '../services/microsoft-oauth'
+import { authorizeMicrosoftAccount, saveMicrosoftAuthorization } from '../services/microsoft-oauth'
+import { closeAddAccountWindow, openAddAccountWindow } from '../services/add-account-window'
 
 export function registerAccountIpc(): void {
   ipcMain.handle('accounts/list', () => listAccounts())
+  ipcMain.handle('accounts/openAddWindow', () => {
+    openAddAccountWindow()
+    return true
+  })
+  ipcMain.handle('accounts/closeAddWindow', () => {
+    closeAddAccountWindow()
+    return true
+  })
   ipcMain.handle('accounts/create', async (_event, input: AccountCreateInput) => {
     let nextInput = input
     let oauthToken: Awaited<ReturnType<typeof authorizeMicrosoftAccount>>['token'] | undefined
@@ -40,12 +45,12 @@ export function registerAccountIpc(): void {
       if (nextInput.authType === 'oauth2') {
         if (!oauthToken) throw new Error('Microsoft OAuth 授权结果无效。')
         saveMicrosoftAuthorization(account.accountId, oauthToken)
-        await testImapOAuthConnection(nextInput, await getMicrosoftAccessToken(account.accountId))
       } else {
         saveAccountPassword(account.accountId, nextInput)
       }
       const savedAccount = getAccount(account.accountId) ?? account
       refreshMailboxWatchers()
+      broadcastAccountCreated(savedAccount)
       return savedAccount
     } catch (error) {
       if (account) {
@@ -61,7 +66,9 @@ export function registerAccountIpc(): void {
     }
 
     if (current.authType === 'oauth2' || input.authType === 'oauth2') {
-      throw new Error('OAuth 账号暂不支持在编辑弹窗中更新，请删除后重新使用 Microsoft 登录。')
+      const account = updateAccount(normalizeOAuthAccountUpdate(input, current))
+      refreshMailboxWatchers()
+      return account
     }
 
     const password = input.password ?? readAccountPassword(input.accountId)
@@ -94,4 +101,40 @@ export function registerAccountIpc(): void {
     refreshMailboxWatchers()
     return removed
   })
+}
+
+function normalizeOAuthAccountUpdate(
+  input: AccountUpdateInput,
+  current: NonNullable<ReturnType<typeof getAccount>>
+): AccountUpdateInput {
+  if (
+    input.password ||
+    (input.authType && input.authType !== current.authType) ||
+    (input.providerKey && input.providerKey !== current.providerKey) ||
+    (input.imapHost && input.imapHost !== current.imapHost) ||
+    (input.imapPort && input.imapPort !== current.imapPort) ||
+    (input.imapSecurity && input.imapSecurity !== current.imapSecurity)
+  ) {
+    throw new Error('OAuth 账号只支持修改别名和同步开关；如需重新授权，请删除后重新添加。')
+  }
+
+  return {
+    accountId: input.accountId,
+    accountLabel: input.accountLabel,
+    displayName: input.displayName,
+    syncEnabled: input.syncEnabled
+  }
+}
+
+function broadcastAccountCreated(account: AccountCreatedEvent['account']): void {
+  const payload: AccountCreatedEvent = {
+    account,
+    requestedSync: true
+  }
+
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.webContents.send('accounts/created', payload)
+    }
+  }
 }

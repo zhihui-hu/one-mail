@@ -4,6 +4,7 @@ export type Account = {
   id: string
   accountId?: number
   providerKey?: string
+  authType?: string
   name: string
   address: string
   unread: number
@@ -32,6 +33,7 @@ export type Message = {
   cc?: string
   subject: string
   preview: string
+  verificationCode?: string
   body: string[]
   html?: string
   bodyStatus: 'none' | 'loading' | 'ready' | 'error'

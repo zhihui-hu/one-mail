@@ -97,7 +97,6 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    user-select: none;
   }
 
   .app-drag-region {
@@ -122,6 +121,11 @@
   .app-no-drag,
   .app-no-drag * {
     cursor: auto;
+  }
+
+  .prose-mail,
+  .prose-mail * {
+    user-select: text;
   }
 
   [data-slot='resizable-handle'] {

@@ -1,14 +1,21 @@
 import { Socket, connect as connectTcp } from 'node:net'
 import { TLSSocket, connect as connectTls } from 'node:tls'
 import type { getAccount } from '../db/repositories/account.repository'
+import { toImapConnectionError } from './imap-errors'
 
 type TestSocket = Socket | TLSSocket
 type ImapAccount = NonNullable<ReturnType<typeof getAccount>>
 
 export type IdleMailboxStatus = {
+  path: string
   uidNext?: number
   totalCount?: number
   unreadCount?: number
+}
+
+export type IdleWatchMailbox = {
+  path: string
+  role: 'inbox' | 'junk'
 }
 
 type IdleResult = {
@@ -20,8 +27,14 @@ const CONNECTION_TIMEOUT_MS = 15000
 
 export class ImapIdleSession {
   private tagIndex = 1
+  private socketError: Error | undefined
+  private readonly socketErrorGuard = (error: Error): void => {
+    this.socketError = toImapConnectionError(error)
+  }
 
-  private constructor(private socket: TestSocket) {}
+  private constructor(private socket: TestSocket) {
+    this.watchSocketErrors(socket)
+  }
 
   static async connect(account: ImapAccount): Promise<ImapIdleSession> {
     const socket =
@@ -42,7 +55,7 @@ export class ImapIdleSession {
 
     if (account.imapSecurity === 'starttls' && socket instanceof Socket) {
       await session.command('STARTTLS')
-      session.socket = await upgradeToTls(socket, account.imapHost)
+      session.replaceSocket(await upgradeToTls(socket, account.imapHost))
     }
 
     return session
@@ -73,18 +86,32 @@ export class ImapIdleSession {
   }
 
   async selectInbox(): Promise<void> {
-    await this.command('SELECT "INBOX"')
+    await this.selectMailbox('INBOX')
+  }
+
+  async selectMailbox(path: string): Promise<void> {
+    await this.command(`SELECT ${quoteAtom(path)}`)
   }
 
   async statusInbox(): Promise<IdleMailboxStatus> {
-    const response = await this.command('STATUS "INBOX" (MESSAGES UNSEEN UIDNEXT)')
+    return this.statusMailbox('INBOX')
+  }
+
+  async statusMailbox(path: string): Promise<IdleMailboxStatus> {
+    const response = await this.command(`STATUS ${quoteAtom(path)} (MESSAGES UNSEEN UIDNEXT)`)
     const values = response.match(/^\* STATUS\s+(?:"[^"]+"|\S+)\s+\(([^)]*)\)/im)?.[1] ?? ''
 
     return {
+      path,
       totalCount: readStatusNumber(values, 'MESSAGES'),
       unreadCount: readStatusNumber(values, 'UNSEEN'),
       uidNext: readStatusNumber(values, 'UIDNEXT')
     }
+  }
+
+  async listWatchMailboxes(): Promise<IdleWatchMailbox[]> {
+    const response = await this.command('LIST "" "*"')
+    return parseWatchMailboxes(response)
   }
 
   async noop(): Promise<void> {
@@ -92,6 +119,7 @@ export class ImapIdleSession {
   }
 
   async idle(timeoutMs: number): Promise<IdleResult> {
+    this.assertSocketHealthy()
     const tag = this.nextTag()
     await writeLine(this.socket, `${tag} IDLE`)
     await this.waitForIdleContinuation()
@@ -103,6 +131,7 @@ export class ImapIdleSession {
     try {
       await this.command('LOGOUT')
     } finally {
+      this.socket.off('error', this.socketErrorGuard)
       this.socket.destroy()
     }
   }
@@ -132,6 +161,7 @@ export class ImapIdleSession {
   }
 
   private async command(command: string): Promise<string> {
+    this.assertSocketHealthy()
     const tag = this.nextTag()
     await writeLine(this.socket, `${tag} ${command}`)
     const response = await readUntilTagged(this.socket, tag)
@@ -145,6 +175,21 @@ export class ImapIdleSession {
     }
 
     return response
+  }
+
+  private replaceSocket(socket: TestSocket): void {
+    this.socket.off('error', this.socketErrorGuard)
+    this.socket = socket
+    this.socketError = undefined
+    this.watchSocketErrors(socket)
+  }
+
+  private watchSocketErrors(socket: TestSocket): void {
+    socket.on('error', this.socketErrorGuard)
+  }
+
+  private assertSocketHealthy(): void {
+    if (this.socketError) throw this.socketError
   }
 }
 
@@ -191,7 +236,7 @@ function waitForIdleChange(
       pendingReason = reason
       socket.write('DONE\r\n', (error) => {
         if (error) {
-          fail(error)
+          fail(toImapConnectionError(error))
           return
         }
 
@@ -220,7 +265,7 @@ function waitForIdleChange(
     }
 
     function handleError(error: Error): void {
-      fail(error)
+      fail(toImapConnectionError(error))
     }
 
     function handleClose(): void {
@@ -245,6 +290,138 @@ function readStatusNumber(values: string, key: string): number | undefined {
   const match = new RegExp(`\\b${key}\\s+(\\d+)`, 'i').exec(values)
   const value = Number(match?.[1])
   return Number.isInteger(value) && value >= 0 ? value : undefined
+}
+
+function parseWatchMailboxes(response: string): IdleWatchMailbox[] {
+  const mailboxes: IdleWatchMailbox[] = []
+
+  for (const line of response.split(/\r?\n/)) {
+    const mailbox = parseWatchMailboxLine(line.trim())
+    if (mailbox) mailboxes.push(mailbox)
+  }
+
+  return uniqueWatchMailboxes(mailboxes)
+}
+
+function parseWatchMailboxLine(line: string): IdleWatchMailbox | null {
+  const match = /^\* LIST \(([^)]*)\) (?:(NIL)|"([^"]*)") (.+)$/i.exec(line)
+  if (!match) return null
+
+  const path = parseImapString(match[4])
+  if (!path) return null
+
+  const attributes = match[1]
+    .split(/\s+/)
+    .map((value) => value.replace(/^\\/, ''))
+    .filter(Boolean)
+  if (hasAttribute(attributes, 'Noselect')) return null
+
+  const displayPath = decodeModifiedUtf7(path)
+  const role = detectWatchMailboxRole(displayPath, attributes)
+  return role ? { path, role } : null
+}
+
+function parseImapString(value: string): string | undefined {
+  const trimmed = value.trim()
+  if (!trimmed || /^NIL$/i.test(trimmed)) return undefined
+
+  if (!trimmed.startsWith('"')) return trimmed
+
+  let result = ''
+  for (let index = 1; index < trimmed.length; index += 1) {
+    const char = trimmed[index]
+    if (char === '"') return result
+    if (char === '\\' && index + 1 < trimmed.length) {
+      index += 1
+      result += trimmed[index]
+      continue
+    }
+    result += char
+  }
+
+  return result
+}
+
+function detectWatchMailboxRole(
+  path: string,
+  attributes: string[]
+): IdleWatchMailbox['role'] | undefined {
+  if (hasAttribute(attributes, 'Inbox') || path.toUpperCase() === 'INBOX') return 'inbox'
+  if (hasAttribute(attributes, 'Junk')) return 'junk'
+
+  const normalizedPath = normalizeMailboxPath(path)
+  if (
+    [
+      'junk',
+      'spam',
+      'bulk mail',
+      'bulk',
+      'junk email',
+      'junk e-mail',
+      '垃圾邮件',
+      '垃圾邮件箱',
+      '垃圾邮箱'
+    ].includes(normalizedPath) ||
+    normalizedPath.endsWith('/junk') ||
+    normalizedPath.endsWith('/spam') ||
+    normalizedPath.endsWith('/junk email') ||
+    normalizedPath.endsWith('/junk e-mail') ||
+    normalizedPath.endsWith('/垃圾邮件') ||
+    normalizedPath.endsWith('/垃圾邮件箱') ||
+    normalizedPath.endsWith('/垃圾邮箱')
+  ) {
+    return 'junk'
+  }
+
+  return undefined
+}
+
+function uniqueWatchMailboxes(mailboxes: IdleWatchMailbox[]): IdleWatchMailbox[] {
+  const seen = new Set<string>()
+
+  return mailboxes.filter((mailbox) => {
+    const key = mailbox.path.toLowerCase()
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function hasAttribute(attributes: string[], attributeName: string): boolean {
+  return attributes.some((attribute) => attribute.toLowerCase() === attributeName.toLowerCase())
+}
+
+function normalizeMailboxPath(path: string): string {
+  return path
+    .replace(/\\/g, '/')
+    .split('/')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join('/')
+    .toLowerCase()
+}
+
+function decodeModifiedUtf7(value: string): string {
+  return value.replace(/&([^-]*)-/g, (match, encoded: string) => {
+    if (encoded === '') return '&'
+
+    try {
+      return decodeUtf16BigEndian(Buffer.from(encoded.replace(/,/g, '/'), 'base64'))
+    } catch {
+      return match
+    }
+  })
+}
+
+function decodeUtf16BigEndian(buffer: Buffer): string {
+  if (buffer.length % 2 !== 0) return ''
+
+  let result = ''
+  for (let index = 0; index < buffer.length; index += 2) {
+    result += String.fromCharCode(buffer.readUInt16BE(index))
+  }
+
+  return result
 }
 
 const CLIENT_ID = {
@@ -300,7 +477,7 @@ function upgradeToTls(socket: Socket, servername: string): Promise<TLSSocket> {
 
     function handleError(error: Error): void {
       cleanup()
-      reject(error)
+      reject(toImapConnectionError(error))
     }
 
     tlsSocket.once('secureConnect', handleSecureConnect)
@@ -344,7 +521,7 @@ function waitForLine(socket: TestSocket, isDone: (line: string) => boolean): Pro
 
     function handleError(error: Error): void {
       cleanup()
-      reject(error)
+      reject(toImapConnectionError(error))
     }
 
     function handleClose(): void {
@@ -384,7 +561,7 @@ function readUntilTagged(socket: TestSocket, tag: string): Promise<string> {
 
     function handleError(error: Error): void {
       cleanup()
-      reject(error)
+      reject(toImapConnectionError(error))
     }
 
     function handleClose(): void {
@@ -402,7 +579,7 @@ function writeLine(socket: TestSocket, line: string): Promise<void> {
   return new Promise((resolve, reject) => {
     socket.write(`${line}\r\n`, (error) => {
       if (error) {
-        reject(error)
+        reject(toImapConnectionError(error))
         return
       }
 

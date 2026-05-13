@@ -217,7 +217,10 @@ export function updateAccount(input: AccountUpdateInput): MailAccount {
       accountId: input.accountId,
       providerKey: input.providerKey ?? current.providerKey,
       displayName: toNullableParam(input.displayName ?? current.displayName),
-      accountLabel: toNullableParam(input.accountLabel ?? current.accountLabel),
+      accountLabel:
+        input.accountLabel === undefined
+          ? (current.accountLabel ?? current.email)
+          : input.accountLabel.trim() || current.email,
       authType: input.authType ?? current.authType,
       imapHost: input.imapHost ?? current.imapHost,
       imapPort: input.imapPort ?? current.imapPort,
@@ -253,6 +256,22 @@ export function disableAccount(accountId: number): MailAccount {
   }
 
   return updated
+}
+
+export function markAccountAuthError(accountId: number, message: string): void {
+  getDatabase()
+    .prepare(
+      `
+      UPDATE onemail_mail_accounts
+      SET
+        status = 'auth_error',
+        credential_state = 'invalid',
+        last_error = :message,
+        updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE account_id = :accountId
+      `
+    )
+    .run({ accountId, message })
 }
 
 export function removeAccount(accountId: number): boolean {

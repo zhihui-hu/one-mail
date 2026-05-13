@@ -12,6 +12,7 @@ type AttachmentDownloadRow = SqliteRow & {
   attachment_id: number
   message_id: number
   account_id: number
+  folder_path: string
   uid: number
   filename: string
   mime_type: string | null
@@ -39,7 +40,7 @@ export async function downloadAttachment(attachmentId: number): Promise<Attachme
   try {
     await authenticateImapSession(account, client)
     await client.identifyClient()
-    await client.selectInbox()
+    await client.selectMailbox(locator.folder_path)
 
     const rawMessage = await client.fetchRawMessage(locator.uid)
     const attachment = findMatchingAttachment(parseMimeAttachments(rawMessage), locator)
@@ -65,12 +66,14 @@ function getAttachmentDownloadLocator(attachmentId: number): AttachmentDownloadR
         a.attachment_id,
         a.message_id,
         m.account_id,
+        f.path AS folder_path,
         m.uid,
         a.filename,
         a.mime_type,
         a.size_bytes
       FROM onemail_message_attachments a
       JOIN onemail_mail_messages m ON m.message_id = a.message_id
+      JOIN onemail_mail_folders f ON f.folder_id = m.folder_id
       WHERE a.attachment_id = :attachmentId
       `
     )

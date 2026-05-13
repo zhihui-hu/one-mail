@@ -1,8 +1,10 @@
 import { Socket, connect as connectTcp } from 'node:net'
 import { TLSSocket, connect as connectTls } from 'node:tls'
 import type { AccountCreateInput } from '../ipc/types'
+import { toImapConnectionError } from '../mail/imap-errors'
 
 const CONNECTION_TIMEOUT_MS = 10000
+const OAUTH_IMAP_AUTH_RETRY_DELAYS_MS = [1200, 2500, 5000]
 
 type TestSocket = Socket | TLSSocket
 const CLIENT_ID = {
@@ -14,20 +16,26 @@ const CLIENT_ID = {
 
 export async function testImapConnection(input: AccountCreateInput): Promise<void> {
   const email = input.email
+  const password = normalizeInputPassword(input)
   if (!email) {
     throw new Error('请输入邮箱地址。')
   }
 
-  if (!input.password) {
+  if (!password) {
     throw new Error('请输入邮箱授权码或密码。')
   }
 
   if (input.imapSecurity === 'ssl_tls') {
-    await testTlsConnection(input, email, input.password)
+    await testTlsConnection(input, email, password)
     return
   }
 
-  await testPlainConnection(input, email, input.password)
+  await testPlainConnection(input, email, password)
+}
+
+function normalizeInputPassword(input: AccountCreateInput): string {
+  const password = input.password?.trim() ?? ''
+  return input.authType === 'app_password' ? password.replace(/\s+/g, '') : password
 }
 
 export async function testImapOAuthConnection(
@@ -39,12 +47,22 @@ export async function testImapOAuthConnection(
     throw new Error('Microsoft OAuth 未返回邮箱地址。')
   }
 
-  if (input.imapSecurity === 'ssl_tls') {
-    await testOAuthTlsConnection(input, email, accessToken)
-    return
-  }
+  for (let attempt = 0; attempt <= OAUTH_IMAP_AUTH_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      if (input.imapSecurity === 'ssl_tls') {
+        await testOAuthTlsConnection(input, email, accessToken)
+      } else {
+        await testOAuthPlainConnection(input, email, accessToken)
+      }
+      return
+    } catch (error) {
+      if (attempt >= OAUTH_IMAP_AUTH_RETRY_DELAYS_MS.length || !isOAuthImapAuthError(error)) {
+        throw error
+      }
 
-  await testOAuthPlainConnection(input, email, accessToken)
+      await wait(OAUTH_IMAP_AUTH_RETRY_DELAYS_MS[attempt])
+    }
+  }
 }
 
 async function testTlsConnection(
@@ -192,7 +210,7 @@ function upgradeToTls(socket: Socket, servername: string): Promise<TLSSocket> {
 
     function handleError(error: Error): void {
       cleanup()
-      reject(toConnectionError(error))
+      reject(toImapConnectionError(error))
     }
 
     tlsSocket.once('secureConnect', handleSecureConnect)
@@ -220,7 +238,7 @@ function waitForTcpConnect(socket: Socket): Promise<void> {
 
     function handleError(error: Error): void {
       cleanup()
-      reject(toConnectionError(error))
+      reject(toImapConnectionError(error))
     }
 
     socket.once('connect', handleConnect)
@@ -248,7 +266,7 @@ function waitForTlsConnect(socket: TLSSocket): Promise<void> {
 
     function handleError(error: Error): void {
       cleanup()
-      reject(toConnectionError(error))
+      reject(toImapConnectionError(error))
     }
 
     socket.once('secureConnect', handleSecureConnect)
@@ -312,7 +330,7 @@ function waitForLine(socket: TestSocket, isDone: (line: string) => boolean): Pro
 
     function handleError(error: Error): void {
       cleanup()
-      reject(toConnectionError(error))
+      reject(toImapConnectionError(error))
     }
 
     function handleClose(): void {
@@ -330,7 +348,7 @@ function writeLine(socket: Socket, line: string): Promise<void> {
   return new Promise((resolve, reject) => {
     socket.write(`${line}\r\n`, (error) => {
       if (error) {
-        reject(toConnectionError(error))
+        reject(toImapConnectionError(error))
         return
       }
 
@@ -373,6 +391,14 @@ function sanitizeImapResponse(value: string): string {
 }
 
 function formatImapActionError(action: string, line: string): string {
+  if (action === 'OAuth 登录认证' && /AUTHENTICATE failed/i.test(line)) {
+    return [
+      'IMAP OAuth 登录认证失败：Outlook 拒绝了当前 Microsoft access token。',
+      '请确认该 Microsoft 账号/组织已允许 IMAP，并且授权页已同意 Outlook IMAP 权限；如果刚完成首次授权，请稍后重试或删除该账号后重新添加。',
+      `服务器响应：${sanitizeImapResponse(line)}`
+    ].join(' ')
+  }
+
   if (action === '登录认证' && /AUTHENTICATIONFAILED|Invalid credentials/i.test(line)) {
     return [
       'IMAP 登录认证失败：Gmail 拒绝了当前凭据。',
@@ -384,24 +410,12 @@ function formatImapActionError(action: string, line: string): string {
   return `IMAP ${action}失败：${sanitizeImapResponse(line)}`
 }
 
-function toConnectionError(error: Error): Error {
-  const code = 'code' in error && typeof error.code === 'string' ? error.code : ''
+function isOAuthImapAuthError(error: unknown): boolean {
+  return error instanceof Error && /IMAP OAuth 登录认证失败/i.test(error.message)
+}
 
-  if (code === 'ENOTFOUND') {
-    return new Error('找不到 IMAP 服务器，请检查服务器地址。')
-  }
-
-  if (code === 'ECONNREFUSED') {
-    return new Error('IMAP 服务器拒绝连接，请检查端口和安全模式。')
-  }
-
-  if (code === 'ETIMEDOUT' || code === 'EHOSTUNREACH' || code === 'ENETUNREACH') {
-    return new Error('连接 IMAP 服务器超时，请检查网络或服务器地址。')
-  }
-
-  if (code === 'CERT_HAS_EXPIRED' || code === 'DEPTH_ZERO_SELF_SIGNED_CERT') {
-    return new Error('IMAP 服务器证书无效，无法建立安全连接。')
-  }
-
-  return new Error(`IMAP 连接测试失败：${error.message}`)
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
 }

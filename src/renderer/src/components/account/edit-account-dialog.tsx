@@ -33,6 +33,7 @@ export function EditAccountDialog({
 }: EditAccountDialogProps): React.JSX.Element {
   const [pending, setPending] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const isOAuthAccount = account.authType === 'oauth2'
   const form = useForm<EditAccountValues>({
     resolver: zodResolver(editAccountSchema),
     defaultValues: {
@@ -65,7 +66,7 @@ export function EditAccountDialog({
     setError(null)
 
     const password = optionalText(values.password)
-    if (account.credentialState !== 'stored' && !password) {
+    if (!isOAuthAccount && account.credentialState !== 'stored' && !password) {
       setError('这个账号还没有保存密码或授权码，请填写后再保存。')
       setPending(false)
       return
@@ -74,8 +75,8 @@ export function EditAccountDialog({
     try {
       await onSubmit({
         accountId: account.accountId,
-        accountLabel: optionalText(values.accountLabel),
-        password
+        accountLabel: values.accountLabel?.trim() ?? '',
+        password: isOAuthAccount ? undefined : password
       })
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : '保存账号失败。')
@@ -90,7 +91,9 @@ export function EditAccountDialog({
       onOpenChange={handleOpenChange}
       title="编辑账号"
       description={
-        account.credentialState === 'stored'
+        isOAuthAccount
+          ? 'Microsoft OAuth 账号在这里仅修改别名；重新授权请删除后重新添加。'
+          : account.credentialState === 'stored'
           ? '保存前会测试邮箱连接是否正常；留空则使用已保存的密码或授权码。'
           : '这个账号还没有保存密码或授权码，保存前需要重新填写并测试连接。'
       }
@@ -100,7 +103,7 @@ export function EditAccountDialog({
             取消
           </Button>
           <Button type="submit" form="edit-account-form" disabled={pending || !account.accountId}>
-            {pending ? '测试中...' : '保存更改'}
+            {pending ? (isOAuthAccount ? '保存中...' : '测试中...') : '保存更改'}
           </Button>
         </>
       }
@@ -126,24 +129,28 @@ export function EditAccountDialog({
               {...form.register('accountLabel')}
             />
           </AccountFormField>
-          <AccountFormField
-            id="edit-account-password"
-            label="密码或授权码"
-            required={account.credentialState !== 'stored'}
-            error={form.formState.errors.password?.message}
-          >
-            <Input
+          {isOAuthAccount ? null : (
+            <AccountFormField
               id="edit-account-password"
-              type="password"
-              autoComplete="current-password"
-              placeholder={
-                account.credentialState === 'stored' ? '留空则使用已保存凭据' : '请输入密码或授权码'
-              }
+              label="密码或授权码"
               required={account.credentialState !== 'stored'}
-              aria-invalid={Boolean(form.formState.errors.password)}
-              {...form.register('password')}
-            />
-          </AccountFormField>
+              error={form.formState.errors.password?.message}
+            >
+              <Input
+                id="edit-account-password"
+                type="password"
+                autoComplete="current-password"
+                placeholder={
+                  account.credentialState === 'stored'
+                    ? '留空则使用已保存凭据'
+                    : '请输入密码或授权码'
+                }
+                required={account.credentialState !== 'stored'}
+                aria-invalid={Boolean(form.formState.errors.password)}
+                {...form.register('password')}
+              />
+            </AccountFormField>
+          )}
         </FieldGroup>
 
         {error ? <FieldError>{error}</FieldError> : null}

@@ -9,6 +9,7 @@ import type {
   NewMailNotificationMessage,
   MessageListQuery
 } from '../../ipc/types'
+import { extractVerificationCode } from '../../../shared/verification-code'
 
 type MessageRow = SqliteRow & {
   message_id: number
@@ -46,6 +47,7 @@ export type MessageReadStateTarget = {
   messageId: number
   accountId: number
   folderId: number
+  folderPath: string
   uid: number
   isRead: boolean
 }
@@ -75,12 +77,30 @@ export function listMessages(query?: MessageListQuery): MailMessageSummary[] {
     where.push("date(COALESCE(m.received_at, m.internal_date)) = date('now', 'localtime')")
   }
 
-  const keyword = (query?.keyword ?? query?.search)?.trim()
+  const keyword = normalizeSearchKeyword(query?.keyword ?? query?.search)
   if (keyword) {
-    where.push(
-      '(m.subject LIKE :keyword OR m.from_name LIKE :keyword OR m.from_email LIKE :keyword OR m.snippet LIKE :keyword)'
-    )
-    params.keyword = `%${keyword}%`
+    const searchClauses = [
+      "m.subject LIKE :likeKeyword ESCAPE '\\'",
+      "m.from_name LIKE :likeKeyword ESCAPE '\\'",
+      "m.from_email LIKE :likeKeyword ESCAPE '\\'",
+      "m.snippet LIKE :likeKeyword ESCAPE '\\'",
+      "b.body_text LIKE :likeKeyword ESCAPE '\\'"
+    ]
+    const ftsKeyword = toFtsQuery(keyword)
+
+    if (ftsKeyword) {
+      searchClauses.unshift(
+        `m.message_id IN (
+          SELECT message_id
+          FROM onemail_message_search
+          WHERE onemail_message_search MATCH :ftsKeyword
+        )`
+      )
+      params.ftsKeyword = ftsKeyword
+    }
+
+    where.push(`(${searchClauses.join(' OR ')})`)
+    params.likeKeyword = `%${escapeLikeKeyword(keyword)}%`
   }
 
   const rows = getDatabase()
@@ -98,8 +118,11 @@ export function listMessages(query?: MessageListQuery): MailMessageSummary[] {
         m.is_read,
         m.is_starred,
         m.has_attachments,
-        m.body_status
+        m.body_status,
+        b.body_text,
+        b.body_html_sanitized
       FROM onemail_mail_messages m
+      LEFT JOIN onemail_message_bodies b ON b.message_id = m.message_id
       WHERE ${where.join(' AND ')}
       ORDER BY COALESCE(m.received_at, m.internal_date, m.created_at) DESC, m.message_id DESC
       LIMIT :limit OFFSET :offset
@@ -108,6 +131,26 @@ export function listMessages(query?: MessageListQuery): MailMessageSummary[] {
     .all(params)
 
   return rows.map(mapMessageSummaryRow)
+}
+
+function normalizeSearchKeyword(value?: string): string | undefined {
+  const keyword = value?.replace(/\s+/g, ' ').trim()
+  return keyword || undefined
+}
+
+function escapeLikeKeyword(value: string): string {
+  return value.replace(/[\\%_]/g, (character) => `\\${character}`)
+}
+
+function toFtsQuery(value: string): string {
+  return (
+    value
+      .match(/[\p{L}\p{N}_]+/gu)
+      ?.map((term) => term.replace(/"/g, '""'))
+      .filter(Boolean)
+      .map((term) => `"${term}"`)
+      .join(' AND ') ?? ''
+  )
 }
 
 export function listAccountMailboxStats(): AccountMailboxStats[] {
@@ -173,8 +216,11 @@ export function listRecentNotificationMessages(
         m.is_read,
         m.is_starred,
         m.has_attachments,
-        m.body_status
+        m.body_status,
+        b.body_text,
+        b.body_html_sanitized
       FROM onemail_mail_messages m
+      LEFT JOIN onemail_message_bodies b ON b.message_id = m.message_id
       WHERE m.account_id = :accountId
         AND m.remote_deleted = 0
       ORDER BY m.message_id DESC
@@ -190,7 +236,13 @@ export function listRecentNotificationMessages(
     fromName: toOptionalString(row.from_name),
     fromEmail: toOptionalString(row.from_email),
     receivedAt: toOptionalString(row.received_at),
-    snippet: toOptionalString(row.snippet)
+    snippet: toOptionalString(row.snippet),
+    verificationCode: extractVerificationCode(
+      row.subject,
+      row.snippet,
+      row.body_text,
+      row.body_html_sanitized
+    )
   }))
 }
 
@@ -268,15 +320,23 @@ export function getMessageReadStateTarget(messageId: number): MessageReadStateTa
         message_id: number
         account_id: number
         folder_id: number
+        folder_path: string
         uid: number
         is_read: number
       }
     >(
       `
-      SELECT message_id, account_id, folder_id, uid, is_read
-      FROM onemail_mail_messages
-      WHERE message_id = :messageId
-        AND remote_deleted = 0
+      SELECT
+        m.message_id,
+        m.account_id,
+        m.folder_id,
+        f.path AS folder_path,
+        m.uid,
+        m.is_read
+      FROM onemail_mail_messages m
+      JOIN onemail_mail_folders f ON f.folder_id = m.folder_id
+      WHERE m.message_id = :messageId
+        AND m.remote_deleted = 0
       `
     )
     .get({ messageId })
@@ -287,6 +347,7 @@ export function getMessageReadStateTarget(messageId: number): MessageReadStateTa
     messageId: toNumber(row.message_id),
     accountId: toNumber(row.account_id),
     folderId: toNumber(row.folder_id),
+    folderPath: row.folder_path,
     uid: toNumber(row.uid),
     isRead: toBoolean(row.is_read)
   }
@@ -343,7 +404,13 @@ function mapMessageSummaryRow(row: MessageRow): MailMessageSummary {
     isRead: toBoolean(row.is_read),
     isStarred: toBoolean(row.is_starred),
     hasAttachments: toBoolean(row.has_attachments),
-    bodyStatus: row.body_status
+    bodyStatus: row.body_status,
+    verificationCode: extractVerificationCode(
+      row.subject,
+      row.snippet,
+      row.body_text,
+      row.body_html_sanitized
+    )
   }
 }
 

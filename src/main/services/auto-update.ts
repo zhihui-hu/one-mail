@@ -1,10 +1,12 @@
 import { app } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import electronUpdater, { type AppUpdater } from 'electron-updater'
+import { isBoringSslBadDecryptError } from '../runtime-errors'
 
 const UPDATE_CHECK_INTERVAL_MS = 1000 * 60 * 60 * 6
 
 let updateCheckTimer: NodeJS.Timeout | undefined
+let autoUpdaterErrorHandlerInstalled = false
 
 function getAutoUpdater(): AppUpdater {
   const { autoUpdater } = electronUpdater
@@ -21,10 +23,11 @@ export function startAutoUpdateChecks(): void {
   }
 
   const autoUpdater = getAutoUpdater()
+  installAutoUpdaterErrorHandler(autoUpdater)
 
   const checkForUpdates = (): void => {
     autoUpdater.checkForUpdatesAndNotify().catch((error) => {
-      console.error('Failed to check for updates', error)
+      logUpdateError(error)
     })
   }
 
@@ -39,4 +42,20 @@ export function stopAutoUpdateChecks(): void {
 
   clearInterval(updateCheckTimer)
   updateCheckTimer = undefined
+}
+
+function installAutoUpdaterErrorHandler(autoUpdater: AppUpdater): void {
+  if (autoUpdaterErrorHandlerInstalled) return
+  autoUpdaterErrorHandlerInstalled = true
+
+  autoUpdater.on('error', logUpdateError)
+}
+
+function logUpdateError(error: unknown): void {
+  if (isBoringSslBadDecryptError(error)) {
+    console.warn('Ignored BoringSSL BAD_DECRYPT while checking for updates.')
+    return
+  }
+
+  console.error('Failed to check for updates', error)
 }

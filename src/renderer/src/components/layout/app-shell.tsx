@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { AccountList } from '@renderer/components/account/account-list'
-import { AddAccountDialog } from '@renderer/components/account/add-account-dialog'
 import { EditAccountDialog } from '@renderer/components/account/edit-account-dialog'
+import { OutlookImapHelpDialog } from '@renderer/components/account/outlook-imap-help-dialog'
 import { RemoveAccountDialog } from '@renderer/components/account/remove-account-dialog'
 import { MailList } from '@renderer/components/mail/mail-list'
 import { MailReader } from '@renderer/components/mail/mail-reader'
@@ -31,14 +31,12 @@ import {
 } from '@renderer/components/ui/tooltip'
 import { Inbox, Plus, Settings, Upload } from 'lucide-react'
 import type {
-  AccountCreateInput,
   AccountUpdateInput,
   AppSettings,
   SettingsUpdateInput,
   SystemInfo
 } from '../../../../shared/types'
 import {
-  createAccount,
   downloadAttachment,
   importSqlBackup,
   loadAccounts,
@@ -46,6 +44,9 @@ import {
   loadMessageBody,
   loadMessageDetail,
   loadMessages,
+  MESSAGE_LIST_PAGE_SIZE,
+  onAccountCreated,
+  openAddAccountWindow,
   removeAccount,
   revealDatabaseInFileManager,
   saveSettings,
@@ -55,8 +56,9 @@ import {
   toMessageQuery,
   updateAccount
 } from '@renderer/lib/api'
+import { isVerificationMailCandidate } from '../../../../shared/verification-code'
 
-export type DialogKind = 'add' | 'edit' | 'delete' | 'settings' | null
+export type DialogKind = 'edit' | 'delete' | 'settings' | null
 
 type SyncNotice = {
   state: 'idle' | 'running' | 'success' | 'error'
@@ -64,6 +66,11 @@ type SyncNotice = {
   startedAt?: Date
   finishedAt?: Date
   message?: string
+}
+
+type MessageListPageState = {
+  hasMore: boolean
+  loadingMore: boolean
 }
 
 export function AppShell(): React.JSX.Element {
@@ -74,13 +81,23 @@ export function AppShell(): React.JSX.Element {
   const [selectedAccountId, setSelectedAccountId] = React.useState('all')
   const [selectedMessageId, setSelectedMessageId] = React.useState('')
   const [filters, setFilters] = React.useState<MailFilterTag[]>([])
+  const [searchKeyword, setSearchKeyword] = React.useState('')
   const [dialogKind, setDialogKind] = React.useState<DialogKind>(null)
   const [dialogAccountId, setDialogAccountId] = React.useState<string | null>(null)
+  const [outlookImapHelpAccount, setOutlookImapHelpAccount] = React.useState<Account | null>(null)
   const [syncingAccountIds, setSyncingAccountIds] = React.useState<Set<string>>(() => new Set())
   const [syncNotice, setSyncNotice] = React.useState<SyncNotice>({ state: 'idle', label: '' })
+  const [messagePage, setMessagePage] = React.useState<MessageListPageState>({
+    hasMore: false,
+    loadingMore: false
+  })
   const [loadingMessageId, setLoadingMessageId] = React.useState<string | null>(null)
   const [loadingBodyMessageId, setLoadingBodyMessageId] = React.useState<string | null>(null)
+  const loadingMoreMessagesRef = React.useRef(false)
+  const loadMoreRequestTokenRef = React.useRef(0)
+  const messageListScopeRef = React.useRef('')
   const markingReadMessageIdsRef = React.useRef<Set<string>>(new Set())
+  const prefetchingVerificationMessageIdsRef = React.useRef<Set<string>>(new Set())
   const [downloadingAttachmentIds, setDownloadingAttachmentIds] = React.useState<Set<number>>(
     () => new Set()
   )
@@ -107,26 +124,48 @@ export function AppShell(): React.JSX.Element {
     : undefined
   const showNoAccounts = !loading && !hasAccounts
 
+  const replaceMessages = React.useCallback((nextMessages: Message[]): void => {
+    loadMoreRequestTokenRef.current += 1
+    loadingMoreMessagesRef.current = false
+    setMessages(nextMessages)
+    setMessagePage({
+      hasMore: nextMessages.length === MESSAGE_LIST_PAGE_SIZE,
+      loadingMore: false
+    })
+    setSelectedMessageId((current) => {
+      if (nextMessages.some((message) => message.id === current)) return current
+      return nextMessages[0]?.id ?? ''
+    })
+  }, [])
+
+  React.useEffect(() => {
+    messageListScopeRef.current = getMessageListScopeKey(selectedAccountId, filters, searchKeyword)
+  }, [filters, searchKeyword, selectedAccountId])
+
   const refreshAccounts = React.useCallback(async () => {
     const nextAccounts = await loadAccounts()
     setAccounts(nextAccounts)
   }, [])
 
   const refreshMessages = React.useCallback(
-    async (accountId: string, nextFilters: MailFilterTag[]) => {
+    async (accountId: string, nextFilters: MailFilterTag[], nextSearchKeyword: string) => {
       if (!accountId) {
         setMessages([])
         setSelectedMessageId('')
+        setMessagePage({ hasMore: false, loadingMore: false })
         return
       }
-      const nextMessages = await loadMessages(toMessageQuery(accountId, nextFilters))
-      setMessages(nextMessages)
-      setSelectedMessageId((current) => {
-        if (nextMessages.some((message) => message.id === current)) return current
-        return nextMessages[0]?.id ?? ''
-      })
+      const nextMessages = await loadMessages(
+        toMessageQuery(
+          accountId,
+          nextFilters,
+          { limit: MESSAGE_LIST_PAGE_SIZE, offset: 0 },
+          nextSearchKeyword
+        )
+      )
+      replaceMessages(nextMessages)
     },
-    []
+    [replaceMessages]
   )
 
   const refreshVisibleMailbox = React.useCallback(
@@ -137,32 +176,34 @@ export function AppShell(): React.JSX.Element {
 
       const refreshedAccounts = loadAccounts()
       const refreshedMessages = shouldRefreshMessages
-        ? loadMessages(toMessageQuery(currentAccountId, filters))
+        ? loadMessages(
+            toMessageQuery(
+              currentAccountId,
+              filters,
+              { limit: MESSAGE_LIST_PAGE_SIZE, offset: 0 },
+              searchKeyword
+            )
+          )
         : Promise.resolve<Message[] | null>(null)
       const [nextAccounts, nextMessages] = await Promise.all([refreshedAccounts, refreshedMessages])
 
       setAccounts(nextAccounts)
 
       if (nextMessages) {
-        setMessages(nextMessages)
-        setSelectedMessageId((current) => {
-          if (nextMessages.some((message) => message.id === current)) return current
-          return nextMessages[0]?.id ?? ''
-        })
+        replaceMessages(nextMessages)
       }
     },
-    [filters, selectedAccountId]
+    [filters, replaceMessages, searchKeyword, selectedAccountId]
   )
 
   const reloadInitialData = React.useCallback(async () => {
     const data = await loadInitialData()
     setAccounts(data.accounts)
-    setMessages(data.messages)
     setSettings(data.settings)
     setSystemInfo(data.systemInfo)
     setSelectedAccountId(data.selectedAccountId)
-    setSelectedMessageId(data.messages[0]?.id ?? '')
-  }, [])
+    replaceMessages(data.messages)
+  }, [replaceMessages])
 
   React.useEffect(() => {
     let cancelled = false
@@ -174,11 +215,10 @@ export function AppShell(): React.JSX.Element {
         const data = await loadInitialData()
         if (cancelled) return
         setAccounts(data.accounts)
-        setMessages(data.messages)
         setSettings(data.settings)
         setSystemInfo(data.systemInfo)
         setSelectedAccountId(data.selectedAccountId)
-        setSelectedMessageId(data.messages[0]?.id ?? '')
+        replaceMessages(data.messages)
       } catch (loadError) {
         if (!cancelled) {
           setError(loadError instanceof Error ? loadError.message : '加载邮箱数据失败。')
@@ -193,7 +233,7 @@ export function AppShell(): React.JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [replaceMessages])
 
   React.useEffect(() => {
     return window.api.sync.onMailboxChanged((event) => {
@@ -203,87 +243,89 @@ export function AppShell(): React.JSX.Element {
     })
   }, [refreshVisibleMailbox])
 
-  async function handleCreateAccount(input: AccountCreateInput): Promise<void> {
-    setError(null)
-    const startedAt = new Date()
-    const accountLabel = input.email ?? 'Microsoft 账号'
-    setSyncNotice({
-      state: 'running',
-      label: accountLabel,
-      startedAt,
-      message:
-        input.authType === 'oauth2'
-          ? input.oauthAuthorizationMode === 'copy_link'
-            ? 'Microsoft 授权链接已复制，请在浏览器中打开并完成授权...'
-            : '正在打开 OneMail 内置 Microsoft 授权窗口...'
-          : `正在验证并保存 ${accountLabel}...`
-    })
-    try {
-      const account = await createAccount(input)
-      const nextAccounts = await loadAccounts()
-      const nextSelectedAccountId = String(account.accountId)
-      setAccounts(nextAccounts)
-      setSelectedAccountId(nextSelectedAccountId)
-      await refreshMessages(nextSelectedAccountId, filters)
-      setDialogKind(null)
-      setSyncNotice({
-        state: 'running',
-        label: account.email,
-        startedAt,
-        message: `${account.email} 已保存，正在后台同步...`
-      })
-      void syncCreatedAccountInBackground(account.accountId, account.email, startedAt)
-    } catch (createError) {
-      const message = createError instanceof Error ? createError.message : '添加账号失败。'
-      setSyncNotice({
-        state: 'error',
-        label: accountLabel,
-        startedAt,
-        finishedAt: new Date(),
-        message: `${accountLabel} 添加失败：${message}`
-      })
-      throw createError
-    }
-  }
+  const syncCreatedAccountInBackground = React.useCallback(
+    (accountId: number, accountEmail: string, startedAt: Date): void => {
+      const accountKey = String(accountId)
+      setSyncingAccountIds((current) => new Set(current).add(accountKey))
 
-  function syncCreatedAccountInBackground(
-    accountId: number,
-    accountEmail: string,
-    startedAt: Date
-  ): void {
-    const accountKey = String(accountId)
-    setSyncingAccountIds((current) => new Set(current).add(accountKey))
+      void syncAccount(accountId, 'initial')
+        .then(async () => {
+          await refreshAccounts()
+          await refreshMessages(String(accountId), filters, searchKeyword)
+          setSyncNotice({
+            state: 'success',
+            label: accountEmail,
+            startedAt,
+            finishedAt: new Date(),
+            message: `${accountEmail} 后台同步完成`
+          })
+        })
+        .catch((syncError) => {
+          const message = syncError instanceof Error ? syncError.message : '同步账号失败。'
+          const account = accounts.find((item) => item.accountId === accountId)
+          if (shouldShowOutlookImapHelp(message, account)) {
+            setOutlookImapHelpAccount(account ?? createOutlookHelpAccount(accountId, accountEmail))
+          }
+          setError(message)
+          setSyncNotice({
+            state: 'error',
+            label: accountEmail,
+            startedAt,
+            finishedAt: new Date(),
+            message: `${accountEmail} 后台同步失败：${message}`
+          })
+        })
+        .finally(() => {
+          setSyncingAccountIds((current) => {
+            const next = new Set(current)
+            next.delete(accountKey)
+            return next
+          })
+        })
+    },
+    [accounts, filters, refreshAccounts, refreshMessages, searchKeyword]
+  )
 
-    void syncAccount(accountId)
-      .then(async () => {
-        await refreshAccounts()
-        await refreshMessages(String(accountId), filters)
+  React.useEffect(() => {
+    return onAccountCreated((event) => {
+      const startedAt = new Date()
+      const nextSelectedAccountId = String(event.account.accountId)
+
+      setError(null)
+      void loadAccounts()
+        .then(async (nextAccounts) => {
+          setAccounts(nextAccounts)
+          setSelectedAccountId(nextSelectedAccountId)
+          await refreshMessages(nextSelectedAccountId, filters, searchKeyword)
+        })
+        .catch((refreshError) => {
+          setError(refreshError instanceof Error ? refreshError.message : '刷新账号失败。')
+        })
+
+      if (event.requestedSync) {
+        setSyncNotice({
+          state: 'running',
+          label: event.account.email,
+          startedAt,
+          message: `${event.account.email} 已保存，正在后台同步...`
+        })
+        syncCreatedAccountInBackground(event.account.accountId, event.account.email, startedAt)
+      } else {
         setSyncNotice({
           state: 'success',
-          label: accountEmail,
+          label: event.account.email,
           startedAt,
           finishedAt: new Date(),
-          message: `${accountEmail} 后台同步完成`
+          message: `${event.account.email} 已保存`
         })
-      })
-      .catch((syncError) => {
-        const message = syncError instanceof Error ? syncError.message : '同步账号失败。'
-        setError(message)
-        setSyncNotice({
-          state: 'error',
-          label: accountEmail,
-          startedAt,
-          finishedAt: new Date(),
-          message: `${accountEmail} 后台同步失败：${message}`
-        })
-      })
-      .finally(() => {
-        setSyncingAccountIds((current) => {
-          const next = new Set(current)
-          next.delete(accountKey)
-          return next
-        })
-      })
+      }
+    })
+  }, [filters, refreshMessages, searchKeyword, syncCreatedAccountInBackground])
+
+  function handleOpenAddAccountWindow(): void {
+    void openAddAccountWindow().catch((openError) => {
+      setError(openError instanceof Error ? openError.message : '打开添加账号窗口失败。')
+    })
   }
 
   async function handleUpdateAccount(input: AccountUpdateInput): Promise<void> {
@@ -319,7 +361,7 @@ export function AppShell(): React.JSX.Element {
       }
     }
     await refreshAccounts()
-    await refreshMessages(String(account.accountId), filters)
+    await refreshMessages(String(account.accountId), filters, searchKeyword)
     setDialogKind(null)
     setDialogAccountId(null)
   }
@@ -341,7 +383,7 @@ export function AppShell(): React.JSX.Element {
     ) {
       setSelectedAccountId(nextSelectedAccountId)
       if (nextSelectedAccountId) {
-        await refreshMessages(nextSelectedAccountId, filters)
+        await refreshMessages(nextSelectedAccountId, filters, searchKeyword)
       } else {
         setMessages([])
         setSelectedMessageId('')
@@ -372,7 +414,7 @@ export function AppShell(): React.JSX.Element {
         return
       }
       await refreshAccounts()
-      await refreshMessages(selectedAccountId, filters)
+      await refreshMessages(selectedAccountId, filters, searchKeyword)
       setSyncNotice({
         state: 'success',
         label: account.name,
@@ -382,6 +424,9 @@ export function AppShell(): React.JSX.Element {
       })
     } catch (refreshError) {
       const message = refreshError instanceof Error ? refreshError.message : '刷新账号失败。'
+      if (shouldShowOutlookImapHelp(message, account)) {
+        setOutlookImapHelpAccount(account)
+      }
       if (shouldEditCredential(message)) {
         setDialogAccountId(account.id)
         setDialogKind('edit')
@@ -432,17 +477,84 @@ export function AppShell(): React.JSX.Element {
   function handleSelectAccount(accountId: string): void {
     if (!accountId) return
     setSelectedAccountId(accountId)
-    void refreshMessages(accountId, filters).catch((refreshError) => {
+    void refreshMessages(accountId, filters, searchKeyword).catch((refreshError) => {
       setError(refreshError instanceof Error ? refreshError.message : '刷新邮件失败。')
     })
   }
 
   function handleChangeFilters(nextFilters: MailFilterTag[]): void {
     setFilters(nextFilters)
-    void refreshMessages(selectedAccountId, nextFilters).catch((refreshError) => {
+    void refreshMessages(selectedAccountId, nextFilters, searchKeyword).catch((refreshError) => {
       setError(refreshError instanceof Error ? refreshError.message : '刷新邮件失败。')
     })
   }
+
+  function handleChangeSearchKeyword(nextSearchKeyword: string): void {
+    setSearchKeyword(nextSearchKeyword)
+    void refreshMessages(selectedAccountId, filters, nextSearchKeyword).catch((refreshError) => {
+      setError(refreshError instanceof Error ? refreshError.message : '搜索邮件失败。')
+    })
+  }
+
+  const handleLoadMoreMessages = React.useCallback((): void => {
+    if (
+      loading ||
+      loadingMoreMessagesRef.current ||
+      messagePage.loadingMore ||
+      !messagePage.hasMore ||
+      !selectedAccountId
+    ) {
+      return
+    }
+
+    loadingMoreMessagesRef.current = true
+    const requestToken = loadMoreRequestTokenRef.current + 1
+    loadMoreRequestTokenRef.current = requestToken
+    setMessagePage((current) => ({ ...current, loadingMore: true }))
+    setError(null)
+
+    const offset = messages.length
+    const scopeKey = getMessageListScopeKey(selectedAccountId, filters, searchKeyword)
+    void loadMessages(
+      toMessageQuery(
+        selectedAccountId,
+        filters,
+        { limit: MESSAGE_LIST_PAGE_SIZE, offset },
+        searchKeyword
+      )
+    )
+      .then((nextMessages) => {
+        if (
+          messageListScopeRef.current !== scopeKey ||
+          loadMoreRequestTokenRef.current !== requestToken
+        ) {
+          return
+        }
+        setMessages((current) => mergeMessagesById(current, nextMessages))
+        setMessagePage({
+          hasMore: nextMessages.length === MESSAGE_LIST_PAGE_SIZE,
+          loadingMore: false
+        })
+      })
+      .catch((loadError) => {
+        if (loadMoreRequestTokenRef.current !== requestToken) return
+        setError(loadError instanceof Error ? loadError.message : '加载更多邮件失败。')
+        setMessagePage((current) => ({ ...current, loadingMore: false }))
+      })
+      .finally(() => {
+        if (loadMoreRequestTokenRef.current === requestToken) {
+          loadingMoreMessagesRef.current = false
+        }
+      })
+  }, [
+    filters,
+    loading,
+    messagePage.hasMore,
+    messagePage.loadingMore,
+    messages.length,
+    searchKeyword,
+    selectedAccountId
+  ])
 
   const handleLoadMessageDetail = React.useCallback((messageId: string): void => {
     setLoadingMessageId(messageId)
@@ -482,6 +594,34 @@ export function AppShell(): React.JSX.Element {
     },
     [loadingBodyMessageId]
   )
+
+  React.useEffect(() => {
+    const candidates = messages
+      .filter(
+        (message) =>
+          !message.verificationCode &&
+          !message.bodyLoaded &&
+          message.bodyStatus !== 'error' &&
+          !prefetchingVerificationMessageIdsRef.current.has(message.id) &&
+          isVerificationMailCandidate(message.subject, message.preview)
+      )
+      .slice(0, 3)
+
+    for (const message of candidates) {
+      prefetchingVerificationMessageIdsRef.current.add(message.id)
+
+      void loadMessageBody(message)
+        .then((detail) => {
+          setMessages((current) =>
+            current.map((item) => (item.id === message.id ? { ...item, ...detail } : item))
+          )
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          prefetchingVerificationMessageIdsRef.current.delete(message.id)
+        })
+    }
+  }, [messages])
 
   const handleDownloadAttachment = React.useCallback(
     (message: Message, attachmentId: number): void => {
@@ -579,14 +719,14 @@ export function AppShell(): React.JSX.Element {
   return (
     <main className="flex h-screen min-h-screen flex-col overflow-hidden bg-background text-foreground">
       <TitleBar
-        onAddAccount={() => setDialogKind('add')}
+        onAddAccount={handleOpenAddAccountWindow}
         onOpenSettings={() => setDialogKind('settings')}
       />
 
       {showNoAccounts ? (
         <NoAccountsBody
           importingSql={importingSql}
-          onAddAccount={() => setDialogKind('add')}
+          onAddAccount={handleOpenAddAccountWindow}
           onImportSql={() => {
             void handleImportSqlBackup()
           }}
@@ -637,10 +777,15 @@ export function AppShell(): React.JSX.Element {
               messages={messages}
               selectedMessageId={selectedMessageId}
               filters={filters}
+              searchKeyword={searchKeyword}
               loading={loading}
+              loadingMore={messagePage.loadingMore}
+              hasMore={messagePage.hasMore}
               error={error}
               onSelectMessage={handleSelectMessage}
               onChangeFilters={handleChangeFilters}
+              onChangeSearchKeyword={handleChangeSearchKeyword}
+              onLoadMore={handleLoadMoreMessages}
             />
           </ResizablePanel>
 
@@ -683,11 +828,6 @@ export function AppShell(): React.JSX.Element {
         }}
       />
 
-      <AddAccountDialog
-        open={dialogKind === 'add'}
-        onOpenChange={(open) => setDialogKind(open ? 'add' : null)}
-        onSubmit={handleCreateAccount}
-      />
       <EditAccountDialog
         account={dialogAccount ?? selectedAccount}
         open={dialogKind === 'edit'}
@@ -713,8 +853,39 @@ export function AppShell(): React.JSX.Element {
         onSubmit={handleUpdateSettings}
         onImported={reloadInitialData}
       />
+      <OutlookImapHelpDialog
+        accountLabel={outlookImapHelpAccount?.name}
+        open={Boolean(outlookImapHelpAccount)}
+        onOpenChange={(open) => {
+          if (!open) setOutlookImapHelpAccount(null)
+        }}
+      />
     </main>
   )
+}
+
+function shouldShowOutlookImapHelp(message: string, account?: Account | null): boolean {
+  if (account?.providerKey && normalizeProviderKey(account.providerKey) !== 'outlook') return false
+  return /IMAP OAuth 登录认证失败|AUTHENTICATE failed/i.test(message)
+}
+
+function normalizeProviderKey(providerKey: string): string {
+  const normalized = providerKey.toLowerCase()
+  if (normalized.includes('outlook') || normalized.includes('microsoft')) return 'outlook'
+  return normalized
+}
+
+function createOutlookHelpAccount(accountId: number, email: string): Account {
+  return {
+    id: String(accountId),
+    accountId,
+    providerKey: 'outlook',
+    name: email,
+    address: email,
+    unread: 0,
+    status: 'auth_error',
+    accent: 'bg-muted-foreground'
+  }
 }
 
 function shouldEditCredential(message: string): boolean {
@@ -749,6 +920,20 @@ function decrementUnreadCount(accounts: Account[], accountId: number): Account[]
       unread: Math.max(0, account.unread - 1)
     }
   })
+}
+
+function mergeMessagesById(current: Message[], nextMessages: Message[]): Message[] {
+  const existingIds = new Set(current.map((message) => message.id))
+  const uniqueNextMessages = nextMessages.filter((message) => !existingIds.has(message.id))
+  return [...current, ...uniqueNextMessages]
+}
+
+function getMessageListScopeKey(
+  accountId: string,
+  filters: MailFilterTag[],
+  searchKeyword: string
+): string {
+  return `${accountId}:${[...filters].sort().join(',')}:${searchKeyword.trim()}`
 }
 
 function NoAccountsBody({

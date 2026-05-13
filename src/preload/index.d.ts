@@ -2,6 +2,7 @@ import { ElectronAPI } from '@electron-toolkit/preload'
 import type { OneMailApi } from '../shared/types'
 
 export type {
+  AccountCreatedEvent,
   AccountCreateInput,
   AccountStatus,
   AccountMailboxStats,
@@ -15,6 +16,7 @@ export type {
   MailboxChangedEvent,
   MailMessageAttachment,
   MailMessageBody,
+  MailMessageBodyLoadResult,
   MailMessageDetail,
   MailMessageSummary,
   MessageFilterTag,
@@ -23,8 +25,10 @@ export type {
   NewMailNotification,
   NewMailNotificationMessage,
   NotificationStatus,
+  OAuthAuthorizationMode,
   OneMailApi,
   SettingsUpdateInput,
+  SyncMode,
   SyncStatus,
   SystemInfo
 } from '../shared/types'
