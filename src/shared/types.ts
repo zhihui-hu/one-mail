@@ -166,6 +166,7 @@ export type NotificationStatus = {
 export type AppSettings = {
   syncIntervalMinutes: number
   syncWindowDays: number
+  openAtLogin: boolean
   externalImagesBlocked: boolean
   locale: string
 }

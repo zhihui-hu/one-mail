@@ -8,6 +8,7 @@ import {
 
 type ImapAccount = NonNullable<ReturnType<typeof getAccount>>
 type ImapLoginSession = {
+  identifyClient: () => Promise<void>
   login: (username: string, password: string) => Promise<void>
   authenticateXOAuth2: (username: string, accessToken: string) => Promise<void>
 }
@@ -18,10 +19,12 @@ export async function authenticateImapSession(
 ): Promise<void> {
   if (account.authType === 'oauth2') {
     await authenticateXOAuth2WithRefreshRetry(account, session)
+    await session.identifyClient()
     return
   }
 
   await session.login(account.email, readAccountPassword(account.accountId))
+  await session.identifyClient()
 }
 
 async function authenticateXOAuth2WithRefreshRetry(

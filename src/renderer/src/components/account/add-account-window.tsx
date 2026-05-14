@@ -19,15 +19,12 @@ export function AddAccountWindow(): React.JSX.Element {
       <header className="app-drag-region flex h-10 shrink-0 items-center border-b bg-card/60 px-5 pl-24">
         <h1 className="truncate text-sm font-semibold tracking-normal">添加账号</h1>
       </header>
-      <section className="min-h-0 flex-1 overflow-auto p-4">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
         <AddAccountForm
           onSubmit={handleSubmit}
-          onCancel={() => {
-            void window.api.accounts.closeAddWindow()
-          }}
-          className="flex flex-col gap-3"
-          bodyClassName="flex flex-col gap-3"
-          footerClassName="mt-1 flex flex-col-reverse gap-2"
+          className="flex min-h-0 flex-1 flex-col gap-3"
+          bodyClassName="flex min-h-0 flex-col gap-3 overflow-auto"
+          footerClassName="mt-1 flex shrink-0 justify-end"
         />
       </section>
     </main>

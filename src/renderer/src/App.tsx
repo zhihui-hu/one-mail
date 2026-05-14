@@ -1,13 +1,12 @@
-import { AddAccountWindow } from './components/account/add-account-window'
-import { AppShell } from './components/layout/app-shell'
+import { RouterProvider } from 'react-router/dom'
+
+import { appRouter } from './app/router'
 import { Toaster } from './components/ui/sonner'
 
 function App(): React.JSX.Element {
-  const windowKind = new URLSearchParams(window.location.search).get('window')
-
   return (
     <>
-      {windowKind === 'add-account' ? <AddAccountWindow /> : <AppShell />}
+      <RouterProvider router={appRouter} />
       <Toaster richColors />
     </>
   )

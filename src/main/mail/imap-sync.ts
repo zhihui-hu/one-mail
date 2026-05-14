@@ -91,7 +91,6 @@ export async function syncAccountMailbox(
 
   try {
     await authenticateImapSession(account, client)
-    await client.identifyClient()
     const mailboxes = await listSyncMailboxes(client)
     const totals = { scannedCount: 0, insertedCount: 0, updatedCount: 0 }
 
@@ -126,7 +125,6 @@ export async function syncAccountNewInboxMessages(accountId: number): Promise<Sy
 
   try {
     await authenticateImapSession(account, client)
-    await client.identifyClient()
     totals = await syncNewInboxMessages(account, client, createInboxMailbox())
   } finally {
     await client.logout().catch(() => undefined)

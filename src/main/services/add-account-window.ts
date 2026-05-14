@@ -17,12 +17,14 @@ export function openAddAccountWindow(): void {
   const nextWindow = new BrowserWindow({
     width: 440,
     height: 460,
-    minWidth: 400,
-    minHeight: 420,
+    minWidth: 440,
+    minHeight: 460,
+    maxWidth: 440,
+    maxHeight: 460,
     title: '添加账号 - OneMail',
     show: false,
     autoHideMenuBar: true,
-    resizable: true,
+    resizable: false,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     trafficLightPosition: { x: 16, y: 14 },
     ...(process.platform !== 'darwin' ? { icon: windowIcon } : {}),
@@ -51,11 +53,11 @@ export function openAddAccountWindow(): void {
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     const url = new URL(process.env['ELECTRON_RENDERER_URL'])
-    url.searchParams.set('window', 'add-account')
+    url.hash = '/accounts/new'
     void nextWindow.loadURL(url.toString())
   } else {
     void nextWindow.loadFile(join(__dirname, '../renderer/index.html'), {
-      query: { window: 'add-account' }
+      hash: '/accounts/new'
     })
   }
 }

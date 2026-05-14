@@ -1,9 +1,11 @@
 import { getDatabase } from '../connection'
+import { getOpenAtLogin, setOpenAtLogin } from '../../services/login-item'
 import type { AppSettings, SettingsUpdateInput } from '../../ipc/types'
 
 const defaultSettings: AppSettings = {
   syncIntervalMinutes: 15,
   syncWindowDays: 90,
+  openAtLogin: false,
   externalImagesBlocked: true,
   locale: 'en-US'
 }
@@ -11,6 +13,7 @@ const defaultSettings: AppSettings = {
 const settingsDefinition = {
   syncIntervalMinutes: { key: 'sync_interval_minutes', type: 'number' },
   syncWindowDays: { key: 'sync_window_days', type: 'number' },
+  openAtLogin: { key: 'open_at_login', type: 'boolean' },
   externalImagesBlocked: { key: 'external_images_blocked', type: 'boolean' },
   locale: { key: 'locale', type: 'string' }
 } as const
@@ -38,6 +41,7 @@ export function getSettings(): AppSettings {
   return {
     syncIntervalMinutes: readNumber(byKey.get(settingsDefinition.syncIntervalMinutes.key), 15),
     syncWindowDays: readNumber(byKey.get(settingsDefinition.syncWindowDays.key), 90),
+    openAtLogin: getOpenAtLogin(),
     externalImagesBlocked: readBoolean(
       byKey.get(settingsDefinition.externalImagesBlocked.key),
       true
@@ -50,6 +54,10 @@ export function updateSettings(input: SettingsUpdateInput): AppSettings {
   const current = getSettings()
   const next: AppSettings = { ...current, ...input }
 
+  if (input.openAtLogin !== undefined) {
+    setOpenAtLogin(next.openAtLogin)
+  }
+
   writeSetting(
     settingsDefinition.syncIntervalMinutes.key,
     String(next.syncIntervalMinutes),
@@ -59,6 +67,11 @@ export function updateSettings(input: SettingsUpdateInput): AppSettings {
     settingsDefinition.syncWindowDays.key,
     String(next.syncWindowDays),
     settingsDefinition.syncWindowDays.type
+  )
+  writeSetting(
+    settingsDefinition.openAtLogin.key,
+    next.openAtLogin ? '1' : '0',
+    settingsDefinition.openAtLogin.type
   )
   writeSetting(
     settingsDefinition.externalImagesBlocked.key,
@@ -85,6 +98,11 @@ function ensureDefaultSettings(): void {
     settingsDefinition.externalImagesBlocked.key,
     defaultSettings.externalImagesBlocked ? '1' : '0',
     settingsDefinition.externalImagesBlocked.type
+  )
+  updateMissingSetting(
+    settingsDefinition.openAtLogin.key,
+    defaultSettings.openAtLogin ? '1' : '0',
+    settingsDefinition.openAtLogin.type
   )
   updateMissingSetting(
     settingsDefinition.locale.key,

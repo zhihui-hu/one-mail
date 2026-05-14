@@ -8,7 +8,7 @@ export default defineConfig({
   preload: {},
   renderer: {
     server: {
-      port: 27507,
+      port: 27508,
       strictPort: true
     },
     resolve: {

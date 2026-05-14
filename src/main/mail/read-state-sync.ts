@@ -34,7 +34,6 @@ export async function syncMessageReadState(
 
   try {
     await authenticateImapSession(account, client)
-    await client.identifyClient()
     await client.selectMailbox(target.folderPath)
     await client.setSeenFlag(target.uid, isRead)
   } finally {

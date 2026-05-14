@@ -13,6 +13,7 @@ import type {
   MessageReadStateUpdate,
   MessageFilterTag,
   MessageListQuery,
+  MailboxChangedEvent,
   SettingsUpdateInput,
   SyncMode,
   SyncStatus,
@@ -68,7 +69,10 @@ export async function openAddAccountWindow(): Promise<boolean> {
 }
 
 export function onAccountCreated(callback: (event: AccountCreatedEvent) => void): () => void {
-  return window.api.accounts.onCreated(callback)
+  const onCreated = window.api?.accounts?.onCreated
+  if (typeof onCreated !== 'function') return () => {}
+
+  return onCreated(callback)
 }
 
 export async function updateAccount(input: AccountUpdateInput): Promise<MailAccount> {
@@ -83,11 +87,28 @@ export async function syncAccount(
   accountId: number,
   mode: SyncMode = 'refresh'
 ): Promise<SyncStatus> {
-  return window.api.sync.startAccount(accountId, mode)
+  const startAccount = window.api?.sync?.startAccount
+  if (typeof startAccount !== 'function') {
+    throw new Error('同步服务暂不可用，请重启应用后重试。')
+  }
+
+  return startAccount(accountId, mode)
 }
 
 export async function syncAllAccounts(mode: SyncMode = 'refresh'): Promise<SyncStatus> {
-  return window.api.sync.startAll(mode)
+  const startAll = window.api?.sync?.startAll
+  if (typeof startAll !== 'function') {
+    throw new Error('同步服务暂不可用，请重启应用后重试。')
+  }
+
+  return startAll(mode)
+}
+
+export function onMailboxChanged(callback: (event: MailboxChangedEvent) => void): () => void {
+  const onChanged = window.api?.sync?.onMailboxChanged
+  if (typeof onChanged !== 'function') return () => {}
+
+  return onChanged(callback)
 }
 
 export async function saveSettings(input: SettingsUpdateInput): Promise<AppSettings> {

@@ -1,4 +1,5 @@
 import { BrowserWindow, Notification, shell } from 'electron'
+import appIcon from '../../../resources/icon.png?asset'
 import { getAccount } from '../db/repositories/account.repository'
 import { listRecentNotificationMessages } from '../db/repositories/message.repository'
 import type { MailboxChangedEvent, NewMailNotification, NotificationStatus } from '../ipc/types'
@@ -67,15 +68,15 @@ function showDesktopNotification(notification: NewMailNotification): void {
     notification.messageCount === 1
       ? firstMessage?.subject || '收到新邮件'
       : `收到 ${notification.messageCount} 封新邮件`
-  const body =
-    verificationCode
-      ? [sender, `验证码 ${verificationCode}`].filter(Boolean).join(' - ')
-      : notification.messageCount === 1
-        ? [sender, firstMessage?.snippet].filter(Boolean).join(' - ')
+  const body = verificationCode
+    ? [sender, `验证码 ${verificationCode}`].filter(Boolean).join(' - ')
+    : notification.messageCount === 1
+      ? [sender, firstMessage?.snippet].filter(Boolean).join(' - ')
       : notification.accountLabel || notification.accountEmail || 'OneMail'
 
   new Notification({
     title,
-    body
+    body,
+    icon: appIcon
   }).show()
 }

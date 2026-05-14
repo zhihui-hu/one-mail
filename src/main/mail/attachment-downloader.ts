@@ -39,7 +39,6 @@ export async function downloadAttachment(attachmentId: number): Promise<Attachme
   const client = await SimpleImapSession.connect(account, 'D')
   try {
     await authenticateImapSession(account, client)
-    await client.identifyClient()
     await client.selectMailbox(locator.folder_path)
 
     const rawMessage = await client.fetchRawMessage(locator.uid)

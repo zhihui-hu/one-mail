@@ -56,7 +56,6 @@ export async function loadMessageBodyFromImap(messageId: number): Promise<MailMe
 
   try {
     await authenticateImapSession(account, client)
-    await client.identifyClient()
     await client.selectMailbox(locator.folder_path)
     const rawMessage = await client.fetchRawMessage(locator.uid)
     const parsed = parseMimeMessage(rawMessage)

@@ -17,34 +17,6 @@ export type AccountSyncResult = {
 
 const activeAccountSyncs = new Map<number, Promise<AccountSyncResult>>()
 
-export async function startSync(
-  accountIds: number[],
-  mode: AccountMailboxSyncMode = 'refresh'
-): Promise<SyncStatus> {
-  const db = getDatabase()
-  const startedAt = new Date().toISOString()
-  markStaleRunningSyncsFailed()
-
-  if (accountIds.length === 0) {
-    const rows = db
-      .prepare<{
-        account_id: number
-      }>('SELECT account_id FROM onemail_mail_accounts WHERE sync_enabled = 1')
-      .all()
-    const results = await Promise.allSettled(
-      rows.map((row) => syncAccountNow(toNumber(row.account_id), mode, startedAt))
-    )
-    const failures = results.filter((result) => result.status === 'rejected')
-    if (failures.length === rows.length && failures.length > 0) {
-      throw formatSyncFailure(failures[0].reason)
-    }
-  } else {
-    await Promise.all(accountIds.map((accountId) => syncAccountNow(accountId, mode, startedAt)))
-  }
-
-  return getSyncStatus()
-}
-
 export function syncAccountNow(
   accountId: number,
   mode: AccountMailboxSyncMode = 'refresh',
@@ -61,10 +33,6 @@ export function syncAccountNow(
   activeAccountSyncs.set(accountId, syncPromise)
 
   return syncPromise
-}
-
-function formatSyncFailure(error: unknown): Error {
-  return error instanceof Error ? error : new Error('同步账号失败。')
 }
 
 export function getSyncStatus(): SyncStatus {

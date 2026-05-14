@@ -37,7 +37,6 @@ type AddAccountDialogProps = {
 
 type AddAccountFormProps = {
   onSubmit: (input: AccountCreateInput) => Promise<void>
-  onCancel: () => void
   className?: string
   bodyClassName?: string
   footerClassName?: string
@@ -45,10 +44,9 @@ type AddAccountFormProps = {
 
 export function AddAccountForm({
   onSubmit,
-  onCancel,
   className = 'flex min-h-0 flex-col gap-3',
   bodyClassName = 'flex flex-col gap-3',
-  footerClassName = 'flex flex-col-reverse gap-2 sm:flex-row sm:justify-end'
+  footerClassName = 'flex justify-end'
 }: AddAccountFormProps): React.JSX.Element {
   const [pending, setPending] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -131,9 +129,6 @@ export function AddAccountForm({
       </div>
 
       <div className={footerClassName}>
-        <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
-          取消
-        </Button>
         <Button type="submit" disabled={pending}>
           {pending
             ? kind === 'outlook'
@@ -162,14 +157,14 @@ export function AddAccountDialog({
       open={open}
       onOpenChange={handleOpenChange}
       title="添加账号"
-      contentClassName="max-h-[82vh] gap-3 p-4 sm:max-w-md"
+      contentClassName="h-[min(560px,calc(100vh-2rem))] grid-rows-[auto_minmax(0,1fr)] gap-3 p-4 sm:w-[440px] sm:max-w-[440px]"
       bodyClassName="min-h-0"
     >
       <AddAccountForm
         key={open ? 'open' : 'closed'}
         onSubmit={onSubmit}
-        onCancel={() => handleOpenChange(false)}
-        bodyClassName="min-h-0 overflow-auto"
+        className="flex h-full min-h-0 flex-col gap-3"
+        bodyClassName="flex min-h-0 flex-1 flex-col gap-3 overflow-auto"
       />
     </ResponsiveDialog>
   )

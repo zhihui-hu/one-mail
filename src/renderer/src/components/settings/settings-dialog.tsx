@@ -8,11 +8,14 @@ import {
   ImageOff,
   KeyRound,
   Languages,
+  LoaderCircle,
+  Power,
   RefreshCcw,
+  ShieldCheck,
   Upload
 } from 'lucide-react'
 import * as React from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { z } from 'zod'
 
 import { exportSqlBackup, importSqlBackup, revealPathInFileManager } from '@renderer/lib/api'
@@ -67,6 +70,7 @@ const settingsSchema = z.object({
     .int('缓存天数必须是整数')
     .min(1, '缓存天数不能小于 1')
     .max(3650, '缓存天数不能超过 3650 天'),
+  openAtLogin: z.boolean(),
   externalImagesBlocked: z.boolean(),
   locale: z.enum(['zh-CN', 'en-US'])
 })
@@ -113,6 +117,7 @@ export function SettingsDialog({
     defaultValues: toFormValues(settings),
     mode: 'onChange'
   })
+  const watchedValues = useWatch({ control: form.control })
 
   const saveSettingsValues = React.useCallback(
     async (values: SettingsFormValues): Promise<void> => {
@@ -135,6 +140,7 @@ export function SettingsDialog({
           await onSubmit({
             syncIntervalMinutes: currentValues.syncIntervalMinutes,
             syncWindowDays: currentValues.syncWindowDays,
+            openAtLogin: currentValues.openAtLogin,
             externalImagesBlocked: currentValues.externalImagesBlocked,
             locale: currentValues.locale
           })
@@ -185,30 +191,27 @@ export function SettingsDialog({
   React.useEffect(() => {
     if (!open) return
 
-    const subscription = form.watch((values) => {
-      if (autoSaveTimerRef.current) {
-        window.clearTimeout(autoSaveTimerRef.current)
-        autoSaveTimerRef.current = null
-      }
+    if (autoSaveTimerRef.current) {
+      window.clearTimeout(autoSaveTimerRef.current)
+      autoSaveTimerRef.current = null
+    }
 
-      const parsedValues = settingsSchema.safeParse(values)
-      if (!parsedValues.success) return
-      if (areSettingsEqual(parsedValues.data, lastSavedValuesRef.current)) return
+    const parsedValues = settingsSchema.safeParse(watchedValues)
+    if (!parsedValues.success) return
+    if (areSettingsEqual(parsedValues.data, lastSavedValuesRef.current)) return
 
-      autoSaveTimerRef.current = window.setTimeout(() => {
-        autoSaveTimerRef.current = null
-        void saveSettingsValues(parsedValues.data)
-      }, AUTO_SAVE_DELAY_MS)
-    })
+    autoSaveTimerRef.current = window.setTimeout(() => {
+      autoSaveTimerRef.current = null
+      void saveSettingsValues(parsedValues.data)
+    }, AUTO_SAVE_DELAY_MS)
 
     return () => {
-      subscription.unsubscribe()
       if (autoSaveTimerRef.current) {
         window.clearTimeout(autoSaveTimerRef.current)
         autoSaveTimerRef.current = null
       }
     }
-  }, [form, open, saveSettingsValues])
+  }, [open, saveSettingsValues, watchedValues])
 
   React.useEffect(() => {
     return () => {
@@ -275,13 +278,12 @@ export function SettingsDialog({
       open={open}
       onOpenChange={handleOpenChange}
       title="设置"
-      // description="管理 OneMail 的同步、显示和本地数据备份。"
-      contentClassName="h-[460px] max-h-[78vh] grid-rows-[3rem_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-xl"
-      headerClassName="h-12 shrink-0 justify-center overflow-hidden border-b px-3 py-1 pr-12 [&_[data-slot=dialog-description]]:truncate [&_[data-slot=dialog-description]]:text-[12px]! [&_[data-slot=dialog-title]]:text-sm! [&_[data-slot=drawer-description]]:truncate [&_[data-slot=drawer-description]]:text-[12px]! [&_[data-slot=drawer-title]]:text-sm!"
+      contentClassName="h-[min(560px,82vh)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-2xl"
+      headerClassName="shrink-0 border-b px-4 py-3 pr-12 [&_[data-slot=dialog-title]]:text-sm! [&_[data-slot=drawer-title]]:text-sm!"
       bodyClassName="h-full min-h-0 overflow-hidden"
     >
       <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden md:grid-cols-[136px_minmax(0,1fr)] md:grid-rows-1">
-        <nav className="min-h-0 shrink-0 border-b bg-muted/30 p-1.5 md:border-r md:border-b-0">
+        <nav className="min-h-0 shrink-0 border-b bg-muted/30 p-1.5 md:border-r md:border-b-0 md:p-2">
           <div className="flex gap-1 md:flex-col">
             {sections.map((item) => {
               const Icon = item.icon
@@ -294,7 +296,7 @@ export function SettingsDialog({
                   className={cn(
                     'flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-left text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring md:w-full md:flex-none [&_svg]:size-3.5',
                     active
-                      ? 'bg-background text-foreground'
+                      ? 'bg-background text-foreground shadow-xs'
                       : 'text-muted-foreground hover:bg-background/70 hover:text-foreground'
                   )}
                   onClick={() => setSection(item.value)}
@@ -333,10 +335,28 @@ function GeneralSettingsForm({
   error: string | null
 }): React.JSX.Element {
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col gap-3 p-3">
-      {/* <SectionHeader title="常规" description="控制后台同步、缓存范围和阅读显示策略。" /> */}
+    <div className="mx-auto flex min-h-full w-full max-w-[540px] flex-col gap-3 p-3 sm:p-4">
+      <FieldGroup className="gap-2.5">
+        <Controller
+          control={form.control}
+          name="openAtLogin"
+          render={({ field }) => (
+            <SettingRow
+              icon={Power}
+              title="开机启动"
+              description="登录系统后自动打开 OneMail。"
+              control={
+                <Switch
+                  id="open-at-login"
+                  size="sm"
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              }
+            />
+          )}
+        />
 
-      <FieldGroup>
         <SettingRow
           icon={Clock3}
           title="同步间隔"
@@ -449,43 +469,34 @@ function BackupSettings({
   const disabled = Boolean(pending)
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-[520px] flex-col gap-3 p-3">
-      {/* <SectionHeader
-        title="导入导出"
-        description="导出当前 SQLite 数据库为 SQL 文件，文件名使用 密钥_linux时间戳.sql。"
-      /> */}
-
-      <FieldGroup>
+    <div className="mx-auto flex min-h-full w-full max-w-[540px] flex-col gap-3 p-3 sm:p-4">
+      <FieldGroup className="gap-2.5">
         <Alert className="bg-muted/30 py-2 text-xs">
           <KeyRound />
           <AlertTitle>数据库密钥</AlertTitle>
           <AlertDescription className="text-xs">
             账号密码使用数据库密钥派生密钥加密；导入时会校验文件名中的密钥、Linux 时间戳范围和 SQL
-            SQL 息。
+            信息。
           </AlertDescription>
         </Alert>
 
         <div className="grid gap-2 sm:grid-cols-2">
-          <Button
-            className="justify-start"
-            variant="outline"
-            size="sm"
+          <BackupActionButton
+            icon={Download}
+            title="导出 SQL"
+            description="保存一份可迁移的本地数据库备份。"
+            loading={pending === 'export'}
+            disabled={disabled}
             onClick={onExport}
+          />
+          <BackupActionButton
+            icon={Upload}
+            title="导入 SQL"
+            description="从备份恢复数据，导入成功后刷新邮箱。"
+            loading={pending === 'import'}
             disabled={disabled}
-          >
-            <Download data-icon="inline-start" />
-            {pending === 'export' ? '导出中...' : '导出 SQL'}
-          </Button>
-          <Button
-            className="justify-start"
-            variant="outline"
-            size="sm"
             onClick={onImport}
-            disabled={disabled}
-          >
-            <Upload data-icon="inline-start" />
-            {pending === 'import' ? '导入中...' : '导入 SQL'}
-          </Button>
+          />
         </div>
 
         {message ? <BackupMessageView message={message} /> : null}
@@ -497,12 +508,20 @@ function BackupSettings({
 
 function BackupMessageView({ message }: { message: BackupMessage }): React.JSX.Element {
   if (!message.path) {
-    return <p className="text-xs text-muted-foreground">{message.label}</p>
+    return (
+      <Alert className="py-2 text-xs">
+        <ShieldCheck />
+        <AlertTitle>{message.label}</AlertTitle>
+      </Alert>
+    )
   }
 
   return (
-    <div className="flex flex-col gap-1.5 rounded-md border bg-card p-2 text-xs">
-      <span className="font-medium">{message.label}</span>
+    <div className="flex flex-col gap-1.5 rounded-md border bg-card p-2.5 text-xs">
+      <div className="flex items-center gap-1.5 font-medium">
+        <ShieldCheck aria-hidden="true" />
+        <span>{message.label}</span>
+      </div>
       <Button
         className="h-auto justify-start break-all px-0 py-0 text-left whitespace-normal"
         variant="link"
@@ -533,7 +552,7 @@ function SettingRow({
 }): React.JSX.Element {
   return (
     <Field data-invalid={invalid || undefined}>
-      <div className="grid gap-2 rounded-md border bg-card p-2.5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <div className="grid gap-2 rounded-md border bg-card p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div className="flex min-w-0 gap-2.5">
           <div className="mt-px flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground [&_svg]:size-3.5">
             <Icon aria-hidden="true" />
@@ -550,10 +569,47 @@ function SettingRow({
   )
 }
 
+function BackupActionButton({
+  icon: Icon,
+  title,
+  description,
+  loading,
+  disabled,
+  onClick
+}: {
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
+  title: string
+  description: string
+  loading: boolean
+  disabled: boolean
+  onClick: () => Promise<void>
+}): React.JSX.Element {
+  return (
+    <Button
+      className="h-auto justify-start px-3 py-2 text-left"
+      variant="outline"
+      size="sm"
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {loading ? (
+        <LoaderCircle data-icon="inline-start" className="animate-spin" />
+      ) : (
+        <Icon data-icon="inline-start" />
+      )}
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span className="truncate">{loading ? `${title}中...` : title}</span>
+        <span className="text-xs font-normal text-muted-foreground">{description}</span>
+      </span>
+    </Button>
+  )
+}
+
 function toFormValues(settings: AppSettings | null): SettingsFormValues {
   return {
     syncIntervalMinutes: settings?.syncIntervalMinutes ?? 15,
     syncWindowDays: settings?.syncWindowDays ?? 90,
+    openAtLogin: settings?.openAtLogin === true,
     externalImagesBlocked: settings?.externalImagesBlocked !== false,
     locale: settings?.locale === 'en-US' ? 'en-US' : 'zh-CN'
   }
@@ -563,6 +619,7 @@ function areSettingsEqual(first: SettingsFormValues, second: SettingsFormValues)
   return (
     first.syncIntervalMinutes === second.syncIntervalMinutes &&
     first.syncWindowDays === second.syncWindowDays &&
+    first.openAtLogin === second.openAtLogin &&
     first.externalImagesBlocked === second.externalImagesBlocked &&
     first.locale === second.locale
   )

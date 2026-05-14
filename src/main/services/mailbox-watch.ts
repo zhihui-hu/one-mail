@@ -116,7 +116,6 @@ async function runMailboxWatcher(task: WatchTask): Promise<void> {
       task.retryCount = 0
 
       await authenticateImapSession(account, session)
-      await session.identifyClient()
       const capabilities = await session.capabilities().catch(() => new Set<string>())
       task.watchMailboxes = await listWatchMailboxes(session)
       task.lastStatuses = await readMailboxStatuses(session, task.watchMailboxes, task.lastStatuses)

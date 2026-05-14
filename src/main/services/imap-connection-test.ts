@@ -80,7 +80,7 @@ async function testTlsConnection(
   try {
     await waitForTlsConnect(socket)
     await waitForImapGreeting(socket)
-    await testLogin(socket, email, password)
+    await testLogin(socket, input, email, password)
   } finally {
     socket.destroy()
   }
@@ -126,7 +126,7 @@ async function testPlainConnection(
       await waitForTaggedOk(socket, 'A001', 'STARTTLS')
       socket = await upgradeToTls(socket, input.imapHost)
     }
-    await testLogin(socket, email, password)
+    await testLogin(socket, input, email, password)
   } finally {
     socket.destroy()
   }
@@ -157,11 +157,15 @@ async function testOAuthPlainConnection(
   }
 }
 
-async function testLogin(socket: TestSocket, username: string, password: string): Promise<void> {
+async function testLogin(
+  socket: TestSocket,
+  input: AccountCreateInput,
+  username: string,
+  password: string
+): Promise<void> {
   await writeLine(socket, `A002 LOGIN ${quoteAtom(username)} ${quoteAtom(password)}`)
-  await waitForTaggedOk(socket, 'A002', '登录认证')
-  await writeLine(socket, `A003 ${formatImapIdCommand()}`)
-  await waitForTaggedOk(socket, 'A003', '客户端身份确认').catch(() => undefined)
+  await waitForTaggedOk(socket, 'A002', '登录认证', input)
+  await identifyClient(socket, 'A003')
   await writeLine(socket, 'A004 EXAMINE "INBOX"')
   await waitForTaggedOk(socket, 'A004', '收件箱访问')
   await writeLine(socket, 'A005 LOGOUT')
@@ -177,11 +181,15 @@ async function testOAuthLogin(
     `A002 AUTHENTICATE XOAUTH2 ${formatXOAuth2Payload(username, accessToken)}`
   )
   await waitForTaggedOk(socket, 'A002', 'OAuth 登录认证')
-  await writeLine(socket, `A003 ${formatImapIdCommand()}`)
-  await waitForTaggedOk(socket, 'A003', '客户端身份确认').catch(() => undefined)
+  await identifyClient(socket, 'A003')
   await writeLine(socket, 'A004 EXAMINE "INBOX"')
   await waitForTaggedOk(socket, 'A004', '收件箱访问')
   await writeLine(socket, 'A005 LOGOUT')
+}
+
+async function identifyClient(socket: TestSocket, tag: string): Promise<void> {
+  await writeLine(socket, `${tag} ${formatImapIdCommand()}`)
+  await waitForTaggedOk(socket, tag, '客户端身份确认').catch(() => undefined)
 }
 
 function upgradeToTls(socket: Socket, servername: string): Promise<TLSSocket> {
@@ -284,11 +292,16 @@ function waitForImapGreeting(socket: TestSocket): Promise<void> {
   })
 }
 
-function waitForTaggedOk(socket: TestSocket, tag: string, action: string): Promise<void> {
+function waitForTaggedOk(
+  socket: TestSocket,
+  tag: string,
+  action: string,
+  input?: AccountCreateInput
+): Promise<void> {
   return waitForLine(socket, (line) => {
     if (new RegExp(`^${tag}\\s+OK\\b`, 'i').test(line)) return true
     if (new RegExp(`^${tag}\\s+(NO|BAD)\\b`, 'i').test(line)) {
-      throw new Error(formatImapActionError(action, line))
+      throw new Error(formatImapActionError(action, line, input))
     }
     return false
   })
@@ -390,7 +403,20 @@ function sanitizeImapResponse(value: string): string {
     .slice(0, 240)
 }
 
-function formatImapActionError(action: string, line: string): string {
+function formatImapActionError(
+  action: string,
+  line: string,
+  input?: AccountCreateInput
+): string {
+  if (action === '登录认证' && input && isNetease163Input(input)) {
+    return [
+      '163 邮箱登录认证失败：网易拒绝了当前账号或授权码。',
+      '请确认已在网页版邮箱的“设置 > POP3/SMTP/IMAP”中开启 IMAP/SMTP 服务，并使用“新增授权密码/客户端授权码”作为密码，不要使用网页登录密码。',
+      '账号请填写完整邮箱地址；如果授权码忘记或不确定，请新增/重置后再试。',
+      `服务器响应：${sanitizeImapResponse(line)}`
+    ].join(' ')
+  }
+
   if (action === 'OAuth 登录认证' && /AUTHENTICATE failed/i.test(line)) {
     return [
       'IMAP OAuth 登录认证失败：Outlook 拒绝了当前 Microsoft access token。',
@@ -408,6 +434,14 @@ function formatImapActionError(action: string, line: string): string {
   }
 
   return `IMAP ${action}失败：${sanitizeImapResponse(line)}`
+}
+
+function isNetease163Input(input: AccountCreateInput): boolean {
+  return (
+    input.providerKey === '163' ||
+    input.imapHost.toLowerCase() === 'imap.163.com' ||
+    input.email?.toLowerCase().endsWith('@163.com') === true
+  )
 }
 
 function isOAuthImapAuthError(error: unknown): boolean {
