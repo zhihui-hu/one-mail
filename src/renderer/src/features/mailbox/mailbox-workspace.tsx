@@ -1,10 +1,16 @@
 import * as React from 'react'
+import { MailWarning, Pencil } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router'
 import { AccountList } from '@renderer/components/account/account-list'
+import { AccountWarningDialog } from '@renderer/components/account/account-warning-dialog'
 import { EditAccountDialog } from '@renderer/components/account/edit-account-dialog'
 import { OutlookImapHelpDialog } from '@renderer/components/account/outlook-imap-help-dialog'
 import { RemoveAccountDialog } from '@renderer/components/account/remove-account-dialog'
+import { DeleteMessageDialog } from '@renderer/components/mail/delete-message-dialog'
+import { MailComposer } from '@renderer/components/mail/mail-composer'
 import { MailList } from '@renderer/components/mail/mail-list'
 import { MailReader } from '@renderer/components/mail/mail-reader'
+import { OutboxPanel } from '@renderer/components/mail/outbox-panel'
 import type { Account, MailFilterTag, Message } from '@renderer/components/mail/types'
 import { SettingsDialog } from '@renderer/components/settings/settings-dialog'
 import {
@@ -13,6 +19,7 @@ import {
   ResizablePanelGroup,
   ResizablePrimitive
 } from '@renderer/components/ui/resizable'
+import { Button } from '@renderer/components/ui/button'
 import type {
   AccountUpdateInput,
   AppSettings,
@@ -20,22 +27,30 @@ import type {
   SystemInfo
 } from '../../../../shared/types'
 import {
+  deleteDraftMessage,
+  deleteOutboxMessage,
   importSqlBackup,
   loadAccounts,
   loadInitialData,
+  loadMessageDetail,
   loadMessages,
+  loadOutboxMessages,
   MESSAGE_LIST_PAGE_SIZE,
   onAccountCreated,
   onMailboxChanged,
   openAddAccountWindow,
+  reauthorizeAccount,
   removeAccount,
   revealDatabaseInFileManager,
+  retryOutboxMessage,
   saveSettings,
   syncAllAccounts,
   syncAccount,
   toMessageQuery,
   updateAccount
 } from '@renderer/lib/api'
+import type { OutboxMessage } from '@renderer/lib/api'
+import { toast } from 'sonner'
 import { NoAccountsBody, StatusBar, TitleBar } from './mailbox-chrome'
 import {
   createOutlookHelpAccount,
@@ -46,11 +61,23 @@ import {
   shouldShowOutlookImapHelp
 } from './mailbox-utils'
 import { useMailboxMessages } from './use-mailbox-messages'
+import { useMailComposer } from './use-mail-composer'
+import { useMessageActions } from './use-message-actions'
+import { useMessageSelection } from './use-message-selection'
 import { useSyncFeedback } from './use-sync-feedback'
 
 export type DialogKind = 'edit' | 'delete' | 'settings' | null
 
+function normalizeRouteId(value: string | undefined): string | undefined {
+  const text = value?.trim()
+  if (!text) return undefined
+  return decodeURIComponent(text)
+}
+
 export function MailboxWorkspace(): React.JSX.Element {
+  const navigate = useNavigate()
+  const routeParams = useParams<{ accountId?: string; messageId?: string }>()
+  const internalRouteRef = React.useRef<string | null>(null)
   const [accounts, setAccounts] = React.useState<Account[]>([])
   const [settings, setSettings] = React.useState<AppSettings | null>(null)
   const [systemInfo, setSystemInfo] = React.useState<SystemInfo | null>(null)
@@ -59,6 +86,10 @@ export function MailboxWorkspace(): React.JSX.Element {
   const [searchKeyword, setSearchKeyword] = React.useState('')
   const [dialogKind, setDialogKind] = React.useState<DialogKind>(null)
   const [dialogAccountId, setDialogAccountId] = React.useState<string | null>(null)
+  const [warningAccountId, setWarningAccountId] = React.useState<string | null>(null)
+  const [outboxOpen, setOutboxOpen] = React.useState(false)
+  const [outboxMessages, setOutboxMessages] = React.useState<OutboxMessage[]>([])
+  const [outboxPending, setOutboxPending] = React.useState(false)
   const [outlookImapHelpAccount, setOutlookImapHelpAccount] = React.useState<Account | null>(null)
   const { syncingAccountIds, syncNotice, startSyncing, finishSyncing, setNotice, clearSyncing } =
     useSyncFeedback()
@@ -75,6 +106,7 @@ export function MailboxWorkspace(): React.JSX.Element {
     downloadingAttachmentIds,
     replaceMessages,
     clearMessages,
+    removeMessages,
     refreshMessages,
     selectMessage,
     loadMoreMessages,
@@ -88,6 +120,31 @@ export function MailboxWorkspace(): React.JSX.Element {
     setAccounts,
     setError
   })
+  const selectionScopeKey = React.useMemo(
+    () => `${selectedAccountId}:${filters.join(',')}:${searchKeyword}`,
+    [filters, searchKeyword, selectedAccountId]
+  )
+  const {
+    selectedMessageIds,
+    selectedMessages,
+    allVisibleSelected,
+    someVisibleSelected,
+    clearSelection,
+    selectAllVisible,
+    toggleMessageSelection
+  } = useMessageSelection({ messages, resetKey: selectionScopeKey })
+  const {
+    deleteRequest,
+    deletingMessageIds,
+    deleting,
+    requestDeleteMessages,
+    cancelDelete,
+    confirmDelete
+  } = useMessageActions({
+    removeMessages,
+    clearSelection,
+    setError
+  })
   const mainLayout = ResizablePrimitive.useDefaultLayout({
     id: 'onemail-main-layout',
     panelIds: ['accounts', 'messages', 'reader']
@@ -96,6 +153,9 @@ export function MailboxWorkspace(): React.JSX.Element {
   const dialogAccount =
     accounts.find((account) => account.id === dialogAccountId) ??
     accounts.find((account) => account.id === selectedAccountId)
+  const warningAccount =
+    accounts.find((account) => account.id === warningAccountId) ??
+    (warningAccountId ? null : undefined)
   const realAccounts = accounts.filter((account) => Boolean(account.accountId))
   const hasAccounts = realAccounts.length > 0
   const selectedAccount =
@@ -106,10 +166,31 @@ export function MailboxWorkspace(): React.JSX.Element {
     ? accounts.find((account) => account.accountId === selectedMessage.accountId)
     : undefined
   const showNoAccounts = !loading && !hasAccounts
+  const {
+    composerOpen,
+    composerDraft,
+    composerPending,
+    openComposer,
+    openOutboxDraft,
+    closeComposer,
+    sendComposerDraft,
+    saveComposerDraft
+  } = useMailComposer({
+    accounts,
+    selectedAccount,
+    setError
+  })
+  const routeAccountId = normalizeRouteId(routeParams.accountId)
+  const routeMessageId = normalizeRouteId(routeParams.messageId)
 
   const refreshAccounts = React.useCallback(async () => {
     const nextAccounts = await loadAccounts()
     setAccounts(nextAccounts)
+  }, [])
+
+  const refreshOutbox = React.useCallback(async (): Promise<void> => {
+    const messages = await loadOutboxMessages()
+    setOutboxMessages(messages)
   }, [])
 
   const refreshVisibleMailbox = React.useCallback(
@@ -186,6 +267,53 @@ export function MailboxWorkspace(): React.JSX.Element {
       })
     })
   }, [refreshVisibleMailbox])
+
+  const openRouteTarget = React.useCallback(
+    async (accountId: string, messageId?: string): Promise<void> => {
+      setError(null)
+      setSelectedAccountId(accountId)
+      setFilters([])
+      setSearchKeyword('')
+
+      const nextMessages = await loadMessages(
+        toMessageQuery(accountId, [], { limit: MESSAGE_LIST_PAGE_SIZE, offset: 0 }, '')
+      )
+      const numericMessageId = messageId ? Number(messageId) : undefined
+      const targetMessage =
+        numericMessageId !== undefined && Number.isFinite(numericMessageId)
+          ? (nextMessages.find((message) => message.messageId === numericMessageId) ??
+            (await loadMessageDetail(numericMessageId)))
+          : nextMessages[0]
+      const visibleMessages =
+        targetMessage && !nextMessages.some((message) => message.id === targetMessage.id)
+          ? [targetMessage, ...nextMessages]
+          : nextMessages
+
+      replaceMessages(visibleMessages)
+      if (targetMessage) {
+        window.setTimeout(() => selectMessage(targetMessage.id), 0)
+      }
+    },
+    [replaceMessages, selectMessage]
+  )
+
+  React.useEffect(() => {
+    if (loading || !routeAccountId || !routeMessageId) return
+    const currentRoute = toMailboxRoute(routeAccountId, routeMessageId)
+    if (internalRouteRef.current === currentRoute) {
+      internalRouteRef.current = null
+      return
+    }
+    void openRouteTarget(routeAccountId, routeMessageId).catch((openError) => {
+      setError(getErrorMessage(openError, '打开链接对应邮件失败。'))
+    })
+  }, [loading, openRouteTarget, routeAccountId, routeMessageId])
+
+  React.useEffect(() => {
+    if (routeAccountId && routeMessageId) return
+    internalRouteRef.current = '/'
+    navigate('/', { replace: true })
+  }, [navigate, routeAccountId, routeMessageId])
 
   const syncCreatedAccountInBackground = React.useCallback(
     (accountId: number, accountEmail: string, startedAt: Date): void => {
@@ -326,6 +454,43 @@ export function MailboxWorkspace(): React.JSX.Element {
     setDialogAccountId(null)
   }
 
+  async function handleReauthorizeAccount(account: Account): Promise<void> {
+    if (!account.accountId) return
+
+    const startedAt = new Date()
+    startSyncing(account.id, {
+      label: account.name,
+      startedAt,
+      message: `正在重新授权 ${account.name}...`
+    })
+    setError(null)
+
+    try {
+      const authorizedAccount = await reauthorizeAccount(account.accountId)
+      await refreshAccounts()
+      finishSyncing(account.id, 'success', {
+        label: account.name,
+        startedAt,
+        message: `${account.name} 授权已更新`
+      })
+      await handleRefreshAccount({
+        ...account,
+        status: authorizedAccount.status,
+        credentialState: authorizedAccount.credentialState,
+        lastError: authorizedAccount.lastError
+      })
+    } catch (reauthorizeError) {
+      const message = getErrorMessage(reauthorizeError, '重新授权失败。')
+      setError(message)
+      finishSyncing(account.id, 'error', {
+        label: account.name,
+        startedAt,
+        message: `${account.name} 重新授权失败：${message}`
+      })
+      throw reauthorizeError
+    }
+  }
+
   async function handleRefreshAccount(account: Account): Promise<void> {
     const startedAt = new Date()
     const syncMessage = account.id === 'all' ? '正在同步全部账号...' : `正在同步 ${account.name}...`
@@ -398,12 +563,68 @@ export function MailboxWorkspace(): React.JSX.Element {
     }
   }
 
+  async function handleSaveComposerDraft(
+    input: Parameters<typeof saveComposerDraft>[0]
+  ): Promise<void> {
+    await saveComposerDraft(input)
+    await refreshOutbox()
+  }
+
+  async function handleRetryOutbox(message: OutboxMessage): Promise<void> {
+    setOutboxPending(true)
+    setError(null)
+    try {
+      const result = await retryOutboxMessage(message.outboxId)
+      toast.success(result.warning ? `邮件已发送：${result.warning}` : '邮件已发送')
+      await refreshOutbox()
+    } catch (retryError) {
+      const messageText = getErrorMessage(retryError, '重试发送失败。')
+      setError(messageText)
+      toast.error(messageText)
+      await refreshOutbox()
+    } finally {
+      setOutboxPending(false)
+    }
+  }
+
+  async function handleDeleteOutbox(message: OutboxMessage): Promise<void> {
+    setOutboxPending(true)
+    setError(null)
+    try {
+      if (message.status === 'draft') {
+        await deleteDraftMessage(message.outboxId)
+      } else {
+        await deleteOutboxMessage(message.outboxId)
+      }
+      toast.success('发送记录已删除')
+      await refreshOutbox()
+    } catch (deleteError) {
+      const messageText = getErrorMessage(deleteError, '删除发送记录失败。')
+      setError(messageText)
+      toast.error(messageText)
+    } finally {
+      setOutboxPending(false)
+    }
+  }
+
   function handleSelectAccount(accountId: string): void {
     if (!accountId) return
+    navigateToMailboxRoute()
     setSelectedAccountId(accountId)
     void refreshMessages(accountId, filters, searchKeyword).catch((refreshError) => {
       setError(getErrorMessage(refreshError, '刷新邮件失败。'))
     })
+  }
+
+  function handleSelectMessage(messageId: string): void {
+    selectMessage(messageId)
+    navigateToMailboxRoute(selectedAccountId, messageId)
+  }
+
+  function navigateToMailboxRoute(accountId?: string, messageId?: string): void {
+    const route = toMailboxRoute(accountId, messageId)
+    internalRouteRef.current = route
+    navigate(route, { replace: false })
   }
 
   function handleChangeFilters(nextFilters: MailFilterTag[]): void {
@@ -422,10 +643,36 @@ export function MailboxWorkspace(): React.JSX.Element {
 
   return (
     <main className="flex h-screen min-h-screen flex-col overflow-hidden bg-background text-foreground">
-      <TitleBar
-        onAddAccount={handleOpenAddAccountWindow}
-        onOpenSettings={() => setDialogKind('settings')}
-      />
+      <div className="relative shrink-0">
+        <TitleBar
+          onAddAccount={handleOpenAddAccountWindow}
+          onOpenSettings={() => setDialogKind('settings')}
+        />
+        <div className="app-no-drag absolute top-1 right-28 flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label="发送记录"
+            disabled={!hasAccounts || outboxPending}
+            onClick={() => setOutboxOpen(true)}
+          >
+            <MailWarning data-icon="inline-start" />
+            记录
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label="写邮件"
+            disabled={!hasAccounts || composerPending}
+            onClick={() => {
+              void openComposer('new')
+            }}
+          >
+            <Pencil data-icon="inline-start" />
+            写信
+          </Button>
+        </div>
+      </div>
 
       {showNoAccounts ? (
         <NoAccountsBody
@@ -465,6 +712,9 @@ export function MailboxWorkspace(): React.JSX.Element {
                 setDialogAccountId(account.id)
                 setDialogKind('delete')
               }}
+              onResolveAccountWarning={(account) => {
+                setWarningAccountId(account.id)
+              }}
             />
           </ResizablePanel>
 
@@ -486,10 +736,18 @@ export function MailboxWorkspace(): React.JSX.Element {
               loadingMore={messagePage.loadingMore}
               hasMore={messagePage.hasMore}
               error={error}
-              onSelectMessage={selectMessage}
+              onSelectMessage={handleSelectMessage}
               onChangeFilters={handleChangeFilters}
               onChangeSearchKeyword={handleChangeSearchKeyword}
               onLoadMore={loadMoreMessages}
+              selectedMessageIds={selectedMessageIds}
+              allVisibleSelected={allVisibleSelected}
+              someVisibleSelected={someVisibleSelected}
+              selectionDisabled={deleting}
+              onToggleMessageSelection={toggleMessageSelection}
+              onSelectAllVisible={selectAllVisible}
+              onClearSelection={clearSelection}
+              onDeleteSelected={() => requestDeleteMessages(selectedMessages)}
             />
           </ResizablePanel>
 
@@ -504,12 +762,24 @@ export function MailboxWorkspace(): React.JSX.Element {
                   loading={loadingMessageId === selectedMessage.id}
                   loadingBody={loadingBodyMessageId === selectedMessage.id}
                   downloadingAttachmentIds={downloadingAttachmentIds}
+                  actionPending={composerPending}
+                  deleting={deletingMessageIds.has(selectedMessage.id)}
                   onLoadBody={() => loadMessageBody(selectedMessage)}
                   onDownloadAttachment={(attachment) => {
                     if (attachment.id !== undefined) {
                       downloadMessageAttachment(selectedMessage, attachment.id)
                     }
                   }}
+                  onReply={() => {
+                    void openComposer('reply', selectedMessage)
+                  }}
+                  onReplyAll={() => {
+                    void openComposer('reply_all', selectedMessage)
+                  }}
+                  onForward={() => {
+                    void openComposer('forward', selectedMessage)
+                  }}
+                  onDelete={() => requestDeleteMessages([selectedMessage])}
                 />
               ) : (
                 <div className="flex h-full items-center justify-center p-8 text-xs text-muted-foreground">
@@ -550,6 +820,28 @@ export function MailboxWorkspace(): React.JSX.Element {
         }}
         onConfirm={handleRemoveAccount}
       />
+      {warningAccount ? (
+        <AccountWarningDialog
+          account={warningAccount}
+          open={Boolean(warningAccountId)}
+          syncing={syncingAccountIds.has(warningAccount.id)}
+          onOpenChange={(open) => {
+            if (!open) setWarningAccountId(null)
+          }}
+          onEdit={(account) => {
+            setDialogAccountId(account.id)
+            setDialogKind('edit')
+          }}
+          onRetry={(account) => {
+            void handleRefreshAccount(account)
+          }}
+          onDelete={(account) => {
+            setDialogAccountId(account.id)
+            setDialogKind('delete')
+          }}
+          onReauthorize={handleReauthorizeAccount}
+        />
+      ) : null}
       <SettingsDialog
         open={dialogKind === 'settings'}
         settings={settings}
@@ -564,6 +856,58 @@ export function MailboxWorkspace(): React.JSX.Element {
           if (!open) setOutlookImapHelpAccount(null)
         }}
       />
+      <MailComposer
+        open={composerOpen}
+        accounts={realAccounts}
+        draft={composerDraft}
+        pending={composerPending}
+        onOpenChange={(open) => {
+          if (!open) closeComposer()
+        }}
+        onSend={sendComposerDraft}
+        onSaveDraft={handleSaveComposerDraft}
+      />
+      <OutboxPanel
+        open={outboxOpen}
+        pending={outboxPending}
+        outboxMessages={outboxMessages}
+        onOpenChange={setOutboxOpen}
+        onRefresh={() => {
+          void refreshOutbox().catch((refreshError) => {
+            setError(getErrorMessage(refreshError, '加载发送记录失败。'))
+          })
+        }}
+        onOpenDraft={(message) => {
+          setOutboxOpen(false)
+          openOutboxDraft(message)
+        }}
+        onRetry={(message) => {
+          void handleRetryOutbox(message)
+        }}
+        onDelete={(message) => {
+          void handleDeleteOutbox(message)
+        }}
+      />
+      <DeleteMessageDialog
+        open={Boolean(deleteRequest)}
+        messages={deleteRequest?.messages ?? []}
+        permanent={deleteRequest?.permanent ?? false}
+        pending={deleting}
+        onOpenChange={(open) => {
+          if (!open) cancelDelete()
+        }}
+        onConfirm={() => {
+          void confirmDelete()
+        }}
+      />
     </main>
   )
+}
+
+function toMailboxRoute(accountId?: string, messageId?: string): string {
+  if (!accountId) return '/'
+  if (accountId === 'all' && !messageId) return '/'
+  return messageId
+    ? `/${encodeURIComponent(accountId)}/${encodeURIComponent(messageId)}`
+    : `/${encodeURIComponent(accountId)}`
 }

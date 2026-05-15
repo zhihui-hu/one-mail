@@ -15,6 +15,10 @@ type MessageRow = SqliteRow & {
   message_id: number
   account_id: number
   folder_id: number
+  folder_role?: string | null
+  folder_name?: string | null
+  rfc822_message_id?: string | null
+  references_header?: string | null
   subject: string | null
   from_name: string | null
   from_email: string | null
@@ -37,6 +41,50 @@ type AttachmentRow = SqliteRow & {
   size_bytes: number
 }
 
+type AddressRow = SqliteRow & {
+  kind: 'from' | 'sender' | 'to' | 'cc' | 'bcc' | 'reply_to'
+  name: string | null
+  email: string
+}
+
+type ComposeSourceRow = MessageRow & {
+  rfc822_message_id: string | null
+  in_reply_to: string | null
+  references_header: string | null
+  sent_at: string | null
+  raw_headers: string | null
+  folder_path: string
+  folder_role: string
+  uid: number
+}
+
+export type MessageComposeAddress = {
+  name?: string
+  email: string
+}
+
+export type MessageComposeSource = {
+  messageId: number
+  accountId: number
+  folderId: number
+  folderPath: string
+  folderRole: string
+  uid: number
+  subject?: string
+  fromName?: string
+  fromEmail?: string
+  sentAt?: string
+  receivedAt?: string
+  rfc822MessageId?: string
+  inReplyTo?: string
+  referencesHeader?: string
+  rawHeaders?: string
+  bodyText?: string
+  bodyHtmlSanitized?: string
+  addresses: Record<AddressRow['kind'], MessageComposeAddress[]>
+  attachments: MailMessageAttachment[]
+}
+
 type AccountMailboxStatsRow = SqliteRow & {
   account_id: number
   total_count: number
@@ -52,8 +100,20 @@ export type MessageReadStateTarget = {
   isRead: boolean
 }
 
+export type MessageDeleteTarget = {
+  messageId: number
+  accountId: number
+  folderId: number
+  folderPath: string
+  folderRole: string
+  uid: number
+  remoteDeleted: boolean
+  userHidden: boolean
+  userDeleted: boolean
+}
+
 export function listMessages(query?: MessageListQuery): MailMessageSummary[] {
-  const where: string[] = ['m.remote_deleted = 0']
+  const where: string[] = ['m.remote_deleted = 0', 'm.user_hidden = 0']
   const params: Record<string, string | number> = {
     limit: Math.min(Math.max(query?.limit ?? 50, 1), 200),
     offset: Math.max(query?.offset ?? 0, 0)
@@ -71,10 +131,24 @@ export function listMessages(query?: MessageListQuery): MailMessageSummary[] {
 
   const filters = new Set(query?.filters ?? [])
   if (filters.has('unread')) where.push('m.is_read = 0')
-  if (filters.has('attachments')) where.push('m.has_attachments = 1')
   if (filters.has('starred')) where.push('m.is_starred = 1')
   if (filters.has('today')) {
-    where.push("date(COALESCE(m.received_at, m.internal_date)) = date('now', 'localtime')")
+    where.push(
+      "date(COALESCE(m.received_at, m.internal_date), 'localtime') = date('now', 'localtime')"
+    )
+  }
+  if (filters.has('yesterday')) {
+    where.push(
+      "date(COALESCE(m.received_at, m.internal_date), 'localtime') = date('now', 'localtime', '-1 day')"
+    )
+  }
+  if (filters.has('last7')) {
+    where.push(
+      "date(COALESCE(m.received_at, m.internal_date), 'localtime') >= date('now', 'localtime', '-6 days')"
+    )
+    where.push(
+      "date(COALESCE(m.received_at, m.internal_date), 'localtime') <= date('now', 'localtime')"
+    )
   }
 
   const keyword = normalizeSearchKeyword(query?.keyword ?? query?.search)
@@ -110,6 +184,10 @@ export function listMessages(query?: MessageListQuery): MailMessageSummary[] {
         m.message_id,
         m.account_id,
         m.folder_id,
+        f.role AS folder_role,
+        f.name AS folder_name,
+        m.rfc822_message_id,
+        m.references_header,
         m.subject,
         m.from_name,
         m.from_email,
@@ -122,6 +200,7 @@ export function listMessages(query?: MessageListQuery): MailMessageSummary[] {
         b.body_text,
         b.body_html_sanitized
       FROM onemail_mail_messages m
+      JOIN onemail_mail_folders f ON f.folder_id = m.folder_id
       LEFT JOIN onemail_message_bodies b ON b.message_id = m.message_id
       WHERE ${where.join(' AND ')}
       ORDER BY COALESCE(m.received_at, m.internal_date, m.created_at) DESC, m.message_id DESC
@@ -176,6 +255,7 @@ export function listAccountMailboxStats(): AccountMailboxStats[] {
           SUM(CASE WHEN m.is_read = 0 THEN 1 ELSE 0 END) AS unread_count
         FROM onemail_mail_messages m
         WHERE m.remote_deleted = 0
+          AND m.user_hidden = 0
           AND NOT EXISTS (
             SELECT 1
             FROM onemail_mail_folders f
@@ -208,6 +288,10 @@ export function listRecentNotificationMessages(
         m.message_id,
         m.account_id,
         m.folder_id,
+        f.role AS folder_role,
+        f.name AS folder_name,
+        m.rfc822_message_id,
+        m.references_header,
         m.subject,
         m.from_name,
         m.from_email,
@@ -220,9 +304,11 @@ export function listRecentNotificationMessages(
         b.body_text,
         b.body_html_sanitized
       FROM onemail_mail_messages m
+      JOIN onemail_mail_folders f ON f.folder_id = m.folder_id
       LEFT JOIN onemail_message_bodies b ON b.message_id = m.message_id
       WHERE m.account_id = :accountId
         AND m.remote_deleted = 0
+        AND m.user_hidden = 0
       ORDER BY m.message_id DESC
       LIMIT :limit
       `
@@ -255,6 +341,10 @@ export function getMessage(messageId: number): MailMessageDetail | null {
         m.message_id,
         m.account_id,
         m.folder_id,
+        f.role AS folder_role,
+        f.name AS folder_name,
+        m.rfc822_message_id,
+        m.references_header,
         m.subject,
         m.from_name,
         m.from_email,
@@ -268,6 +358,7 @@ export function getMessage(messageId: number): MailMessageDetail | null {
         b.body_html_sanitized,
         b.external_images_blocked
       FROM onemail_mail_messages m
+      JOIN onemail_mail_folders f ON f.folder_id = m.folder_id
       LEFT JOIN onemail_message_bodies b ON b.message_id = m.message_id
       WHERE m.message_id = :messageId
       `
@@ -353,6 +444,134 @@ export function getMessageReadStateTarget(messageId: number): MessageReadStateTa
   }
 }
 
+export function getMessageComposeSource(messageId: number): MessageComposeSource | null {
+  const db = getDatabase()
+  const row = db
+    .prepare<ComposeSourceRow>(
+      `
+      SELECT
+        m.message_id,
+        m.account_id,
+        m.folder_id,
+        f.path AS folder_path,
+        f.role AS folder_role,
+        m.uid,
+        m.rfc822_message_id,
+        m.in_reply_to,
+        m.references_header,
+        m.subject,
+        m.from_name,
+        m.from_email,
+        m.sent_at,
+        m.received_at,
+        m.raw_headers,
+        m.snippet,
+        m.is_read,
+        m.is_starred,
+        m.has_attachments,
+        m.body_status,
+        b.body_text,
+        b.body_html_sanitized
+      FROM onemail_mail_messages m
+      JOIN onemail_mail_folders f ON f.folder_id = m.folder_id
+      LEFT JOIN onemail_message_bodies b ON b.message_id = m.message_id
+      WHERE m.message_id = :messageId
+        AND m.remote_deleted = 0
+      `
+    )
+    .get({ messageId })
+
+  if (!row) return null
+
+  return {
+    messageId: toNumber(row.message_id),
+    accountId: toNumber(row.account_id),
+    folderId: toNumber(row.folder_id),
+    folderPath: row.folder_path,
+    folderRole: row.folder_role,
+    uid: toNumber(row.uid),
+    subject: toOptionalString(row.subject),
+    fromName: toOptionalString(row.from_name),
+    fromEmail: toOptionalString(row.from_email),
+    sentAt: toOptionalString(row.sent_at),
+    receivedAt: toOptionalString(row.received_at),
+    rfc822MessageId: toOptionalString(row.rfc822_message_id),
+    inReplyTo: toOptionalString(row.in_reply_to),
+    referencesHeader: toOptionalString(row.references_header),
+    rawHeaders: toOptionalString(row.raw_headers),
+    bodyText: toOptionalString(row.body_text),
+    bodyHtmlSanitized: toOptionalString(row.body_html_sanitized),
+    addresses: listMessageAddresses(messageId, db),
+    attachments: listAttachments(messageId, db)
+  }
+}
+
+export function markMessageAnswered(messageId: number, isAnswered = true): void {
+  getDatabase()
+    .prepare(
+      `
+      UPDATE onemail_mail_messages
+      SET is_answered = :isAnswered,
+          flags_json = :flagsJson,
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE message_id = :messageId
+      `
+    )
+    .run({
+      messageId,
+      isAnswered: isAnswered ? 1 : 0,
+      flagsJson: updateFlagsJson(messageId, 'Answered', isAnswered)
+    })
+}
+
+export function getMessageDeleteTarget(messageId: number): MessageDeleteTarget | null {
+  const row = getDatabase()
+    .prepare<
+      SqliteRow & {
+        message_id: number
+        account_id: number
+        folder_id: number
+        folder_path: string
+        folder_role: string
+        uid: number
+        remote_deleted: number
+        user_hidden: number
+        user_deleted: number
+      }
+    >(
+      `
+      SELECT
+        m.message_id,
+        m.account_id,
+        m.folder_id,
+        f.path AS folder_path,
+        f.role AS folder_role,
+        m.uid,
+        m.remote_deleted,
+        m.user_hidden,
+        m.user_deleted
+      FROM onemail_mail_messages m
+      JOIN onemail_mail_folders f ON f.folder_id = m.folder_id
+      WHERE m.message_id = :messageId
+      `
+    )
+    .get({ messageId })
+
+  if (!row) return null
+
+  return {
+    messageId: toNumber(row.message_id),
+    accountId: toNumber(row.account_id),
+    folderId: toNumber(row.folder_id),
+    folderPath: row.folder_path,
+    folderRole: row.folder_role,
+    uid: toNumber(row.uid),
+    remoteDeleted: toBoolean(row.remote_deleted),
+    userHidden: toBoolean(row.user_hidden),
+    userDeleted: toBoolean(row.user_deleted)
+  }
+}
+
 export function updateMessageReadState(messageId: number, isRead: boolean): MessageReadStateUpdate {
   const db = getDatabase()
   const target = getMessageReadStateTarget(messageId)
@@ -391,14 +610,69 @@ export function updateMessageReadState(messageId: number, isRead: boolean): Mess
   }
 }
 
+export function markMessageUserDeleted(messageId: number): void {
+  updateMessageDeleteState(messageId, {
+    remote_deleted: 1,
+    is_deleted: 1,
+    user_deleted: 1,
+    delete_error: null,
+    deleted_at: nowSql(),
+    last_operation_at: nowSql()
+  })
+}
+
+export function markMessageUserHidden(messageId: number): void {
+  updateMessageDeleteState(messageId, {
+    user_hidden: 1,
+    delete_error: null,
+    deleted_at: nowSql(),
+    last_operation_at: nowSql()
+  })
+}
+
+export function restoreMessageLocally(messageId: number): void {
+  updateMessageDeleteState(messageId, {
+    user_hidden: 0,
+    user_deleted: 0,
+    delete_error: null,
+    deleted_at: null,
+    last_operation_at: nowSql()
+  })
+}
+
+export function markMessageRemoteDeleted(messageId: number): void {
+  updateMessageDeleteState(messageId, {
+    remote_deleted: 1,
+    is_deleted: 1,
+    delete_error: null,
+    deleted_at: nowSql(),
+    last_operation_at: nowSql()
+  })
+}
+
+export function markMessageDeleteError(messageId: number, errorMessage: string): void {
+  updateMessageDeleteState(messageId, {
+    delete_error: errorMessage.slice(0, 500),
+    last_operation_at: nowSql()
+  })
+}
+
 function mapMessageSummaryRow(row: MessageRow): MailMessageSummary {
+  const addresses = listMessageAddresses(toNumber(row.message_id))
   return {
     messageId: toNumber(row.message_id),
     accountId: toNumber(row.account_id),
     folderId: toNumber(row.folder_id),
+    folderRole: toOptionalString(row.folder_role),
+    folderName: toOptionalString(row.folder_name),
     subject: toOptionalString(row.subject),
     fromName: toOptionalString(row.from_name),
     fromEmail: toOptionalString(row.from_email),
+    to: formatAddressList(addresses.to),
+    cc: formatAddressList(addresses.cc),
+    replyTo: formatAddressList(addresses.reply_to),
+    messageRfc822Id: toOptionalString(row.rfc822_message_id),
+    references: toOptionalString(row.references_header),
     receivedAt: toOptionalString(row.received_at),
     snippet: toOptionalString(row.snippet),
     isRead: toBoolean(row.is_read),
@@ -415,19 +689,7 @@ function mapMessageSummaryRow(row: MessageRow): MailMessageSummary {
 }
 
 function updateFlagsJsonForReadState(nextIsRead: boolean, messageId: number): string {
-  const current = getDatabase()
-    .prepare<{
-      flags_json: string
-    }>('SELECT flags_json FROM onemail_mail_messages WHERE message_id = :messageId')
-    .get({ messageId })
-  const flags = parseFlagsJson(current?.flags_json)
-  deleteFlag(flags, 'Seen')
-
-  if (nextIsRead) {
-    flags.add('Seen')
-  }
-
-  return JSON.stringify(Array.from(flags))
+  return updateFlagsJson(messageId, 'Seen', nextIsRead)
 }
 
 function parseFlagsJson(value?: string): Set<string> {
@@ -452,6 +714,72 @@ function deleteFlag(flags: Set<string>, flagName: string): void {
   }
 }
 
+function updateFlagsJson(messageId: number, flagName: string, enabled: boolean): string {
+  const current = getDatabase()
+    .prepare<{
+      flags_json: string
+    }>('SELECT flags_json FROM onemail_mail_messages WHERE message_id = :messageId')
+    .get({ messageId })
+  const flags = parseFlagsJson(current?.flags_json)
+  deleteFlag(flags, flagName)
+
+  if (enabled) {
+    flags.add(flagName)
+  }
+
+  return JSON.stringify(Array.from(flags))
+}
+
+function updateMessageDeleteState(
+  messageId: number,
+  values: Record<string, string | number | null>
+): void {
+  const existingColumns = getMessageColumns()
+  const assignments: string[] = []
+  const params: Record<string, string | number | null> = { messageId }
+
+  for (const [column, value] of Object.entries(values)) {
+    if (!existingColumns.has(column)) continue
+
+    if (value === nowSql()) {
+      assignments.push(`${column} = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`)
+      continue
+    }
+
+    const paramName = column.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase())
+    assignments.push(`${column} = :${paramName}`)
+    params[paramName] = value
+  }
+
+  if (assignments.length === 0) return
+
+  const target = getMessageDeleteTarget(messageId)
+  getDatabase()
+    .prepare(
+      `
+      UPDATE onemail_mail_messages
+      SET ${assignments.join(', ')},
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE message_id = :messageId
+      `
+    )
+    .run(params)
+
+  if (target) refreshFolderUnreadCount(target.folderId)
+}
+
+function getMessageColumns(): Set<string> {
+  const rows = getDatabase()
+    .prepare<{ name: string }>('PRAGMA table_info(onemail_mail_messages)')
+    .all()
+
+  return new Set(rows.map((row) => row.name))
+}
+
+function nowSql(): '__NOW__' {
+  return '__NOW__'
+}
+
 function refreshFolderUnreadCount(folderId: number): void {
   getDatabase()
     .prepare(
@@ -462,6 +790,7 @@ function refreshFolderUnreadCount(folderId: number): void {
             FROM onemail_mail_messages
             WHERE folder_id = :folderId
               AND remote_deleted = 0
+              AND user_hidden = 0
               AND is_read = 0
           ),
           total_count = (
@@ -469,6 +798,7 @@ function refreshFolderUnreadCount(folderId: number): void {
             FROM onemail_mail_messages
             WHERE folder_id = :folderId
               AND remote_deleted = 0
+              AND user_hidden = 0
           ),
           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE folder_id = :folderId
@@ -501,6 +831,48 @@ function listAttachments(messageId: number, db = getDatabase()): MailMessageAtta
     contentDisposition: row.content_disposition ?? undefined,
     sizeBytes: toNumber(row.size_bytes)
   }))
+}
+
+function listMessageAddresses(
+  messageId: number,
+  db = getDatabase()
+): Record<AddressRow['kind'], MessageComposeAddress[]> {
+  const rows = db
+    .prepare<AddressRow>(
+      `
+      SELECT kind, name, email
+      FROM onemail_message_addresses
+      WHERE message_id = :messageId
+      ORDER BY sort_order ASC, address_id ASC
+      `
+    )
+    .all({ messageId })
+
+  const addresses: Record<AddressRow['kind'], MessageComposeAddress[]> = {
+    from: [],
+    sender: [],
+    to: [],
+    cc: [],
+    bcc: [],
+    reply_to: []
+  }
+
+  for (const row of rows) {
+    addresses[row.kind].push({
+      name: toOptionalString(row.name),
+      email: row.email
+    })
+  }
+
+  return addresses
+}
+
+function formatAddressList(addresses: MessageComposeAddress[]): string | undefined {
+  if (addresses.length === 0) return undefined
+
+  return addresses
+    .map((address) => (address.name ? `${address.name} <${address.email}>` : address.email))
+    .join(', ')
 }
 
 function mapBodyRow(row: MessageRow): MailMessageBody | undefined {

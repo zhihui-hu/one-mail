@@ -6,21 +6,26 @@ import type {
   AppSettings,
   BackupImportResult,
   AttachmentDownloadResult,
+  ComposeDraft as SharedComposeDraft,
   MailAccount,
+  MailAddressInput,
+  MailAttachmentInput,
   MailMessageDetail,
   MailMessageBody,
   MailMessageSummary,
+  MailSendInput,
   MessageReadStateUpdate,
   MessageFilterTag,
   MessageListQuery,
   MailboxChangedEvent,
+  OutboxMessage as SharedOutboxMessage,
   SettingsUpdateInput,
   SyncMode,
   SyncStatus,
   SystemInfo
 } from '../../../shared/types'
 import { normalizeMailBodyText, normalizeMailDisplayText } from '../../../shared/mail-text'
-import type { Account, Message } from '@renderer/components/mail/types'
+import type { Account, Message, MessageFolderRole } from '@renderer/components/mail/types'
 
 const platformLabel: Partial<Record<NodeJS.Platform, string>> = {
   darwin: 'macOS',
@@ -29,6 +34,106 @@ const platformLabel: Partial<Record<NodeJS.Platform, string>> = {
 }
 
 export const MESSAGE_LIST_PAGE_SIZE = 100
+
+export type ComposeKind = 'new' | 'reply' | 'reply_all' | 'forward'
+
+export type ComposeDraftInput = {
+  kind: ComposeKind
+  accountId: number
+  relatedMessageId?: number
+}
+
+export type ComposeDraft = {
+  draftId?: number
+  kind: ComposeKind
+  accountId: number
+  relatedMessageId?: number
+  to: string[]
+  cc: string[]
+  bcc: string[]
+  subject: string
+  bodyText: string
+  attachments?: MailAttachmentInput[]
+  inReplyTo?: string
+  references?: string
+}
+
+export type SendMessageInput = {
+  draftId?: number
+  kind: ComposeKind
+  accountId: number
+  relatedMessageId?: number
+  to: string[]
+  cc?: string[]
+  bcc?: string[]
+  subject: string
+  bodyText: string
+  attachments?: MailAttachmentInput[]
+  attachmentPaths?: string[]
+  inReplyTo?: string
+  references?: string
+}
+
+export type SendMessageResult = {
+  sent: boolean
+  messageId?: string
+  outboxId?: number
+  warning?: string
+}
+
+export type DeleteMessageInput = {
+  messageId: number
+  permanent?: boolean
+}
+
+export type DeleteMessageResult = {
+  messageId: number
+  deleted: boolean
+  permanent?: boolean
+  hidden?: boolean
+  error?: string
+}
+
+export type BulkDeleteMessagesInput = {
+  messageIds: number[]
+  permanent?: boolean
+}
+
+export type BulkDeleteMessagesResult = {
+  succeededMessageIds: number[]
+  failedItems: Array<{ messageId: number; error: string }>
+  deletedCount: number
+  failedCount: number
+}
+
+export type HideMessageResult = {
+  messageId: number
+  hidden: boolean
+}
+
+export type RestoreMessageResult = {
+  messageId: number
+  restored: boolean
+}
+
+export type OutboxMessage = {
+  outboxId: number
+  kind: ComposeKind
+  accountId: number
+  relatedMessageId?: number
+  status: SharedOutboxMessage['status']
+  to: string[]
+  cc: string[]
+  bcc: string[]
+  subject: string
+  bodyText: string
+  attachments: MailAttachmentInput[]
+  inReplyTo?: string
+  references?: string
+  lastError?: string
+  lastWarning?: string
+  updatedAt: string
+}
 
 export async function loadInitialData(): Promise<{
   accounts: Account[]
@@ -77,6 +182,10 @@ export function onAccountCreated(callback: (event: AccountCreatedEvent) => void)
 
 export async function updateAccount(input: AccountUpdateInput): Promise<MailAccount> {
   return window.api.accounts.update(input)
+}
+
+export async function reauthorizeAccount(accountId: number): Promise<MailAccount> {
+  return window.api.accounts.reauthorize(accountId)
 }
 
 export async function removeAccount(accountId: number): Promise<boolean> {
@@ -184,6 +293,111 @@ export async function downloadAttachment(attachmentId: number): Promise<Attachme
   return window.api.messages.downloadAttachment(attachmentId)
 }
 
+export async function createComposeDraft(input: ComposeDraftInput): Promise<ComposeDraft> {
+  const compose = window.api.compose
+  if (input.kind === 'reply' || input.kind === 'reply_all') {
+    return toUiComposeDraft(
+      await compose.createReplyDraft({
+        messageId: requireRelatedMessageId(input),
+        mode: input.kind
+      })
+    )
+  }
+
+  if (input.kind === 'forward') {
+    return toUiComposeDraft(
+      await compose.createForwardDraft({
+        messageId: requireRelatedMessageId(input)
+      })
+    )
+  }
+
+  return createLocalDraft(input)
+}
+
+export async function sendComposedMessage(input: SendMessageInput): Promise<SendMessageResult> {
+  const result = await window.api.compose.send(toSharedSendInput(input))
+  return {
+    sent: result.status === 'sent',
+    messageId: result.rfc822MessageId,
+    outboxId: result.outboxId,
+    warning: result.warning ?? result.error
+  }
+}
+
+export async function selectMailAttachments(): Promise<MailAttachmentInput[]> {
+  return window.api.compose.selectAttachments()
+}
+
+export async function saveComposedDraft(input: SendMessageInput): Promise<OutboxMessage> {
+  return toUiOutboxMessage(await window.api.compose.saveDraft(toSharedSendInput(input)))
+}
+
+export async function loadOutboxMessages(): Promise<OutboxMessage[]> {
+  const messages = await window.api.compose.listOutbox({
+    statuses: ['draft', 'failed', 'sending'],
+    limit: 100
+  })
+  return messages.map(toUiOutboxMessage)
+}
+
+export async function retryOutboxMessage(outboxId: number): Promise<SendMessageResult> {
+  const result = await window.api.compose.retry(outboxId)
+  return {
+    sent: result.status === 'sent',
+    messageId: result.rfc822MessageId,
+    outboxId: result.outboxId,
+    warning: result.warning ?? result.error
+  }
+}
+
+export async function deleteOutboxMessage(outboxId: number): Promise<boolean> {
+  return window.api.compose.deleteOutbox(outboxId)
+}
+
+export async function deleteDraftMessage(outboxId: number): Promise<boolean> {
+  return window.api.compose.deleteDraft(outboxId)
+}
+
+export async function deleteMessage(input: DeleteMessageInput): Promise<DeleteMessageResult> {
+  const result = await window.api.messages.delete({
+    messageId: input.messageId,
+    mode: input.permanent ? 'permanent' : 'trash'
+  })
+  return {
+    messageId: result.messageId,
+    deleted: result.deleted,
+    permanent: result.mode === 'permanent',
+    hidden: result.mode === 'local_hide',
+    error: result.error
+  }
+}
+
+export async function bulkDeleteMessages(
+  input: BulkDeleteMessagesInput
+): Promise<BulkDeleteMessagesResult> {
+  return window.api.messages.bulkDelete({
+    messageIds: input.messageIds,
+    mode: input.permanent ? 'permanent' : 'trash'
+  })
+}
+
+export async function hideMessage(messageId: number): Promise<HideMessageResult> {
+  const result = await window.api.messages.hideLocal(messageId)
+  return {
+    messageId: result.messageId,
+    hidden: result.deleted || result.localOnly
+  }
+}
+
+export async function restoreMessage(messageId: number): Promise<RestoreMessageResult> {
+  const result = await window.api.messages.restore(messageId)
+  return {
+    messageId: result.messageId,
+    restored: result.restored
+  }
+}
+
 export function getPlatformName(info?: SystemInfo): string {
   if (!info) return 'Desktop'
   return platformLabel[info.platform] ?? info.platform
@@ -208,6 +422,7 @@ function toAccountList(accounts: MailAccount[], accountStats: AccountMailboxStat
       messageCount: stats?.totalCount ?? 0,
       credentialState: account.credentialState,
       status: account.status,
+      lastError: account.lastError,
       accent: account.syncEnabled ? 'bg-muted-foreground' : 'bg-muted'
     }
   })
@@ -256,8 +471,15 @@ function toMessage(message: MailMessageSummary | MailMessageDetail): Message {
     messageId: message.messageId,
     accountId: message.accountId,
     folderId: message.folderId,
+    folderRole: readOptionalString(message, 'folderRole') as MessageFolderRole | undefined,
+    folderName: readOptionalString(message, 'folderName'),
     from: fromName ?? fromEmail ?? '未知发件人',
     fromAddress: fromEmail,
+    to: normalizeMailDisplayText(readOptionalString(message, 'to')),
+    cc: normalizeMailDisplayText(readOptionalString(message, 'cc')),
+    replyTo: normalizeMailDisplayText(readOptionalString(message, 'replyTo')),
+    messageRfc822Id: normalizeMailDisplayText(readOptionalString(message, 'messageRfc822Id')),
+    references: normalizeMailDisplayText(readOptionalString(message, 'references')),
     subject,
     preview: snippet,
     verificationCode: normalizeMailDisplayText(message.verificationCode),
@@ -287,6 +509,101 @@ function toMessage(message: MailMessageSummary | MailMessageDetail): Message {
           ? [{ name: '附件元数据', size: '待加载', type: '附件' }]
           : []
   }
+}
+
+function createLocalDraft(input: ComposeDraftInput): ComposeDraft {
+  return {
+    kind: input.kind,
+    accountId: input.accountId,
+    relatedMessageId: input.relatedMessageId,
+    to: [],
+    cc: [],
+    bcc: [],
+    subject: '',
+    bodyText: ''
+  }
+}
+
+function toUiComposeDraft(draft: SharedComposeDraft): ComposeDraft {
+  return {
+    kind: draft.mode,
+    accountId: draft.accountId,
+    relatedMessageId: draft.relatedMessageId,
+    to: draft.to.map(formatAddressInput),
+    cc: draft.cc.map(formatAddressInput),
+    bcc: draft.bcc.map(formatAddressInput),
+    subject: draft.subject ?? '',
+    bodyText: draft.bodyText ?? '',
+    inReplyTo: draft.inReplyTo,
+    references: draft.referencesHeader
+  }
+}
+
+function toUiOutboxMessage(message: SharedOutboxMessage): OutboxMessage {
+  return {
+    outboxId: message.outboxId,
+    kind: message.composeKind,
+    accountId: message.accountId,
+    relatedMessageId: message.relatedMessageId,
+    status: message.status,
+    to: message.to.map(formatAddressInput),
+    cc: message.cc.map(formatAddressInput),
+    bcc: message.bcc.map(formatAddressInput),
+    subject: message.subject ?? '',
+    bodyText: message.bodyText ?? '',
+    attachments: message.attachments ?? [],
+    inReplyTo: message.inReplyTo,
+    references: message.referencesHeader,
+    lastError: message.lastError,
+    lastWarning: message.lastWarning,
+    updatedAt: message.updatedAt
+  }
+}
+
+function toSharedSendInput(input: SendMessageInput): MailSendInput {
+  return {
+    outboxId: input.draftId,
+    accountId: input.accountId,
+    mode: input.kind,
+    relatedMessageId: input.relatedMessageId,
+    to: input.to.map(parseAddressInput),
+    cc: input.cc?.map(parseAddressInput),
+    bcc: input.bcc?.map(parseAddressInput),
+    subject: input.subject,
+    bodyText: input.bodyText,
+    inReplyTo: input.inReplyTo,
+    referencesHeader: input.references,
+    attachments: input.attachments ?? input.attachmentPaths?.map((filePath) => ({ filePath }))
+  }
+}
+
+function requireRelatedMessageId(input: ComposeDraftInput): number {
+  if (!input.relatedMessageId) {
+    throw new Error('缺少原邮件，无法创建回复或转发草稿。')
+  }
+
+  return input.relatedMessageId
+}
+
+function formatAddressInput(address: MailAddressInput): string {
+  return address.name ? `${address.name} <${address.email}>` : address.email
+}
+
+function parseAddressInput(value: string): MailAddressInput {
+  const trimmed = value.trim()
+  const match = /^(.*?)<([^<>]+)>$/.exec(trimmed)
+  if (!match) return { email: trimmed }
+
+  return {
+    name: match[1].trim() || undefined,
+    email: match[2].trim()
+  }
+}
+
+function readOptionalString(source: unknown, key: string): string | undefined {
+  if (!source || typeof source !== 'object') return undefined
+  const value = (source as Record<string, unknown>)[key]
+  return typeof value === 'string' ? value : undefined
 }
 
 function mergeMessageBody(message: Message, body: MailMessageBody): Message {

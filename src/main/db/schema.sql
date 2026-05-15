@@ -15,6 +15,13 @@ CREATE TABLE IF NOT EXISTS onemail_provider_presets (
   imap_host TEXT,
   imap_port INTEGER,
   imap_security TEXT CHECK (imap_security IN ('ssl_tls', 'starttls', 'none')),
+  smtp_host TEXT,
+  smtp_port INTEGER,
+  smtp_security TEXT CHECK (smtp_security IN ('ssl_tls', 'starttls', 'none')),
+  smtp_auth_type TEXT CHECK (
+    smtp_auth_type IN ('oauth2', 'app_password', 'password', 'bridge', 'manual')
+  ),
+  smtp_requires_auth INTEGER NOT NULL DEFAULT 1 CHECK (smtp_requires_auth IN (0, 1)),
   oauth_provider TEXT,
   oauth_scopes_json TEXT NOT NULL DEFAULT '[]',
   requires_enable_imap INTEGER NOT NULL DEFAULT 1 CHECK (requires_enable_imap IN (0, 1)),
@@ -43,6 +50,13 @@ CREATE TABLE IF NOT EXISTS onemail_mail_accounts (
   imap_host TEXT NOT NULL,
   imap_port INTEGER NOT NULL CHECK (imap_port > 0 AND imap_port <= 65535),
   imap_security TEXT NOT NULL CHECK (imap_security IN ('ssl_tls', 'starttls', 'none')),
+  smtp_host TEXT,
+  smtp_port INTEGER CHECK (smtp_port IS NULL OR (smtp_port > 0 AND smtp_port <= 65535)),
+  smtp_security TEXT CHECK (smtp_security IN ('ssl_tls', 'starttls', 'none')),
+  smtp_auth_type TEXT CHECK (
+    smtp_auth_type IN ('oauth2', 'app_password', 'password', 'bridge', 'manual')
+  ),
+  smtp_enabled INTEGER NOT NULL DEFAULT 1 CHECK (smtp_enabled IN (0, 1)),
   sync_enabled INTEGER NOT NULL DEFAULT 1 CHECK (sync_enabled IN (0, 1)),
   sync_interval_minutes INTEGER NOT NULL DEFAULT 15 CHECK (sync_interval_minutes >= 0),
   sync_window_days INTEGER NOT NULL DEFAULT 90 CHECK (sync_window_days > 0),
@@ -152,6 +166,11 @@ CREATE TABLE IF NOT EXISTS onemail_mail_messages (
   labels_json TEXT NOT NULL DEFAULT '[]',
   raw_headers TEXT,
   remote_deleted INTEGER NOT NULL DEFAULT 0 CHECK (remote_deleted IN (0, 1)),
+  user_deleted INTEGER NOT NULL DEFAULT 0 CHECK (user_deleted IN (0, 1)),
+  user_hidden INTEGER NOT NULL DEFAULT 0 CHECK (user_hidden IN (0, 1)),
+  deleted_at TEXT,
+  delete_error TEXT,
+  last_operation_at TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   FOREIGN KEY (account_id) REFERENCES onemail_mail_accounts(account_id) ON DELETE CASCADE,
@@ -230,6 +249,87 @@ CREATE TABLE IF NOT EXISTS onemail_sync_runs (
   FOREIGN KEY (account_id) REFERENCES onemail_mail_accounts(account_id) ON DELETE SET NULL,
   FOREIGN KEY (folder_id) REFERENCES onemail_mail_folders(folder_id) ON DELETE SET NULL,
   FOREIGN KEY (message_id) REFERENCES onemail_mail_messages(message_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS onemail_outbox_messages (
+  outbox_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id INTEGER NOT NULL,
+  related_message_id INTEGER,
+  compose_kind TEXT NOT NULL CHECK (compose_kind IN ('new', 'reply', 'reply_all', 'forward')),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (
+    status IN ('draft', 'queued', 'sending', 'sent', 'failed', 'cancelled', 'deleted')
+  ),
+  rfc822_message_id TEXT NOT NULL,
+  in_reply_to TEXT,
+  references_header TEXT,
+  from_name TEXT,
+  from_email TEXT NOT NULL,
+  to_json TEXT NOT NULL DEFAULT '[]',
+  cc_json TEXT NOT NULL DEFAULT '[]',
+  bcc_json TEXT NOT NULL DEFAULT '[]',
+  subject TEXT,
+  body_text TEXT,
+  body_html TEXT,
+  raw_mime TEXT,
+  remote_sent_folder_id INTEGER,
+  remote_sent_uid INTEGER,
+  sent_at TEXT,
+  deleted_at TEXT,
+  last_error TEXT,
+  last_warning TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY (account_id) REFERENCES onemail_mail_accounts(account_id) ON DELETE CASCADE,
+  FOREIGN KEY (related_message_id) REFERENCES onemail_mail_messages(message_id) ON DELETE SET NULL,
+  FOREIGN KEY (remote_sent_folder_id) REFERENCES onemail_mail_folders(folder_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS onemail_outbox_attachments (
+  attachment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  outbox_id INTEGER NOT NULL,
+  source_kind TEXT NOT NULL CHECK (source_kind IN ('local_file', 'forwarded_attachment')),
+  source_message_id INTEGER,
+  source_attachment_id INTEGER,
+  file_path TEXT,
+  filename TEXT NOT NULL,
+  mime_type TEXT,
+  size_bytes INTEGER NOT NULL DEFAULT 0 CHECK (size_bytes >= 0),
+  content_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY (outbox_id) REFERENCES onemail_outbox_messages(outbox_id) ON DELETE CASCADE,
+  FOREIGN KEY (source_message_id) REFERENCES onemail_mail_messages(message_id) ON DELETE SET NULL,
+  FOREIGN KEY (source_attachment_id) REFERENCES onemail_message_attachments(attachment_id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS onemail_message_operations (
+  operation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+  operation_batch_id TEXT,
+  message_id INTEGER,
+  outbox_id INTEGER,
+  account_id INTEGER NOT NULL,
+  operation_kind TEXT NOT NULL CHECK (
+    operation_kind IN (
+      'send',
+      'reply',
+      'reply_all',
+      'forward',
+      'delete',
+      'restore',
+      'permanent_delete',
+      'append_sent',
+      'mark_answered'
+    )
+  ),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (
+    status IN ('pending', 'running', 'success', 'failed', 'cancelled')
+  ),
+  remote_action TEXT,
+  error_message TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY (message_id) REFERENCES onemail_mail_messages(message_id) ON DELETE SET NULL,
+  FOREIGN KEY (outbox_id) REFERENCES onemail_outbox_messages(outbox_id) ON DELETE SET NULL,
+  FOREIGN KEY (account_id) REFERENCES onemail_mail_accounts(account_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS onemail_app_settings (

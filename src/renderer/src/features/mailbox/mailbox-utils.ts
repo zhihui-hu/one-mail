@@ -18,6 +18,7 @@ export function createOutlookHelpAccount(accountId: number, email: string): Acco
     address: email,
     unread: 0,
     status: 'auth_error',
+    lastError: 'Outlook IMAP 登录认证失败。',
     accent: 'bg-muted-foreground'
   }
 }

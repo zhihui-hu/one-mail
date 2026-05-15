@@ -5,7 +5,7 @@ export function formatRelativeTime(value?: string): string {
   const date = parseDate(value)
   if (!date) return '未知时间'
 
-  return formatDistanceToNow(date, { addSuffix: true, locale: zhCN })
+  return normalizeRelativeTime(formatDistanceToNow(date, { addSuffix: true, locale: zhCN }))
 }
 
 export function formatAbsoluteTime(value?: string): string | undefined {
@@ -20,4 +20,8 @@ function parseDate(value?: string): Date | null {
 
   const date = new Date(value)
   return Number.isNaN(date.getTime()) ? null : date
+}
+
+function normalizeRelativeTime(value: string): string {
+  return value.replace(/^(大约|大概|约)\s*/, '')
 }

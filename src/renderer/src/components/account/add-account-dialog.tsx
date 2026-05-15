@@ -3,6 +3,7 @@ import * as React from 'react'
 import { useForm } from 'react-hook-form'
 
 import { ResponsiveDialog } from '@renderer/components/responsive-dialog'
+import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import { FieldError, FieldGroup } from '@renderer/components/ui/field'
 import {
@@ -28,6 +29,9 @@ import { GmailAccountForm } from './gmail-account-form'
 import { NeteaseAccountForm } from './netease-account-form'
 import { OutlookAccountForm } from './outlook-account-form'
 import { QqAccountForm } from './qq-account-form'
+
+const ACCOUNT_ADD_GUIDE_URL =
+  'https://huzhihui.com/blog/personal-email-account-add-guide-imap-smtp-app-password'
 
 type AddAccountDialogProps = {
   open: boolean
@@ -106,6 +110,8 @@ export function AddAccountForm({
       onSubmit={form.handleSubmit((values) => handleSubmit(values))}
     >
       <div className={bodyClassName}>
+        <AccountAddGuideHint kind={kind} />
+
         <AccountFormField id="account-kind" label="邮箱类型" required>
           <Select value={kind} onValueChange={handleKindChange} required>
             <SelectTrigger id="account-kind" aria-label="邮箱类型" className="w-full">
@@ -180,6 +186,30 @@ function renderProviderForm(
   if (kind === 'custom') return <CustomImapAccountForm form={form} />
 
   return <GmailAccountForm form={form} />
+}
+
+function AccountAddGuideHint({ kind }: { kind: AccountKind }): React.JSX.Element {
+  const preset = getProviderPreset(kind)
+
+  return (
+    <Alert variant="warning">
+      <AlertDescription className="text-xs leading-5">
+        {getAccountGuideText(kind, preset.label)}
+        <a href={ACCOUNT_ADD_GUIDE_URL} target="_blank" rel="noreferrer">
+          查看添加指南
+        </a>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function getAccountGuideText(kind: AccountKind, label: string): string {
+  if (kind === 'gmail') return `添加 ${label} 前，建议先开启 IMAP 并准备应用密码。`
+  if (kind === 'netease163') return `添加 ${label} 前，建议先开启 IMAP/SMTP 并准备客户端授权码。`
+  if (kind === 'qq') return `添加 ${label} 前，建议先开启 IMAP/SMTP 并准备授权码。`
+  if (kind === 'custom') return '添加自定义 IMAP 前，建议先确认服务器、端口、连接安全和密码/授权码。'
+
+  return `添加 ${label} 前，如需检查邮箱访问设置，`
 }
 
 function optionalText(value?: string): string | undefined {

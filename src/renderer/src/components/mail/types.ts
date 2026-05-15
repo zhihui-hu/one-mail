@@ -1,4 +1,4 @@
-export type MailFilterTag = 'unread' | 'attachments' | 'starred' | 'today'
+export type MailFilterTag = 'unread' | 'starred' | 'today' | 'yesterday' | 'last7'
 
 export type Account = {
   id: string
@@ -11,6 +11,7 @@ export type Account = {
   messageCount?: number
   status: string
   credentialState?: string
+  lastError?: string
   accent: string
 }
 
@@ -22,15 +23,32 @@ export type Attachment = {
   disposition?: string
 }
 
+export type MessageFolderRole =
+  | 'inbox'
+  | 'sent'
+  | 'drafts'
+  | 'trash'
+  | 'junk'
+  | 'archive'
+  | 'all_mail'
+  | 'important'
+  | 'starred'
+  | 'custom'
+
 export type Message = {
   id: string
   messageId: number
   accountId: number
   folderId: number
+  folderRole?: MessageFolderRole
+  folderName?: string
   from: string
   fromAddress?: string
   to?: string
   cc?: string
+  replyTo?: string
+  messageRfc822Id?: string
+  references?: string
   subject: string
   preview: string
   verificationCode?: string

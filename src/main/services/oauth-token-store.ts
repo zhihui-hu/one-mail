@@ -70,6 +70,8 @@ export function saveOAuthToken(
       `
       UPDATE onemail_mail_accounts
       SET credential_state = 'stored',
+          status = 'active',
+          last_error = NULL,
           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE account_id = :accountId
       `

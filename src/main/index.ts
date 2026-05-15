@@ -7,15 +7,26 @@ import { closeDatabase, initializeDatabase } from './db/connection'
 import { registerIpcHandlers } from './ipc'
 import { installRuntimeErrorGuards } from './runtime-errors'
 import { startAutoUpdateChecks, stopAutoUpdateChecks } from './services/auto-update'
-import { startMailboxWatchers, stopMailboxWatchers } from './services/mailbox-watch'
+import {
+  requestForegroundMailboxSync,
+  startMailboxWatchers,
+  stopMailboxWatchers
+} from './services/mailbox-watch'
+import { setNotificationOpenWindowHandler } from './services/notification-center'
 
 installRuntimeErrorGuards()
 
-function createWindow(): void {
+let mainWindow: BrowserWindow | null = null
+
+function createWindow(initialRoute = '/'): BrowserWindow {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    return mainWindow
+  }
+
   const windowIcon = process.platform === 'win32' ? windowsIcon : appIcon
 
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  const nextWindow = new BrowserWindow({
     width: 1180,
     height: 760,
     minWidth: 920,
@@ -32,11 +43,30 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+  mainWindow = nextWindow
+
+  nextWindow.on('ready-to-show', () => {
+    nextWindow.show()
+    requestForegroundMailboxSync('startup')
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
+  nextWindow.on('focus', () => {
+    requestForegroundMailboxSync('focus')
+  })
+
+  nextWindow.on('show', () => {
+    requestForegroundMailboxSync('show')
+  })
+
+  nextWindow.on('restore', () => {
+    requestForegroundMailboxSync('restore')
+  })
+
+  nextWindow.on('closed', () => {
+    if (mainWindow === nextWindow) mainWindow = null
+  })
+
+  nextWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
@@ -44,10 +74,16 @@ function createWindow(): void {
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    const url = new URL(process.env['ELECTRON_RENDERER_URL'])
+    url.hash = initialRoute
+    void nextWindow.loadURL(url.toString())
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    void nextWindow.loadFile(join(__dirname, '../renderer/index.html'), {
+      hash: initialRoute
+    })
   }
+
+  return nextWindow
 }
 
 // This method will be called when Electron has finished
@@ -63,6 +99,7 @@ app.whenReady().then(() => {
   registerIpcHandlers()
   startMailboxWatchers()
   startAutoUpdateChecks()
+  setNotificationOpenWindowHandler((route) => createWindow(route))
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.

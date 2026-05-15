@@ -91,6 +91,25 @@ export function registerAccountIpc(): void {
     refreshMailboxWatchers()
     return account
   })
+  ipcMain.handle('accounts/reauthorize', async (_event, accountId: number) => {
+    const current = getAccount(accountId)
+    if (!current) {
+      throw new Error(`Account not found: ${accountId}`)
+    }
+    if (current.authType !== 'oauth2') {
+      throw new Error('只有 Microsoft OAuth 账号需要重新授权。')
+    }
+
+    const authorization = await authorizeMicrosoftAccount()
+    if (authorization.email.toLowerCase() !== current.email.toLowerCase()) {
+      throw new Error(`请使用 ${current.email} 完成授权。`)
+    }
+
+    saveMicrosoftAuthorization(current.accountId, authorization.token)
+    const account = getAccount(current.accountId) ?? current
+    refreshMailboxWatchers()
+    return account
+  })
   ipcMain.handle('accounts/disable', (_event, accountId: number) => {
     const account = disableAccount(accountId)
     refreshMailboxWatchers()

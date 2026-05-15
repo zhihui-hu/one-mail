@@ -13,6 +13,10 @@ export const appRouter = createHashRouter([
     element: <AddAccountPage />
   },
   {
+    path: '/:accountId/:messageId',
+    element: <MailboxPage />
+  },
+  {
     path: '*',
     element: <Navigate to="/" replace />
   }

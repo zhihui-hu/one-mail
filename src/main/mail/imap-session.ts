@@ -1,13 +1,17 @@
 import { Socket, connect as connectTcp } from 'node:net'
 import { TLSSocket, connect as connectTls } from 'node:tls'
 import type { getAccount } from '../db/repositories/account.repository'
-import { toImapConnectionError } from './imap-errors'
+import { sanitizeImapResponse, toImapConnectionError } from './imap-errors'
 
 type TestSocket = Socket | TLSSocket
 type ImapAccount = NonNullable<ReturnType<typeof getAccount>>
 
 const CONNECTION_TIMEOUT_MS = 15000
 const BODY_FETCH_TIMEOUT_MS = 60000
+export type ImapAppendOptions = {
+  flags?: string[]
+  internalDate?: Date | string
+}
 
 export class SimpleImapSession {
   private tagIndex = 1
@@ -60,6 +64,22 @@ export class SimpleImapSession {
     await this.command(formatImapIdCommand()).catch(() => undefined)
   }
 
+  async capability(): Promise<Set<string>> {
+    const response = await this.command('CAPABILITY')
+    const capabilities = new Set<string>()
+
+    for (const line of response.split(/\r?\n/)) {
+      const match = /^\*\s+CAPABILITY\s+(.+)$/i.exec(line.trim())
+      if (!match?.[1]) continue
+
+      for (const item of match[1].trim().split(/\s+/)) {
+        if (item) capabilities.add(item.toUpperCase())
+      }
+    }
+
+    return capabilities
+  }
+
   async selectInbox(): Promise<void> {
     await this.selectMailbox('INBOX')
   }
@@ -73,13 +93,58 @@ export class SimpleImapSession {
     return extractRawMessageLiteral(response)
   }
 
-  async setSeenFlag(uid: number, isRead: boolean): Promise<void> {
-    if (!Number.isInteger(uid) || uid <= 0) {
-      throw new Error('邮件 UID 无效，无法同步已读状态。')
-    }
+  async appendMessage(
+    mailboxPath: string,
+    rawMessage: string,
+    optionsOrFlags: ImapAppendOptions | string[] = {}
+  ): Promise<void> {
+    const options = Array.isArray(optionsOrFlags) ? { flags: optionsOrFlags } : optionsOrFlags
+    const flags = formatAppendFlags(options.flags)
+    const internalDate = formatAppendInternalDate(options.internalDate)
+    const literal = Buffer.from(rawMessage, 'utf8')
+    const tag = `${this.tagPrefix}${String(this.tagIndex++).padStart(4, '0')}`
+    const command = ['APPEND', quoteAtom(mailboxPath), flags, internalDate, `{${literal.byteLength}}`]
+      .filter(Boolean)
+      .join(' ')
 
+    await this.literalCommand(
+      tag,
+      command,
+      literal,
+      BODY_FETCH_TIMEOUT_MS
+    )
+  }
+
+  async uidMove(uid: number, destinationMailbox: string): Promise<void> {
+    assertValidUid(uid)
+    await this.command(`UID MOVE ${uid} ${quoteAtom(destinationMailbox)}`)
+  }
+
+  async uidCopy(uid: number, destinationMailbox: string): Promise<void> {
+    assertValidUid(uid)
+    await this.command(`UID COPY ${uid} ${quoteAtom(destinationMailbox)}`)
+  }
+
+  async setSeenFlag(uid: number, isRead: boolean): Promise<void> {
+    assertValidUid(uid)
     const operation = isRead ? '+FLAGS.SILENT' : '-FLAGS.SILENT'
     await this.command(`UID STORE ${uid} ${operation} (\\Seen)`)
+  }
+
+  async setDeletedFlag(uid: number, isDeleted = true): Promise<void> {
+    assertValidUid(uid)
+    const operation = isDeleted ? '+FLAGS.SILENT' : '-FLAGS.SILENT'
+    await this.command(`UID STORE ${uid} ${operation} (\\Deleted)`)
+  }
+
+  async setAnsweredFlag(uid: number, isAnswered = true): Promise<void> {
+    assertValidUid(uid)
+    const operation = isAnswered ? '+FLAGS.SILENT' : '-FLAGS.SILENT'
+    await this.command(`UID STORE ${uid} ${operation} (\\Answered)`)
+  }
+
+  async expunge(): Promise<void> {
+    await this.command('EXPUNGE')
   }
 
   async logout(): Promise<void> {
@@ -105,6 +170,29 @@ export class SimpleImapSession {
     this.assertSocketHealthy()
     const tag = `${this.tagPrefix}${String(this.tagIndex++).padStart(4, '0')}`
     await writeLine(this.socket, `${tag} ${command}`)
+    const response = await readUntilTagged(this.socket, tag, timeoutMs)
+    const lastLine = response
+      .trimEnd()
+      .split(/\r?\n/)
+      .findLast((line) => line.trimStart().startsWith(tag))
+
+    if (!lastLine || !new RegExp(`^${tag}\\s+OK\\b`, 'i').test(lastLine.trimStart())) {
+      throw new Error(`IMAP 命令失败：${sanitizeImapResponse(lastLine ?? command)}`)
+    }
+
+    return response
+  }
+
+  private async literalCommand(
+    tag: string,
+    command: string,
+    literal: Buffer,
+    timeoutMs = CONNECTION_TIMEOUT_MS
+  ): Promise<string> {
+    this.assertSocketHealthy()
+    await writeLine(this.socket, `${tag} ${command}`)
+    await waitForContinuation(this.socket)
+    await writeRaw(this.socket, Buffer.concat([literal, Buffer.from('\r\n', 'utf8')]))
     const response = await readUntilTagged(this.socket, tag, timeoutMs)
     const lastLine = response
       .trimEnd()
@@ -174,18 +262,43 @@ function formatImapIdCommand(): string {
   return `ID (${values.map(quoteAtom).join(' ')})`
 }
 
-function sanitizeImapResponse(value: string): string {
-  return value
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 240)
-}
-
 function quoteAtom(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+}
+
+function assertValidUid(uid: number): void {
+  if (!Number.isInteger(uid) || uid <= 0) {
+    throw new Error('邮件 UID 无效，无法执行 IMAP 操作。')
+  }
+}
+
+function formatAppendFlags(flags?: string[]): string {
+  if (!flags || flags.length === 0) return ''
+
+  const normalized = flags
+    .map((flag) => flag.trim())
+    .filter(Boolean)
+    .map((flag) => (flag.startsWith('\\') ? flag : `\\${flag}`))
+
+  return normalized.length > 0 ? `(${normalized.join(' ')})` : ''
+}
+
+function formatAppendInternalDate(value?: Date | string): string {
+  if (!value) return ''
+
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][
+    date.getUTCMonth()
+  ]
+  const year = date.getUTCFullYear()
+  const hours = String(date.getUTCHours()).padStart(2, '0')
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0')
+  const seconds = String(date.getUTCSeconds()).padStart(2, '0')
+
+  return `"${day}-${month}-${year} ${hours}:${minutes}:${seconds} +0000"`
 }
 
 function formatXOAuth2Payload(username: string, accessToken: string): string {
@@ -329,8 +442,12 @@ function readUntilTagged(
 }
 
 function writeLine(socket: TestSocket, line: string): Promise<void> {
+  return writeRaw(socket, `${line}\r\n`)
+}
+
+function writeRaw(socket: TestSocket, data: Buffer | string): Promise<void> {
   return new Promise((resolve, reject) => {
-    socket.write(`${line}\r\n`, (error) => {
+    socket.write(data, (error) => {
       if (error) {
         reject(toImapConnectionError(error))
         return
@@ -338,5 +455,44 @@ function writeLine(socket: TestSocket, line: string): Promise<void> {
 
       resolve()
     })
+  })
+}
+
+function waitForContinuation(socket: TestSocket): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let buffer = ''
+    const timeout = setTimeout(() => {
+      cleanup()
+      reject(new Error('IMAP 服务器响应超时。'))
+    }, CONNECTION_TIMEOUT_MS)
+
+    function cleanup(): void {
+      clearTimeout(timeout)
+      socket.off('data', handleData)
+      socket.off('error', handleError)
+      socket.off('close', handleClose)
+    }
+
+    function handleData(chunk: Buffer): void {
+      buffer += chunk.toString('utf8')
+      if (/^\+\s?/m.test(buffer)) {
+        cleanup()
+        resolve()
+      }
+    }
+
+    function handleError(error: Error): void {
+      cleanup()
+      reject(toImapConnectionError(error))
+    }
+
+    function handleClose(): void {
+      cleanup()
+      reject(new Error('IMAP 连接已断开。'))
+    }
+
+    socket.on('data', handleData)
+    socket.once('error', handleError)
+    socket.once('close', handleClose)
   })
 }

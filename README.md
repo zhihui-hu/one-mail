@@ -32,6 +32,22 @@ OneMail 是一个本地优先的桌面邮件客户端，使用 Electron + React 
 
 ---
 
+## 📸 预览图
+
+<p>
+  <img src="https://img.huzhihui.com/2026/05/15/OnaMail-03.webp" alt="OneMail 邮件阅读预览" width="100%" />
+</p>
+
+<p>
+  <img src="https://img.huzhihui.com/2026/05/15/OnaMail-02.webp" alt="OneMail 邮件列表预览" width="100%" />
+</p>
+
+<p>
+  <img src="https://img.huzhihui.com/2026/05/15/OnaMail-01.webp" alt="OneMail 账号管理预览" width="100%" />
+</p>
+
+---
+
 ## 🖥️ 界面概览
 
 OneMail 当前采用三栏桌面布局：

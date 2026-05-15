@@ -12,6 +12,7 @@ import { basename, dirname, join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { schemaSql } from './schema'
+import { upgradeSchema } from './schema-upgrade'
 
 export type SqliteValue = string | number | bigint | Buffer | null
 export type SqliteParams = Record<string, SqliteValue> | SqliteValue[]
@@ -78,6 +79,7 @@ export function initializeDatabase(targetDatabasePath = getDatabasePath()): Sqli
   nextDatabase.exec('PRAGMA busy_timeout = 5000;')
 
   applySchema(nextDatabase)
+  upgradeSchema(nextDatabase)
 
   database = nextDatabase
   return nextDatabase

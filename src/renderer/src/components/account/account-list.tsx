@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ChevronRight, Edit3, Mail, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { AlertTriangle, ChevronRight, Edit3, Mail, Plus, RefreshCw, Trash2 } from 'lucide-react'
 
 import type { Account } from '@renderer/components/mail/types'
 import { Badge } from '@renderer/components/ui/badge'
@@ -11,8 +11,15 @@ import {
   ContextMenuItem,
   ContextMenuTrigger
 } from '@renderer/components/ui/context-menu'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
 import oneMailIcon from '../../assets/onemail-icon.png'
+import { getAccountWarning } from './account-warning'
 
 type AccountListProps = {
   accounts: Account[]
@@ -22,6 +29,7 @@ type AccountListProps = {
   onRefreshAccount: (account: Account) => void
   onEditAccount: (account: Account) => void
   onDeleteAccount: (account: Account) => void
+  onResolveAccountWarning: (account: Account) => void
 }
 
 type AccountGroup = {
@@ -37,7 +45,8 @@ export function AccountList({
   onSelectAccount,
   onRefreshAccount,
   onEditAccount,
-  onDeleteAccount
+  onDeleteAccount,
+  onResolveAccountWarning
 }: AccountListProps): React.JSX.Element {
   const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(() => new Set())
   const allAccount = accounts.find((account) => account.id === 'all')
@@ -57,59 +66,63 @@ export function AccountList({
 
   return (
     <aside className="flex h-full min-w-0 flex-col bg-card/60 text-xs text-foreground">
-      <div className="min-h-0 flex-1 overflow-auto px-2 py-2">
-        <div className="flex flex-col gap-1">
-          {allAccount ? (
-            <AccountRow
-              account={allAccount}
-              selected={selectedAccountId === allAccount.id}
-              syncing={syncingAccountIds.has(allAccount.id)}
-              onClick={() => onSelectAccount(allAccount.id)}
-              onRefresh={() => onRefreshAccount(allAccount)}
-              onEdit={() => undefined}
-              onDelete={() => undefined}
-            />
-          ) : null}
-          {groups.length > 0 ? (
-            groups.map((group) => {
-              const collapsed = collapsedGroups.has(group.key)
+      <div className="min-h-0 flex-1 overflow-auto px-1.5 py-1.5">
+        <TooltipProvider>
+          <div className="flex flex-col gap-0.5">
+            {allAccount ? (
+              <AccountRow
+                account={allAccount}
+                selected={selectedAccountId === allAccount.id}
+                syncing={syncingAccountIds.has(allAccount.id)}
+                onClick={() => onSelectAccount(allAccount.id)}
+                onRefresh={() => onRefreshAccount(allAccount)}
+                onEdit={() => undefined}
+                onDelete={() => undefined}
+                onResolveWarning={() => onResolveAccountWarning(allAccount)}
+              />
+            ) : null}
+            {groups.length > 0 ? (
+              groups.map((group) => {
+                const collapsed = collapsedGroups.has(group.key)
 
-              return (
-                <section key={group.key}>
-                  <button
-                    type="button"
-                    className="flex h-7 w-full items-center gap-1 rounded-md px-2 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    onClick={() => toggleGroup(group.key)}
-                  >
-                    <ChevronRight
-                      className={cn('transition-transform size-4', !collapsed && 'rotate-90')}
-                      aria-hidden="true"
-                    />
-                    <span className="min-w-0 flex-1 truncate">{group.label}</span>
-                  </button>
-                  {!collapsed ? (
-                    <div className="flex flex-col gap-0.5">
-                      {group.accounts.map((account) => (
-                        <AccountRow
-                          key={account.id}
-                          account={account}
-                          selected={selectedAccountId === account.id}
-                          syncing={syncingAccountIds.has(account.id)}
-                          onClick={() => onSelectAccount(account.id)}
-                          onRefresh={() => onRefreshAccount(account)}
-                          onEdit={() => onEditAccount(account)}
-                          onDelete={() => onDeleteAccount(account)}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                </section>
-              )
-            })
-          ) : (
-            <EmptyAccounts />
-          )}
-        </div>
+                return (
+                  <section key={group.key}>
+                    <button
+                      type="button"
+                      className="flex h-6 w-full items-center gap-1 rounded-md px-1.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => toggleGroup(group.key)}
+                    >
+                      <ChevronRight
+                        className={cn('size-3.5 transition-transform', !collapsed && 'rotate-90')}
+                        aria-hidden="true"
+                      />
+                      <span className="min-w-0 flex-1 truncate">{group.label}</span>
+                    </button>
+                    {!collapsed ? (
+                      <div className="flex flex-col gap-0.5">
+                        {group.accounts.map((account) => (
+                          <AccountRow
+                            key={account.id}
+                            account={account}
+                            selected={selectedAccountId === account.id}
+                            syncing={syncingAccountIds.has(account.id)}
+                            onClick={() => onSelectAccount(account.id)}
+                            onRefresh={() => onRefreshAccount(account)}
+                            onEdit={() => onEditAccount(account)}
+                            onDelete={() => onDeleteAccount(account)}
+                            onResolveWarning={() => onResolveAccountWarning(account)}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </section>
+                )
+              })
+            ) : (
+              <EmptyAccounts />
+            )}
+          </div>
+        </TooltipProvider>
       </div>
     </aside>
   )
@@ -122,7 +135,8 @@ function AccountRow({
   onClick,
   onRefresh,
   onEdit,
-  onDelete
+  onDelete,
+  onResolveWarning
 }: {
   account: Account
   selected: boolean
@@ -131,65 +145,92 @@ function AccountRow({
   onRefresh: () => void
   onEdit: () => void
   onDelete: () => void
+  onResolveWarning: () => void
 }): React.JSX.Element {
   const canModify = Boolean(account.accountId)
-  const row = (
-    <button
-      type="button"
-      onClick={onClick}
+  const warning = getAccountWarning(account)
+  const handleSelect = warning ? onResolveWarning : onClick
+  const rowContent = (
+    <div
       className={cn(
-        'group grid h-8 w-full grid-cols-[28px_minmax(0,1fr)_auto] items-center  gap-0.5 rounded-md px-2 text-left outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring',
+        'group grid h-7 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-0.5 rounded-md px-1.5 transition-colors hover:bg-muted focus-within:ring-2 focus-within:ring-ring',
         selected && 'bg-secondary text-secondary-foreground'
       )}
     >
-      <ProviderLogo account={account} selected={selected} />
-      <span className="min-w-0">
-        <span className="block truncate font-medium">{account.name}</span>
-      </span>
-      <span className="flex w-6.5 items-center justify-end gap-1">
-        <Badge
-          variant="secondary"
-          className={cn(
-            'h-5 min-w-5 rounded-full px-1.5 text-[11px] group-hover:hidden',
-            syncing && 'hidden'
-          )}
-        >
-          {account.unread}
-        </Badge>
-        <span
-          role="button"
-          tabIndex={0}
+      <button
+        type="button"
+        onClick={handleSelect}
+        className={cn(
+          'grid min-w-0 grid-cols-[24px_minmax(0,1fr)] items-center gap-0.5 text-left outline-none',
+          warning && 'text-warning-foreground'
+        )}
+      >
+        <ProviderLogo account={account} selected={selected} warning={Boolean(warning)} />
+        <span className="flex min-w-0 items-center gap-1">
+          <span className="truncate font-medium">{account.name}</span>
+          {warning ? (
+            <AlertTriangle
+              className="size-3.5 shrink-0 text-warning-foreground"
+              aria-hidden="true"
+              strokeWidth={2}
+            />
+          ) : null}
+        </span>
+      </button>
+      <span className="flex min-w-5 items-center justify-end gap-1">
+        {warning ? null : (
+          <Badge
+            variant="secondary"
+            className={cn(
+              'h-4 min-w-4 rounded-full px-1 text-[10px] group-hover:hidden',
+              syncing && 'hidden'
+            )}
+          >
+            {account.unread}
+          </Badge>
+        )}
+        <button
+          type="button"
           aria-label="刷新账号"
           className={cn(
-            'hidden size-6 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-background hover:text-foreground focus-visible:inline-flex focus-visible:ring-2 focus-visible:ring-ring group-hover:inline-flex [&_svg]:size-3.5',
+            'hidden size-5 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-background hover:text-foreground focus-visible:inline-flex focus-visible:ring-2 focus-visible:ring-ring group-hover:inline-flex [&_svg]:size-3',
             syncing && 'inline-flex'
           )}
           onClick={(event) => {
             event.stopPropagation()
             onRefresh()
           }}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return
-            event.preventDefault()
-            event.stopPropagation()
-            onRefresh()
-          }}
         >
           <RefreshCw className={cn(syncing && 'animate-spin')} aria-hidden="true" strokeWidth={2} />
-        </span>
+        </button>
       </span>
-    </button>
+    </div>
   )
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+      {warning ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <ContextMenuTrigger asChild>{rowContent}</ContextMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="right">{warning.tooltip}</TooltipContent>
+        </Tooltip>
+      ) : (
+        <ContextMenuTrigger asChild>{rowContent}</ContextMenuTrigger>
+      )}
       <ContextMenuContent className="w-36">
         <ContextMenuGroup>
-          <ContextMenuItem onSelect={onRefresh}>
-            <RefreshCw strokeWidth={2} />
-            刷新
+          <ContextMenuItem onSelect={warning ? onResolveWarning : onRefresh}>
+            {warning ? <AlertTriangle strokeWidth={2} /> : <RefreshCw strokeWidth={2} />}
+            {warning ? '解决异常' : '刷新'}
           </ContextMenuItem>
+          {warning ? (
+            <ContextMenuItem onSelect={onRefresh}>
+              <RefreshCw strokeWidth={2} />
+              重新同步
+            </ContextMenuItem>
+          ) : null}
           {canModify ? (
             <>
               <ContextMenuItem onSelect={onEdit}>
@@ -210,10 +251,12 @@ function AccountRow({
 
 function ProviderLogo({
   account,
-  selected
+  selected,
+  warning
 }: {
   account: Account
   selected: boolean
+  warning?: boolean
 }): React.JSX.Element {
   const isUnifiedInbox = account.id === 'all'
   const domain = getProviderLogoDomain(account)
@@ -238,6 +281,7 @@ function ProviderLogo({
       className={cn(
         'flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-md bg-background text-muted-foreground [&_img]:size-4 [&_img]:object-contain [&_svg]:size-4',
         isUnifiedInbox && 'bg-transparent [&_img]:size-5 [&_img]:rounded-md [&_img]:object-cover',
+        warning && 'text-warning-foreground',
         selected && 'text-foreground'
       )}
     >

@@ -5,7 +5,9 @@ import { toast } from 'sonner'
 import { formatAbsoluteTime, formatRelativeTime } from '@renderer/components/mail/date-format'
 import { EllipsisTooltip } from '@renderer/components/mail/ellipsis-tooltip'
 import { MailFilterTags } from '@renderer/components/mail/mail-filter-tags'
+import { MailListSelectionToolbar } from '@renderer/components/mail/mail-list-selection-toolbar'
 import type { Account, MailFilterTag, Message } from '@renderer/components/mail/types'
+import { Checkbox } from '@renderer/components/ui/checkbox'
 import {
   InputGroup,
   InputGroupAddon,
@@ -30,6 +32,14 @@ type MailListProps = {
   onChangeFilters: (filters: MailFilterTag[]) => void
   onChangeSearchKeyword: (keyword: string) => void
   onLoadMore: () => void
+  selectedMessageIds?: Set<string>
+  allVisibleSelected?: boolean
+  someVisibleSelected?: boolean
+  selectionDisabled?: boolean
+  onToggleMessageSelection?: (messageId: string, range?: boolean) => void
+  onSelectAllVisible?: () => void
+  onClearSelection?: () => void
+  onDeleteSelected?: () => void
 }
 
 export function MailList({
@@ -45,13 +55,26 @@ export function MailList({
   onSelectMessage,
   onChangeFilters,
   onChangeSearchKeyword,
-  onLoadMore
+  onLoadMore,
+  selectedMessageIds = new Set(),
+  allVisibleSelected = false,
+  someVisibleSelected = false,
+  selectionDisabled = false,
+  onToggleMessageSelection,
+  onSelectAllVisible,
+  onClearSelection,
+  onDeleteSelected
 }: MailListProps): React.JSX.Element {
   const scrollContainerRef = React.useRef<HTMLDivElement | null>(null)
-  const messageCount =
-    filters.length > 0 || searchKeyword.trim()
-      ? messages.length
-      : (account.messageCount ?? messages.length)
+  const accountMessageCount = account.messageCount ?? messages.length
+  const readCount = Math.max(0, accountMessageCount - account.unread)
+  const selectedCount = selectedMessageIds.size
+  const hasSelection = selectedCount > 0
+  const permanentDeleteAvailable =
+    hasSelection &&
+    messages
+      .filter((message) => selectedMessageIds.has(message.id))
+      .every((message) => message.folderRole === 'trash')
 
   const handleScroll = React.useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
@@ -75,13 +98,13 @@ export function MailList({
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col bg-background">
       <header className="app-drag-region shrink-0 border-b bg-card/60">
-        <div className="app-no-drag flex h-12 items-center gap-3 px-4">
+        <div className="app-no-drag flex h-9 items-center gap-3 px-4">
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-sm font-semibold">{account.name}</h1>
-            <p className="truncate text-xs text-muted-foreground">
-              {messageCount} 封邮件，{account.unread} 封未读
-            </p>
           </div>
+          <p className="shrink-0 text-xs text-muted-foreground">
+            已读 {readCount} · 未读 {account.unread}
+          </p>
         </div>
         <div className="app-no-drag flex flex-col gap-2 px-4 pb-2">
           <InputGroup>
@@ -109,6 +132,18 @@ export function MailList({
           </InputGroup>
           <MailFilterTags value={filters} onValueChange={onChangeFilters} />
         </div>
+        {hasSelection && onSelectAllVisible && onClearSelection && onDeleteSelected ? (
+          <MailListSelectionToolbar
+            selectedCount={selectedCount}
+            allVisibleSelected={allVisibleSelected}
+            someVisibleSelected={someVisibleSelected}
+            permanentDeleteAvailable={permanentDeleteAvailable}
+            disabled={selectionDisabled}
+            onSelectAllVisible={onSelectAllVisible}
+            onClearSelection={onClearSelection}
+            onDeleteSelected={onDeleteSelected}
+          />
+        ) : null}
       </header>
 
       <div
@@ -128,6 +163,9 @@ export function MailList({
                   key={message.id}
                   message={message}
                   selected={message.id === selectedMessageId}
+                  checked={selectedMessageIds.has(message.id)}
+                  selectionDisabled={selectionDisabled}
+                  onToggleSelection={(range) => onToggleMessageSelection?.(message.id, range)}
                   onSelect={() => onSelectMessage(message.id)}
                 />
               ))}
@@ -174,10 +212,16 @@ function LoadMoreState({
 function MessageListItem({
   message,
   selected,
+  checked,
+  selectionDisabled,
+  onToggleSelection,
   onSelect
 }: {
   message: Message
   selected: boolean
+  checked: boolean
+  selectionDisabled?: boolean
+  onToggleSelection?: (range?: boolean) => void
   onSelect: () => void
 }): React.JSX.Element {
   const absoluteTime = formatAbsoluteTime(message.receivedAt)
@@ -228,10 +272,29 @@ function MessageListItem({
       onKeyDown={handleKeyDown}
       aria-selected={selected}
       className={cn(
-        'grid w-full cursor-default grid-cols-[10px_minmax(0,1fr)] gap-2 border-b px-4 py-2 text-left outline-none transition-colors select-text hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring',
+        'grid w-full cursor-default grid-cols-[16px_10px_minmax(0,1fr)] gap-2 border-b px-4 py-2 text-left outline-none transition-colors select-text hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring',
         selected && 'bg-secondary text-secondary-foreground'
       )}
     >
+      <span className="mt-0.5 flex items-start justify-center">
+        <Checkbox
+          checked={checked}
+          disabled={selectionDisabled}
+          aria-label={`选择 ${message.subject}`}
+          onClick={(event) => event.stopPropagation()}
+          onCheckedChange={() => onToggleSelection?.(false)}
+          onKeyDown={(event) => {
+            if (event.key === ' ') event.stopPropagation()
+          }}
+          onPointerDown={(event) => {
+            if (event.shiftKey) {
+              event.preventDefault()
+              event.stopPropagation()
+              onToggleSelection?.(true)
+            }
+          }}
+        />
+      </span>
       <span
         className={cn(
           'mt-1.5 size-1.5 rounded-full',

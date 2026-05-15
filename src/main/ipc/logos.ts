@@ -7,7 +7,7 @@ export function registerLogoIpc(): void {
   ipcMain.handle('logos/get', async (_event, domain: string) => getLogoDataUrl(domain))
 }
 
-async function getLogoDataUrl(domain: string): Promise<string | null> {
+export async function getLogoDataUrl(domain: string): Promise<string | null> {
   const normalizedDomain = normalizeDomain(domain)
   if (!normalizedDomain) return null
 

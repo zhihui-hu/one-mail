@@ -1,4 +1,5 @@
-import { BrowserWindow, powerMonitor } from 'electron'
+import { networkInterfaces } from 'node:os'
+import { BrowserWindow, net, powerMonitor } from 'electron'
 import { listAccounts, markAccountAuthError } from '../db/repositories/account.repository'
 import { syncAccountNow, type AccountSyncResult } from '../db/repositories/sync.repository'
 import { authenticateImapSession } from '../mail/imap-auth'
@@ -17,8 +18,16 @@ type WatchTask = {
   stopped: boolean
   session?: ImapIdleSession
   retryCount: number
+  failureCount: number
   watchMailboxes: IdleWatchMailbox[]
   lastStatuses: Map<string, IdleMailboxStatus>
+}
+
+type WatchSuspensionReason = 'auth' | 'failure'
+
+type WatchSuspension = {
+  signature: string
+  reason: WatchSuspensionReason
 }
 
 type MailboxChangedEvent = {
@@ -27,31 +36,70 @@ type MailboxChangedEvent = {
   changedAt: string
 }
 
+type ForegroundSyncReason = 'startup' | 'focus' | 'show' | 'restore' | 'resume' | 'network'
+
 const FALLBACK_POLL_MS = 5 * 60 * 1000
 const IDLE_REFRESH_MS = FALLBACK_POLL_MS
 const START_STAGGER_MS = 1500
 const MIN_RETRY_MS = 5000
 const MAX_RETRY_MS = 5 * 60 * 1000
 const MAX_PARALLEL_SYNC = 3
+const FOREGROUND_SYNC_COOLDOWN_MS = 60 * 1000
+const MAX_WATCH_FAILURES = 10
+const NETWORK_CHECK_INTERVAL_MS = 5000
+const NETWORK_CHANGE_SETTLE_MS = 1500
 
 const tasks = new Map<number, WatchTask>()
 const runningSyncs = new Map<number, Promise<AccountSyncResult>>()
+const suspendedWatchSignatures = new Map<number, WatchSuspension>()
 const syncQueue: Array<() => void> = []
 let initialized = false
+let foregroundSyncRunning = false
+let lastForegroundSyncAt = 0
+let pendingForegroundSyncReason: ForegroundSyncReason | undefined
+let networkCheckTimer: NodeJS.Timeout | undefined
+let pendingNetworkChangeTimer: NodeJS.Timeout | undefined
+let lastNetworkSignature = ''
 
 export function startMailboxWatchers(): void {
   if (initialized) return
   initialized = true
+  startNetworkChangeWatch()
   refreshMailboxWatchers()
 
   powerMonitor.on('resume', () => {
     restartMailboxWatchers()
+    requestForegroundMailboxSync('resume')
+  })
+}
+
+export function requestForegroundMailboxSync(reason: ForegroundSyncReason): void {
+  const now = Date.now()
+  const ignoresCooldown = reason === 'network'
+
+  if (foregroundSyncRunning) {
+    if (ignoresCooldown) pendingForegroundSyncReason = reason
+    return
+  }
+
+  if (!ignoresCooldown && now - lastForegroundSyncAt < FOREGROUND_SYNC_COOLDOWN_MS) {
+    return
+  }
+
+  foregroundSyncRunning = true
+  lastForegroundSyncAt = now
+
+  void syncForegroundMailboxes(reason).finally(() => {
+    foregroundSyncRunning = false
+    const pendingReason = pendingForegroundSyncReason
+    pendingForegroundSyncReason = undefined
+    if (pendingReason) requestForegroundMailboxSync(pendingReason)
   })
 }
 
 export function refreshMailboxWatchers(): void {
   const accounts = listAccounts().filter(
-    (account) => account.syncEnabled && account.credentialState === 'stored'
+    (account) => isWatchableAccount(account) && !isWatchSuspended(account)
   )
   const activeAccounts = new Map(accounts.map((account) => [account.accountId, account]))
 
@@ -69,6 +117,7 @@ export function refreshMailboxWatchers(): void {
       signature: getWatchSignature(account),
       stopped: false,
       retryCount: 0,
+      failureCount: 0,
       watchMailboxes: [{ path: 'INBOX', role: 'inbox' }],
       lastStatuses: new Map()
     }
@@ -81,6 +130,7 @@ export function refreshMailboxWatchers(): void {
 }
 
 export function stopMailboxWatchers(): void {
+  stopNetworkChangeWatch()
   for (const accountId of tasks.keys()) {
     stopMailboxWatcher(accountId)
   }
@@ -106,7 +156,7 @@ async function runMailboxWatcher(task: WatchTask): Promise<void> {
   while (!task.stopped) {
     try {
       const account = listAccounts().find((item) => item.accountId === task.accountId)
-      if (!account || !account.syncEnabled || account.credentialState !== 'stored') {
+      if (!account || !isWatchableAccount(account) || isWatchSuspended(account)) {
         stopMailboxWatcher(task.accountId)
         return
       }
@@ -119,6 +169,7 @@ async function runMailboxWatcher(task: WatchTask): Promise<void> {
       const capabilities = await session.capabilities().catch(() => new Set<string>())
       task.watchMailboxes = await listWatchMailboxes(session)
       task.lastStatuses = await readMailboxStatuses(session, task.watchMailboxes, task.lastStatuses)
+      task.failureCount = 0
 
       if (capabilities.has('IDLE')) {
         await session.selectInbox()
@@ -132,9 +183,10 @@ async function runMailboxWatcher(task: WatchTask): Promise<void> {
         console.warn(`[mailbox-watch] account ${task.accountId}: ${message}`)
         if (isImapAuthErrorMessage(message)) {
           markAccountAuthError(task.accountId, message)
-          stopMailboxWatcher(task.accountId)
+          suspendMailboxWatcher(task, 'auth')
           return
         }
+        if (markWatchFailure(task, message)) return
         await wait(getRetryDelay(task))
       }
     } finally {
@@ -142,6 +194,23 @@ async function runMailboxWatcher(task: WatchTask): Promise<void> {
       task.session = undefined
     }
   }
+}
+
+function markWatchFailure(task: WatchTask, message: string): boolean {
+  task.failureCount += 1
+
+  if (task.failureCount < MAX_WATCH_FAILURES) return false
+
+  console.warn(
+    `[mailbox-watch] account ${task.accountId}: stopped after ${task.failureCount} consecutive failures. Last error: ${message}`
+  )
+  suspendMailboxWatcher(task, 'failure')
+  return true
+}
+
+function suspendMailboxWatcher(task: WatchTask, reason: WatchSuspensionReason): void {
+  suspendedWatchSignatures.set(task.accountId, { signature: task.signature, reason })
+  stopMailboxWatcher(task.accountId)
 }
 
 async function runIdleLoop(task: WatchTask, session: ImapIdleSession): Promise<void> {
@@ -256,6 +325,41 @@ async function syncChangedMailbox(
   })
 }
 
+async function syncForegroundMailboxes(reason: ForegroundSyncReason): Promise<void> {
+  const accounts = listAccounts().filter(
+    (account) => isWatchableAccount(account) && !isWatchSuspended(account)
+  )
+
+  if (accounts.length === 0) return
+
+  await Promise.all(
+    accounts.map(async (account) => {
+      try {
+        const result = await runLimitedSync(account.accountId)
+
+        notifyNewMail({
+          accountId: account.accountId,
+          reason: 'manual',
+          messageCount: result.insertedCount
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '同步账号失败。'
+        console.warn(
+          `[mailbox-watch] foreground sync ${reason} account ${account.accountId}: ${message}`
+        )
+      } finally {
+        notifyMailboxChanged({
+          accountId: account.accountId,
+          reason: 'manual',
+          changedAt: new Date().toISOString()
+        })
+      }
+    })
+  )
+
+  refreshMailboxWatchers()
+}
+
 async function runLimitedSync(accountId: number): Promise<AccountSyncResult> {
   return runLimitedAccountSync(accountId, syncAccountNow)
 }
@@ -307,6 +411,110 @@ function getWatchSignature(account: ReturnType<typeof listAccounts>[number]): st
     account.syncEnabled,
     account.credentialState
   ].join('|')
+}
+
+function isWatchableAccount(account: ReturnType<typeof listAccounts>[number]): boolean {
+  return (
+    account.syncEnabled &&
+    account.credentialState === 'stored' &&
+    account.status !== 'auth_error' &&
+    account.status !== 'disabled'
+  )
+}
+
+function isWatchSuspended(account: ReturnType<typeof listAccounts>[number]): boolean {
+  const suspension = suspendedWatchSignatures.get(account.accountId)
+  if (!suspension) return false
+
+  if (suspension.reason === 'auth') {
+    if (account.status === 'auth_error' || account.credentialState !== 'stored') return true
+
+    suspendedWatchSignatures.delete(account.accountId)
+    return false
+  }
+
+  if (suspension.signature === getWatchSignature(account)) return true
+
+  suspendedWatchSignatures.delete(account.accountId)
+  return false
+}
+
+function startNetworkChangeWatch(): void {
+  if (networkCheckTimer) return
+
+  lastNetworkSignature = getNetworkSignature()
+  networkCheckTimer = setInterval(checkNetworkSignatureChanged, NETWORK_CHECK_INTERVAL_MS)
+  networkCheckTimer.unref?.()
+}
+
+function stopNetworkChangeWatch(): void {
+  if (networkCheckTimer) {
+    clearInterval(networkCheckTimer)
+    networkCheckTimer = undefined
+  }
+
+  if (pendingNetworkChangeTimer) {
+    clearTimeout(pendingNetworkChangeTimer)
+    pendingNetworkChangeTimer = undefined
+  }
+
+  lastNetworkSignature = ''
+}
+
+function checkNetworkSignatureChanged(): void {
+  const nextSignature = getNetworkSignature()
+  if (nextSignature === lastNetworkSignature) return
+
+  lastNetworkSignature = nextSignature
+  scheduleNetworkMailboxCheck()
+}
+
+function scheduleNetworkMailboxCheck(): void {
+  if (pendingNetworkChangeTimer) {
+    clearTimeout(pendingNetworkChangeTimer)
+  }
+
+  pendingNetworkChangeTimer = setTimeout(() => {
+    pendingNetworkChangeTimer = undefined
+    handleNetworkChange()
+  }, NETWORK_CHANGE_SETTLE_MS)
+  pendingNetworkChangeTimer.unref?.()
+}
+
+function handleNetworkChange(): void {
+  console.info('[mailbox-watch] network changed, rechecking mailbox availability.')
+  clearNetworkFailureSuspensions()
+  restartMailboxWatchers()
+  requestForegroundMailboxSync('network')
+}
+
+function clearNetworkFailureSuspensions(): void {
+  for (const [accountId, suspension] of suspendedWatchSignatures) {
+    if (suspension.reason === 'failure') {
+      suspendedWatchSignatures.delete(accountId)
+    }
+  }
+}
+
+function getNetworkSignature(): string {
+  const addresses: string[] = []
+
+  for (const [name, entries] of Object.entries(networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      if (entry.internal) continue
+      addresses.push([name, entry.family, entry.address, entry.cidr ?? '', entry.mac].join(':'))
+    }
+  }
+
+  return [`online:${isNetworkOnline()}`, ...addresses.sort()].join('|')
+}
+
+function isNetworkOnline(): boolean {
+  try {
+    return net.isOnline()
+  } catch {
+    return true
+  }
 }
 
 function notifyMailboxChanged(event: MailboxChangedEvent): void {

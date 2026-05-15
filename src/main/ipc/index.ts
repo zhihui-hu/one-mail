@@ -1,5 +1,7 @@
 import { registerAccountIpc } from './accounts'
+import { registerComposeIpc } from './compose'
 import { registerLogoIpc } from './logos'
+import { registerMessageActionIpc } from './message-actions'
 import { registerMessageIpc } from './messages'
 import { registerNotificationIpc } from './notifications'
 import { registerSettingsIpc } from './settings'
@@ -14,8 +16,10 @@ export function registerIpcHandlers(): void {
   }
 
   registerAccountIpc()
+  registerComposeIpc()
   registerLogoIpc()
   registerMessageIpc()
+  registerMessageActionIpc()
   registerNotificationIpc()
   registerSyncIpc()
   registerSettingsIpc()

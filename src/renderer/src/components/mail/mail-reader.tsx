@@ -1,11 +1,21 @@
-import { Download, FileText, Image, Loader2, Paperclip, ShieldCheck } from 'lucide-react'
+import {
+  Download,
+  FileText,
+  Forward,
+  Image,
+  Loader2,
+  Paperclip,
+  Reply,
+  ReplyAll,
+  ShieldCheck,
+  Trash2
+} from 'lucide-react'
 import * as React from 'react'
 
 import { formatAbsoluteTime, formatRelativeTime } from '@renderer/components/mail/date-format'
 import { EllipsisTooltip } from '@renderer/components/mail/ellipsis-tooltip'
 import { prepareMailHtml, type PreparedMailHtml } from '@renderer/components/mail/mail-html'
 import type { Attachment, Message } from '@renderer/components/mail/types'
-import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import {
@@ -16,7 +26,14 @@ import {
   TableHeader,
   TableRow
 } from '@renderer/components/ui/table'
-import { TooltipProvider } from '@renderer/components/ui/tooltip'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from '@renderer/components/ui/tooltip'
+
+const REMOTE_IMAGES_HELP_URL = 'https://huzhihui.com/blog/click-load-images-ip-leak-email-tracking'
 
 type MailReaderProps = {
   message: Message
@@ -24,8 +41,14 @@ type MailReaderProps = {
   loading?: boolean
   loadingBody?: boolean
   downloadingAttachmentIds?: Set<number>
+  actionPending?: boolean
+  deleting?: boolean
   onLoadBody: () => void
   onDownloadAttachment?: (attachment: Attachment) => void
+  onReply?: () => void
+  onReplyAll?: () => void
+  onForward?: () => void
+  onDelete?: () => void
 }
 
 export function MailReader({
@@ -34,8 +57,14 @@ export function MailReader({
   loading = false,
   loadingBody = false,
   downloadingAttachmentIds,
+  actionPending = false,
+  deleting = false,
   onLoadBody,
-  onDownloadAttachment
+  onDownloadAttachment,
+  onReply,
+  onReplyAll,
+  onForward,
+  onDelete
 }: MailReaderProps): React.JSX.Element {
   const canShowHtml = Boolean(message.html)
   const hasLoadedBody = message.bodyLoaded || canShowHtml
@@ -76,19 +105,22 @@ export function MailReader({
             </span>
           </div>
           <div className="app-no-drag flex shrink-0 items-center gap-2">
-            <Badge variant={externalContentAllowed ? 'secondary' : 'outline'}>
+            {/* <Badge variant={externalContentAllowed ? 'secondary' : 'outline'}>
               {externalContentAllowed ? '完整内容' : '安全预览'}
-            </Badge>
+            </Badge> */}
             {loadingBody ? (
               <Button size="sm" variant="outline" disabled>
                 <Loader2 data-icon="inline-start" className="animate-spin" />
                 正在加载正文
               </Button>
             ) : canLoadFullContent ? (
-              <Button size="sm" variant="outline" onClick={allowExternalContent}>
-                <Image data-icon="inline-start" />
-                加载完整内容
-              </Button>
+              <>
+                <RemoteImagesHelpLink />
+                <Button size="sm" variant="outline" onClick={allowExternalContent}>
+                  <Image data-icon="inline-start" />
+                  加载完整内容
+                </Button>
+              </>
             ) : !hasLoadedBody && message.bodyStatus === 'error' ? (
               <Button size="sm" variant="outline" onClick={onLoadBody}>
                 {loadingBody ? (
@@ -122,16 +154,62 @@ export function MailReader({
                   </div>
                 </TooltipProvider>
               </div>
-              <div
-                className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
-                title={formatAbsoluteTime(message.receivedAt)}
-              >
-                {formatRelativeTime(message.receivedAt)}
+              <div className="flex shrink-0 flex-col items-end gap-2">
+                <div
+                  className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
+                  title={formatAbsoluteTime(message.receivedAt)}
+                >
+                  {formatRelativeTime(message.receivedAt)}
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button size="icon-sm" variant="ghost" disabled={actionPending} onClick={onReply}>
+                    {actionPending ? (
+                      <Loader2 className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Reply aria-hidden="true" />
+                    )}
+                    <span className="sr-only">回复</span>
+                  </Button>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    disabled={actionPending}
+                    onClick={onReplyAll}
+                  >
+                    {actionPending ? (
+                      <Loader2 className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <ReplyAll aria-hidden="true" />
+                    )}
+                    <span className="sr-only">回复全部</span>
+                  </Button>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    disabled={actionPending}
+                    onClick={onForward}
+                  >
+                    {actionPending ? (
+                      <Loader2 className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Forward aria-hidden="true" />
+                    )}
+                    <span className="sr-only">转发</span>
+                  </Button>
+                  <Button size="icon-sm" variant="ghost" disabled={deleting} onClick={onDelete}>
+                    {deleting ? (
+                      <Loader2 className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Trash2 aria-hidden="true" />
+                    )}
+                    <span className="sr-only">删除</span>
+                  </Button>
+                </div>
               </div>
             </div>
           </section>
 
-          {loading ? (
+          {loading && !message.detailLoaded ? (
             <section className="text-xs text-muted-foreground">正在加载邮件详情...</section>
           ) : (
             <MessageBody
@@ -154,6 +232,28 @@ export function MailReader({
         </article>
       </div>
     </div>
+  )
+}
+
+function RemoteImagesHelpLink(): React.JSX.Element {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <a
+            href={REMOTE_IMAGES_HELP_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs text-muted-foreground underline underline-offset-4 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            了解影响
+          </a>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="end" className="max-w-72 whitespace-normal leading-5">
+          加载远程图片可能让发件方或追踪服务知道你的 IP、设备信息和打开时间。
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   )
 }
 

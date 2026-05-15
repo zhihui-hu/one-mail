@@ -50,6 +50,7 @@ export function useMailboxMessages({
   downloadingAttachmentIds: Set<number>
   replaceMessages: (nextMessages: Message[]) => void
   clearMessages: () => void
+  removeMessages: (messageIds: string[]) => void
   refreshMessages: (
     accountId: string,
     nextFilters: MailFilterTag[],
@@ -72,6 +73,8 @@ export function useMailboxMessages({
     () => new Set()
   )
   const loadingMoreMessagesRef = React.useRef(false)
+  const loadingMessageIdsRef = React.useRef<Set<string>>(new Set())
+  const loadingBodyMessageIdsRef = React.useRef<Set<string>>(new Set())
   const loadMoreRequestTokenRef = React.useRef(0)
   const messageListScopeRef = React.useRef('')
   const markingReadMessageIdsRef = React.useRef<Set<string>>(new Set())
@@ -79,10 +82,21 @@ export function useMailboxMessages({
 
   const selectedMessage = messages.find((message) => message.id === selectedMessageId)
 
+  const beginLoadingBody = React.useCallback((message: Message): boolean => {
+    if (message.bodyLoaded || loadingBodyMessageIdsRef.current.has(message.id)) return false
+    loadingBodyMessageIdsRef.current.add(message.id)
+    return true
+  }, [])
+
   const replaceMessages = React.useCallback((nextMessages: Message[]): void => {
     loadMoreRequestTokenRef.current += 1
     loadingMoreMessagesRef.current = false
-    setMessages(nextMessages)
+    setMessages((current) => {
+      const currentById = new Map(current.map((message) => [message.id, message]))
+      return nextMessages.map((message) =>
+        preserveLoadedMessage(message, currentById.get(message.id))
+      )
+    })
     setMessagePage({
       hasMore: nextMessages.length === MESSAGE_LIST_PAGE_SIZE,
       loadingMore: false
@@ -101,6 +115,18 @@ export function useMailboxMessages({
     setMessagePage({ hasMore: false, loadingMore: false })
   }, [])
 
+  const removeMessages = React.useCallback((messageIds: string[]): void => {
+    const removedIds = new Set(messageIds)
+    setMessages((current) => {
+      const next = current.filter((message) => !removedIds.has(message.id))
+      setSelectedMessageId((selectedId) => {
+        if (!removedIds.has(selectedId)) return selectedId
+        return next[0]?.id ?? ''
+      })
+      return next
+    })
+  }, [])
+
   React.useEffect(() => {
     messageListScopeRef.current = getMessageListScopeKey(selectedAccountId, filters, searchKeyword)
   }, [filters, searchKeyword, selectedAccountId])
@@ -111,6 +137,10 @@ export function useMailboxMessages({
       nextFilters: MailFilterTag[],
       nextSearchKeyword: string
     ): Promise<void> => {
+      loadMoreRequestTokenRef.current += 1
+      loadingMoreMessagesRef.current = false
+      setMessagePage((current) => ({ ...current, loadingMore: false }))
+
       if (!accountId) {
         clearMessages()
         return
@@ -191,6 +221,8 @@ export function useMailboxMessages({
 
   const loadMessageDetail = React.useCallback(
     (messageId: string): void => {
+      if (loadingMessageIdsRef.current.has(messageId)) return
+      loadingMessageIdsRef.current.add(messageId)
       setLoadingMessageId(messageId)
 
       void loadMessageDetailById(messageId)
@@ -206,6 +238,7 @@ export function useMailboxMessages({
           setError(getErrorMessage(loadError, '加载邮件详情失败。'))
         })
         .finally(() => {
+          loadingMessageIdsRef.current.delete(messageId)
           setLoadingMessageId((current) => (current === messageId ? null : current))
         })
     },
@@ -214,7 +247,7 @@ export function useMailboxMessages({
 
   const loadMessageBodyForReader = React.useCallback(
     (message: Message): void => {
-      if (loadingBodyMessageId === message.id) return
+      if (!beginLoadingBody(message)) return
       setLoadingBodyMessageId(message.id)
 
       void loadMessageBody(message)
@@ -225,10 +258,11 @@ export function useMailboxMessages({
           setError(getErrorMessage(loadError, '加载邮件正文失败。'))
         })
         .finally(() => {
+          loadingBodyMessageIdsRef.current.delete(message.id)
           setLoadingBodyMessageId((current) => (current === message.id ? null : current))
         })
     },
-    [loadingBodyMessageId, setError]
+    [beginLoadingBody, setError]
   )
 
   React.useEffect(() => {
@@ -244,6 +278,7 @@ export function useMailboxMessages({
       .slice(0, 3)
 
     for (const message of candidates) {
+      if (!beginLoadingBody(message)) continue
       prefetchingVerificationMessageIdsRef.current.add(message.id)
 
       void loadMessageBody(message)
@@ -252,10 +287,11 @@ export function useMailboxMessages({
         })
         .catch(() => undefined)
         .finally(() => {
+          loadingBodyMessageIdsRef.current.delete(message.id)
           prefetchingVerificationMessageIdsRef.current.delete(message.id)
         })
     }
-  }, [messages])
+  }, [beginLoadingBody, messages])
 
   const markMessageReadOnOpen = React.useCallback(
     (message: Message): void => {
@@ -320,7 +356,7 @@ export function useMailboxMessages({
       setSelectedMessageId(messageId)
       const message = messages.find((item) => item.id === messageId)
       if (message) markMessageReadOnOpen(message)
-      loadMessageDetail(messageId)
+      if (!message?.detailLoaded) loadMessageDetail(messageId)
     },
     [loadMessageDetail, markMessageReadOnOpen, messages]
   )
@@ -362,6 +398,7 @@ export function useMailboxMessages({
     downloadingAttachmentIds,
     replaceMessages,
     clearMessages,
+    removeMessages,
     refreshMessages,
     selectMessage,
     loadMoreMessages,
@@ -382,4 +419,21 @@ function replaceMessage(
   setMessages((current) =>
     current.map((item) => (item.id === messageId ? { ...item, ...detail } : item))
   )
+}
+
+function preserveLoadedMessage(next: Message, current: Message | undefined): Message {
+  if (!current || next.detailLoaded || (!current.detailLoaded && !current.bodyLoaded)) {
+    return next
+  }
+
+  return {
+    ...next,
+    body: current.body,
+    html: current.html,
+    bodyStatus: current.bodyLoaded ? current.bodyStatus : next.bodyStatus,
+    bodyLoaded: current.bodyLoaded,
+    detailLoaded: current.detailLoaded,
+    externalImagesBlocked: current.externalImagesBlocked,
+    attachments: current.detailLoaded ? current.attachments : next.attachments
+  }
 }

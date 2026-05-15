@@ -7,6 +7,7 @@ export type AccountStatus =
   | 'network_error'
 export type AuthType = 'oauth2' | 'app_password' | 'password' | 'bridge' | 'manual'
 export type ImapSecurity = 'ssl_tls' | 'starttls' | 'none'
+export type SmtpSecurity = 'ssl_tls' | 'starttls' | 'none'
 export type CredentialState = 'pending' | 'stored' | 'invalid' | 'expired' | 'revoked'
 export type OAuthAuthorizationMode = 'internal_browser' | 'copy_link'
 export type SyncMode = 'initial' | 'refresh'
@@ -21,6 +22,11 @@ export type MailAccount = {
   imapHost: string
   imapPort: number
   imapSecurity: ImapSecurity
+  smtpHost?: string
+  smtpPort?: number
+  smtpSecurity?: SmtpSecurity
+  smtpAuthType?: AuthType
+  smtpEnabled: boolean
   syncEnabled: boolean
   credentialState: CredentialState
   status: AccountStatus
@@ -38,6 +44,11 @@ export type AccountCreateInput = {
   imapHost: string
   imapPort: number
   imapSecurity: ImapSecurity
+  smtpHost?: string
+  smtpPort?: number
+  smtpSecurity?: SmtpSecurity
+  smtpAuthType?: AuthType
+  smtpEnabled?: boolean
 }
 
 export type AccountCreatedEvent = {
@@ -52,7 +63,7 @@ export type AccountUpdateInput = Partial<Omit<AccountCreateInput, 'email' | 'pas
   syncEnabled?: boolean
 }
 
-export type MessageFilterTag = 'unread' | 'attachments' | 'starred' | 'today'
+export type MessageFilterTag = 'unread' | 'starred' | 'today' | 'yesterday' | 'last7'
 
 export type MessageListQuery = {
   accountId?: number
@@ -69,9 +80,16 @@ export type MailMessageSummary = {
   messageId: number
   accountId: number
   folderId: number
+  folderRole?: string
+  folderName?: string
   subject?: string
   fromName?: string
   fromEmail?: string
+  to?: string
+  cc?: string
+  replyTo?: string
+  messageRfc822Id?: string
+  references?: string
   receivedAt?: string
   snippet?: string
   isRead: boolean
@@ -116,6 +134,155 @@ export type MailMessageBodyLoadResult = {
 export type MailMessageDetail = MailMessageSummary & {
   body?: MailMessageBody
   attachments: MailMessageAttachment[]
+}
+
+export type MailAddressInput = {
+  name?: string
+  email: string
+}
+
+export type MailComposeMode = 'new' | 'reply' | 'reply_all' | 'forward'
+
+export type MailAttachmentInput = {
+  filePath?: string
+  filename?: string
+  mimeType?: string
+  sizeBytes?: number
+  sourceMessageId?: number
+  sourceAttachmentId?: number
+}
+
+export type MailSendInput = {
+  outboxId?: number
+  accountId: number
+  mode: MailComposeMode
+  relatedMessageId?: number
+  to: MailAddressInput[]
+  cc?: MailAddressInput[]
+  bcc?: MailAddressInput[]
+  subject?: string
+  bodyText?: string
+  bodyHtml?: string
+  attachments?: MailAttachmentInput[]
+  inReplyTo?: string
+  referencesHeader?: string
+}
+
+export type MailSendResult = {
+  outboxId: number
+  accountId: number
+  status: OutboxMessage['status']
+  rfc822MessageId: string
+  sentAt?: string
+  warning?: string
+  error?: string
+}
+
+export type ReplyDraftInput = {
+  messageId: number
+  mode: Extract<MailComposeMode, 'reply' | 'reply_all'>
+}
+
+export type ForwardDraftInput = {
+  messageId: number
+}
+
+export type ForwardAttachmentCandidate = {
+  attachmentId: number
+  filename: string
+  mimeType?: string
+  sizeBytes: number
+  selected: boolean
+}
+
+export type ComposeDraft = {
+  accountId: number
+  mode: MailComposeMode
+  relatedMessageId?: number
+  to: MailAddressInput[]
+  cc: MailAddressInput[]
+  bcc: MailAddressInput[]
+  subject?: string
+  bodyText?: string
+  inReplyTo?: string
+  referencesHeader?: string
+  forwardAttachments?: ForwardAttachmentCandidate[]
+}
+
+export type OutboxMessage = {
+  outboxId: number
+  accountId: number
+  relatedMessageId?: number
+  composeKind: MailComposeMode
+  status: 'draft' | 'queued' | 'sending' | 'sent' | 'failed' | 'cancelled' | 'deleted'
+  rfc822MessageId: string
+  from?: MailAddressInput
+  subject?: string
+  bodyText?: string
+  bodyHtml?: string
+  inReplyTo?: string
+  referencesHeader?: string
+  attachments?: MailAttachmentInput[]
+  to: MailAddressInput[]
+  cc: MailAddressInput[]
+  bcc: MailAddressInput[]
+  sentAt?: string
+  deletedAt?: string
+  lastError?: string
+  lastWarning?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type OutboxListQuery = {
+  statuses?: OutboxMessage['status'][]
+  limit?: number
+}
+
+export type MessageDeleteMode = 'trash' | 'permanent' | 'local_hide'
+
+export type MessageDeleteInput = {
+  messageId: number
+  mode?: MessageDeleteMode
+  allowLocalHide?: boolean
+}
+
+export type MessageDeleteResult = {
+  messageId: number
+  accountId?: number
+  mode: MessageDeleteMode
+  deleted: boolean
+  localOnly: boolean
+  error?: string
+}
+
+export type MessageBulkDeleteInput = {
+  messageIds: number[]
+  mode?: MessageDeleteMode
+  allowLocalHide?: boolean
+}
+
+export type MessageBulkDeleteFailure = {
+  messageId: number
+  accountId?: number
+  error: string
+}
+
+export type MessageBulkDeleteResult = {
+  mode: MessageDeleteMode
+  succeededMessageIds: number[]
+  failedItems: MessageBulkDeleteFailure[]
+  deletedCount: number
+  failedCount: number
+  operationBatchId?: string
+}
+
+export type MessageRestoreResult = {
+  messageId: number
+  accountId?: number
+  restored: boolean
+  localOnly: boolean
+  error?: string
 }
 
 export type MessageReadStateUpdate = {
@@ -195,6 +362,7 @@ export type OneMailApi = {
     openAddWindow: () => Promise<boolean>
     closeAddWindow: () => Promise<boolean>
     update: (input: AccountUpdateInput) => Promise<MailAccount>
+    reauthorize: (accountId: number) => Promise<MailAccount>
     disable: (accountId: number) => Promise<MailAccount>
     remove: (accountId: number) => Promise<boolean>
   }
@@ -208,6 +376,22 @@ export type OneMailApi = {
     loadBody: (messageId: number) => Promise<MailMessageBodyLoadResult>
     setReadState: (messageId: number, isRead: boolean) => Promise<MessageReadStateUpdate>
     downloadAttachment: (attachmentId: number) => Promise<AttachmentDownloadResult>
+    delete: (input: MessageDeleteInput) => Promise<MessageDeleteResult>
+    bulkDelete: (input: MessageBulkDeleteInput) => Promise<MessageBulkDeleteResult>
+    hideLocal: (messageId: number) => Promise<MessageDeleteResult>
+    restore: (messageId: number) => Promise<MessageRestoreResult>
+  }
+  compose: {
+    createReplyDraft: (input: ReplyDraftInput) => Promise<ComposeDraft>
+    createForwardDraft: (input: ForwardDraftInput) => Promise<ComposeDraft>
+    send: (input: MailSendInput) => Promise<MailSendResult>
+    selectAttachments: () => Promise<MailAttachmentInput[]>
+    listOutbox: (query?: OutboxListQuery) => Promise<OutboxMessage[]>
+    saveDraft: (input: MailSendInput) => Promise<OutboxMessage>
+    deleteDraft: (outboxId: number) => Promise<boolean>
+    retry: (outboxId: number) => Promise<MailSendResult>
+    deleteOutbox: (outboxId: number) => Promise<boolean>
+    onSent: (callback: (result: MailSendResult) => void) => () => void
   }
   sync: {
     startAll: (mode?: SyncMode) => Promise<SyncStatus>
