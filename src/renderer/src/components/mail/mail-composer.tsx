@@ -25,6 +25,7 @@ import { AddressInput } from '@renderer/components/mail/address-input'
 import type { Account } from '@renderer/components/mail/types'
 import { Button } from '@renderer/components/ui/button'
 import { ButtonGroup } from '@renderer/components/ui/button-group'
+import { Checkbox } from '@renderer/components/ui/checkbox'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@renderer/components/ui/field'
 import { Input } from '@renderer/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@renderer/components/ui/native-select'
@@ -90,6 +91,7 @@ export function MailComposer({
   const defaultAccount = sendAccounts.find(
     (account) => String(account.accountId) === form.accountId
   )
+  const unselectedForwardAttachments = getUnselectedForwardAttachments(draft, form.attachments)
 
   async function handleSubmit(action: 'send' | 'draft'): Promise<void> {
     if (!draft) return
@@ -353,7 +355,7 @@ export function MailComposer({
                 <div className="grid gap-2 sm:grid-cols-2">
                   {form.attachments.map((attachment) => (
                     <div
-                      key={attachment.filePath ?? attachment.filename}
+                      key={getAttachmentKey(attachment)}
                       className="flex min-h-9 items-center gap-2 rounded-md border px-2 text-xs"
                     >
                       <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />
@@ -363,16 +365,58 @@ export function MailComposer({
                       <span className="shrink-0 text-muted-foreground">
                         {formatBytes(attachment.sizeBytes)}
                       </span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon-sm"
+                      {attachment.sourceAttachmentId ? (
+                        <Checkbox
+                          checked
+                          disabled={pending}
+                          aria-label="包含原邮件附件"
+                          onCheckedChange={(checked) => {
+                            if (checked === false) removeAttachment(attachment)
+                          }}
+                        />
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          disabled={pending}
+                          aria-label="移除附件"
+                          onClick={() => removeAttachment(attachment)}
+                        >
+                          <X />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {unselectedForwardAttachments.length > 0 ? (
+              <div className="border-t px-3 py-2">
+                <div className="mb-2 text-xs text-muted-foreground">原邮件附件</div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {unselectedForwardAttachments.map((attachment) => (
+                    <div
+                      key={getAttachmentKey(attachment)}
+                      className="flex min-h-9 items-center gap-2 rounded-md border px-2 text-xs"
+                    >
+                      <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {attachment.filename ?? '附件'}
+                      </span>
+                      <span className="shrink-0 text-muted-foreground">
+                        {formatBytes(attachment.sizeBytes)}
+                      </span>
+                      <Checkbox
                         disabled={pending}
-                        aria-label="移除附件"
-                        onClick={() => removeAttachment(attachment)}
-                      >
-                        <X />
-                      </Button>
+                        aria-label="包含原邮件附件"
+                        onCheckedChange={(checked) => {
+                          if (checked !== true) return
+                          updateForm((current) => ({
+                            attachments: [...current.attachments, attachment]
+                          }))
+                        }}
+                      />
                     </div>
                   ))}
                 </div>
@@ -780,8 +824,20 @@ function resolveFormPatch(
   }
 }
 
-function getAttachmentKey(attachment: MailAttachmentInput): string {
-  return attachment.filePath ?? attachment.filename ?? String(attachment.sourceAttachmentId ?? '')
+export function getAttachmentKey(attachment: MailAttachmentInput): string {
+  return attachment.sourceAttachmentId
+    ? `source:${attachment.sourceMessageId ?? ''}:${attachment.sourceAttachmentId}`
+    : (attachment.filePath ?? attachment.filename ?? '')
+}
+
+export function getUnselectedForwardAttachments(
+  draft: ComposeDraft | null,
+  selectedAttachments: MailAttachmentInput[]
+): MailAttachmentInput[] {
+  const selectedKeys = new Set(selectedAttachments.map(getAttachmentKey))
+  return (draft?.forwardAttachments ?? []).filter(
+    (attachment) => !selectedKeys.has(getAttachmentKey(attachment))
+  )
 }
 
 function normalizeComposerHtml(value: string): string | undefined {

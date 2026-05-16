@@ -82,7 +82,10 @@ export function registerComposeIpc(): void {
       attachments: input.attachments?.map((attachment) => ({
         filePath: attachment.filePath,
         filename: attachment.filename,
-        mimeType: attachment.mimeType
+        mimeType: attachment.mimeType,
+        sourceMessageId: attachment.sourceMessageId,
+        sourceAttachmentId: attachment.sourceAttachmentId,
+        sizeBytes: attachment.sizeBytes
       }))
     })
     const sentAt = result.date.toISOString()
@@ -155,7 +158,10 @@ export function registerComposeIpc(): void {
       attachments: input.attachments?.map((attachment) => ({
         filePath: attachment.filePath,
         filename: attachment.filename,
-        mimeType: attachment.mimeType
+        mimeType: attachment.mimeType,
+        sourceMessageId: attachment.sourceMessageId,
+        sourceAttachmentId: attachment.sourceAttachmentId,
+        sizeBytes: attachment.sizeBytes
       }))
     }
     const record = input.outboxId
@@ -222,7 +228,9 @@ function toOutboxMessage(record: OutboxRecord): OutboxMessage {
       filePath: attachment.filePath,
       filename: attachment.filename,
       mimeType: attachment.mimeType,
-      sizeBytes: attachment.sizeBytes
+      sizeBytes: attachment.sizeBytes,
+      sourceMessageId: attachment.sourceMessageId,
+      sourceAttachmentId: attachment.sourceAttachmentId
     })),
     to: record.to,
     cc: record.cc ?? [],

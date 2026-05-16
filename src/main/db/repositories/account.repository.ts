@@ -451,7 +451,7 @@ function getProviderSmtpPreset(
       smtpPort: 587,
       smtpSecurity: 'starttls',
       smtpAuthType: 'oauth2',
-      smtpEnabled: false
+      smtpEnabled: true
     }
   }
 

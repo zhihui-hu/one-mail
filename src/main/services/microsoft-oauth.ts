@@ -39,7 +39,8 @@ const MICROSOFT_SCOPES = [
   'profile',
   'email',
   'offline_access',
-  'https://outlook.office.com/IMAP.AccessAsUser.All'
+  'https://outlook.office.com/IMAP.AccessAsUser.All',
+  'https://outlook.office.com/SMTP.Send'
 ]
 const MICROSOFT_OUTLOOK_RESOURCES = new Set([
   'https://outlook.office.com',
@@ -48,6 +49,8 @@ const MICROSOFT_OUTLOOK_RESOURCES = new Set([
 ])
 const MICROSOFT_REQUIRED_RESOURCE_SCOPE = 'https://outlook.office.com/IMAP.AccessAsUser.All'
 const MICROSOFT_REQUIRED_SCOPE_NAME = 'IMAP.AccessAsUser.All'
+const MICROSOFT_REQUIRED_SMTP_SCOPE = 'https://outlook.office.com/SMTP.Send'
+const MICROSOFT_REQUIRED_SMTP_SCOPE_NAME = 'SMTP.Send'
 const TOKEN_REFRESH_SKEW_MS = 2 * 60 * 1000
 
 export async function authorizeMicrosoftAccount(
@@ -79,7 +82,7 @@ export async function getMicrosoftAccessToken(
   accountId: number
 ): Promise<MicrosoftAccessTokenResult> {
   const token = readOAuthToken(accountId)
-  if (!shouldRefreshToken(token)) {
+  if (!shouldRefreshToken(token) && hasMicrosoftOutlookScopes(token)) {
     return {
       accessToken: token.accessToken,
       loginHints: getMicrosoftLoginHints(token)
@@ -352,7 +355,7 @@ function mapTokenResponse(body: MicrosoftTokenResponse): OAuthTokenPayload {
   }
 
   const accessPayload = decodeJwtPayloadSafe(body.access_token)
-  assertMicrosoftImapScopeGranted(body.scope, accessPayload)
+  assertMicrosoftOutlookScopesGranted(body.scope, accessPayload)
   assertMicrosoftImapAccessTokenAudience(accessPayload)
 
   return {
@@ -367,26 +370,46 @@ function mapTokenResponse(body: MicrosoftTokenResponse): OAuthTokenPayload {
   }
 }
 
-function assertMicrosoftImapScopeGranted(
+function assertMicrosoftOutlookScopesGranted(
   scope: string | undefined,
   accessPayload: Record<string, unknown>
 ): void {
-  const grantedScopes = new Set([
-    ...parseScopeValues(scope),
-    ...parseScopeValues(readStringClaim(accessPayload, 'scp'))
-  ])
+  const grantedScopes = getGrantedScopes(scope, accessPayload)
   if (grantedScopes.size === 0) return
 
-  if (
-    grantedScopes.has(normalizeScope(MICROSOFT_REQUIRED_RESOURCE_SCOPE)) ||
-    grantedScopes.has(normalizeScope(MICROSOFT_REQUIRED_SCOPE_NAME))
-  ) {
+  if (hasRequiredMicrosoftOutlookScopes(grantedScopes)) {
     return
   }
 
   throw new Error(
-    'Microsoft OAuth 未授予 Outlook IMAP 权限。请重新登录并在授权页同意 OneMail 访问邮箱。'
+    'Microsoft OAuth 未授予 Outlook IMAP/SMTP 权限。请重新登录并在授权页同意 OneMail 访问和发送邮件。'
   )
+}
+
+function hasMicrosoftOutlookScopes(token: OAuthTokenPayload): boolean {
+  const grantedScopes = getGrantedScopes(undefined, decodeJwtPayloadSafe(token.accessToken))
+  return grantedScopes.size === 0 || hasRequiredMicrosoftOutlookScopes(grantedScopes)
+}
+
+function getGrantedScopes(
+  scope: string | undefined,
+  accessPayload: Record<string, unknown>
+): Set<string> {
+  return new Set([
+    ...parseScopeValues(scope),
+    ...parseScopeValues(readStringClaim(accessPayload, 'scp'))
+  ])
+}
+
+export function hasRequiredMicrosoftOutlookScopes(grantedScopes: Set<string>): boolean {
+  const hasImap =
+    grantedScopes.has(normalizeScope(MICROSOFT_REQUIRED_RESOURCE_SCOPE)) ||
+    grantedScopes.has(normalizeScope(MICROSOFT_REQUIRED_SCOPE_NAME))
+  const hasSmtp =
+    grantedScopes.has(normalizeScope(MICROSOFT_REQUIRED_SMTP_SCOPE)) ||
+    grantedScopes.has(normalizeScope(MICROSOFT_REQUIRED_SMTP_SCOPE_NAME))
+
+  return hasImap && hasSmtp
 }
 
 function assertMicrosoftImapAccessTokenAudience(accessPayload: Record<string, unknown>): void {

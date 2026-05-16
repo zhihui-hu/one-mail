@@ -92,6 +92,9 @@ export function useMailComposer({ accounts, selectedAccount, setError }: UseMail
           bodyText: outbox.bodyText,
           bodyHtml: outbox.bodyHtml,
           attachments: outbox.attachments,
+          forwardAttachments: outbox.attachments.filter((attachment) =>
+            Boolean(attachment.sourceAttachmentId)
+          ),
           inReplyTo: outbox.inReplyTo,
           references: outbox.references
         }
@@ -146,6 +149,9 @@ export function useMailComposer({ accounts, selectedAccount, setError }: UseMail
             bodyText: savedDraft.bodyText,
             bodyHtml: savedDraft.bodyHtml,
             attachments: savedDraft.attachments,
+            forwardAttachments: savedDraft.attachments.filter((attachment) =>
+              Boolean(attachment.sourceAttachmentId)
+            ),
             inReplyTo: savedDraft.inReplyTo,
             references: savedDraft.references
           }

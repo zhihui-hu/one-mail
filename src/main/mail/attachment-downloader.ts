@@ -33,6 +33,26 @@ export async function downloadAttachment(attachmentId: number): Promise<Attachme
     return { downloaded: false, attachmentId }
   }
 
+  const attachment = await loadAttachmentContentByLocator(locator)
+  writeFileSync(saveResult.filePath, attachment.content)
+
+  return {
+    downloaded: true,
+    attachmentId,
+    filePath: saveResult.filePath
+  }
+}
+
+export async function loadAttachmentContent(attachmentId: number): Promise<ParsedMessageAttachment> {
+  const locator = getAttachmentDownloadLocator(attachmentId)
+  if (!locator) throw new Error(`Attachment not found: ${attachmentId}`)
+
+  return loadAttachmentContentByLocator(locator)
+}
+
+async function loadAttachmentContentByLocator(
+  locator: AttachmentDownloadRow
+): Promise<ParsedMessageAttachment> {
   const account = getAccount(locator.account_id)
   if (!account) throw new Error(`Account not found: ${locator.account_id}`)
 
@@ -45,13 +65,7 @@ export async function downloadAttachment(attachmentId: number): Promise<Attachme
     const attachment = findMatchingAttachment(parseMimeAttachments(rawMessage), locator)
     if (!attachment) throw new Error('未找到可下载的附件内容。')
 
-    writeFileSync(saveResult.filePath, attachment.content)
-
-    return {
-      downloaded: true,
-      attachmentId,
-      filePath: saveResult.filePath
-    }
+    return attachment
   } finally {
     await client.logout().catch(() => undefined)
   }

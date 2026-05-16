@@ -15,6 +15,7 @@ import {
 } from '../db/repositories/outbox.repository'
 import { getMessageComposeSource, markMessageAnswered } from '../db/repositories/message.repository'
 import { readAccountPassword } from '../services/credential-store'
+import { getMicrosoftAccessToken } from '../services/microsoft-oauth'
 import {
   composePlainTextMessage,
   type ComposeAddress,
@@ -23,6 +24,8 @@ import {
 } from './message-composer'
 import { appendMessageToSentFolder } from './sent-folder-append'
 import { SimpleImapSession } from './imap-session'
+import { loadAttachmentContent } from './attachment-downloader'
+import { authenticateImapSession } from './imap-auth'
 
 export type SmtpSecurity = 'ssl_tls' | 'starttls' | 'none'
 
@@ -92,7 +95,8 @@ type SmtpTransport = {
 
 export async function sendPlainTextEmail(input: SmtpSendInput): Promise<SmtpSendResult> {
   const from = resolveFromAddress(input.accountId, input.from)
-  const composed = composePlainTextMessage({ ...input, from })
+  const attachments = await materializeForwardedAttachments(input.attachments)
+  const composed = composePlainTextMessage({ ...input, attachments, from })
   const outbox = input.outboxId
     ? prepareExistingOutbox(input.outboxId, input.accountId)
     : createOutboxRecord({
@@ -110,7 +114,7 @@ export async function sendPlainTextEmail(input: SmtpSendInput): Promise<SmtpSend
         subject: input.subject,
         bodyText: input.bodyText,
         bodyHtml: input.bodyHtml,
-        attachments: input.attachments,
+        attachments,
         rawMime: composed.rawMime
       })
   const operation = createMessageOperation({
@@ -196,24 +200,17 @@ async function deliverRawEmail(input: SmtpDeliveryInput): Promise<{ envelopeId?:
   const account = getAccount(input.accountId)
   if (!account) throw new Error(`Account not found: ${input.accountId}`)
 
-  if (account.authType !== 'password' && account.authType !== 'app_password') {
-    throw new Error('当前阶段仅支持密码或应用授权码账号通过 SMTP 发信。')
-  }
-
   const smtpAccount = getSmtpAccount(input.accountId)
   const smtpConfig = resolveSmtpConfig(smtpAccount)
   const from = input.from ?? resolveFromAddress(input.accountId)
-  const password = readAccountPassword(input.accountId)
+  const auth = await resolveSmtpAuth(account, smtpAccount)
   const nodemailer = await loadNodemailer()
   const transport = nodemailer.createTransport({
     host: smtpConfig.host,
     port: smtpConfig.port,
     secure: smtpConfig.security === 'ssl_tls',
     requireTLS: smtpConfig.security === 'starttls',
-    auth: {
-      user: account.email,
-      pass: password
-    }
+    auth
   })
 
   const result = await transport.sendMail({
@@ -227,6 +224,31 @@ async function deliverRawEmail(input: SmtpDeliveryInput): Promise<{ envelopeId?:
   return {
     envelopeId: result.messageId ?? result.response
   }
+}
+
+async function resolveSmtpAuth(
+  account: NonNullable<ReturnType<typeof getAccount>>,
+  smtpAccount: SmtpAccountRow
+): Promise<Record<string, string | number | undefined>> {
+  const authType = smtpAccount.smtp_auth_type ?? account.authType
+
+  if (authType === 'oauth2') {
+    const token = await getMicrosoftAccessToken(account.accountId)
+    return {
+      type: 'OAuth2',
+      user: account.email,
+      accessToken: token.accessToken
+    }
+  }
+
+  if (authType === 'password' || authType === 'app_password') {
+    return {
+      user: account.email,
+      pass: readAccountPassword(account.accountId)
+    }
+  }
+
+  throw new Error('当前账号缺少可用的 SMTP 发信认证方式。')
 }
 
 function resolveFromAddress(accountId: number, from?: ComposeAddress): ComposeAddress {
@@ -259,8 +281,7 @@ async function markAnsweredBestEffort(messageId: number): Promise<string | undef
   let session: SimpleImapSession | undefined
   try {
     session = await SimpleImapSession.connect(account, 'A')
-    await session.identifyClient()
-    await session.login(account.email, readAccountPassword(source.accountId))
+    await authenticateImapSession(account, session)
     await session.selectMailbox(source.folderPath)
     await session.setAnsweredFlag(source.uid, true)
     return undefined
@@ -321,7 +342,9 @@ function resolveSmtpConfig(row: SmtpAccountRow): {
   port: number
   security: SmtpSecurity
 } {
-  if (row.smtp_enabled === 0) throw new Error('此账号未启用 SMTP 发信。')
+  if (row.smtp_enabled === 0 && row.smtp_auth_type !== 'oauth2' && row.auth_type !== 'oauth2') {
+    throw new Error('此账号未启用 SMTP 发信。')
+  }
 
   const host =
     toOptionalString(row.smtp_host) ??
@@ -368,4 +391,30 @@ async function loadNodemailer(): Promise<Required<Pick<NodemailerModule, 'create
     const message = error instanceof Error ? error.message : String(error)
     throw new Error(`缺少 SMTP 发送依赖 nodemailer，请先安装 nodemailer。原始错误：${message}`)
   }
+}
+
+async function materializeForwardedAttachments(
+  attachments?: ComposeAttachment[]
+): Promise<ComposeAttachment[] | undefined> {
+  if (!attachments || attachments.length === 0) return attachments
+
+  const materialized: ComposeAttachment[] = []
+
+  for (const attachment of attachments) {
+    if (attachment.content || attachment.filePath || !attachment.sourceAttachmentId) {
+      materialized.push(attachment)
+      continue
+    }
+
+    const loaded = await loadAttachmentContent(attachment.sourceAttachmentId)
+    materialized.push({
+      ...attachment,
+      filename: attachment.filename ?? loaded.filename,
+      mimeType: attachment.mimeType ?? loaded.mimeType,
+      content: loaded.content,
+      sizeBytes: loaded.content.length
+    })
+  }
+
+  return materialized
 }

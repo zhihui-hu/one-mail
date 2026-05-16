@@ -1,6 +1,6 @@
 import { getAccount } from '../db/repositories/account.repository'
 import { getDatabase, toNumber, type SqliteRow } from '../db/connection'
-import { readAccountPassword } from '../services/credential-store'
+import { authenticateImapSession } from './imap-auth'
 import { SimpleImapSession } from './imap-session'
 
 export type SentAppendResult = {
@@ -28,8 +28,7 @@ export async function appendMessageToSentFolder(
 
   try {
     session = await SimpleImapSession.connect(account, 'S')
-    await session.identifyClient()
-    await session.login(account.email, readAccountPassword(accountId))
+    await authenticateImapSession(account, session)
     await session.appendMessage(sentFolder.path, rawMime, ['Seen'])
     return { appended: true, folderId: toNumber(sentFolder.folder_id) }
   } catch (error) {

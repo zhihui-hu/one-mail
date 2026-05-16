@@ -55,6 +55,7 @@ export type ComposeDraft = {
   bodyText: string
   bodyHtml?: string
   attachments?: MailAttachmentInput[]
+  forwardAttachments?: MailAttachmentInput[]
   inReplyTo?: string
   references?: string
 }
@@ -528,7 +529,7 @@ function createLocalDraft(input: ComposeDraftInput): ComposeDraft {
   }
 }
 
-function toUiComposeDraft(draft: SharedComposeDraft): ComposeDraft {
+export function toUiComposeDraft(draft: SharedComposeDraft): ComposeDraft {
   return {
     kind: draft.mode,
     accountId: draft.accountId,
@@ -539,6 +540,13 @@ function toUiComposeDraft(draft: SharedComposeDraft): ComposeDraft {
     subject: draft.subject ?? '',
     bodyText: draft.bodyText ?? '',
     bodyHtml: draft.bodyHtml,
+    forwardAttachments: draft.forwardAttachments?.map((attachment) => ({
+      sourceMessageId: draft.relatedMessageId,
+      sourceAttachmentId: attachment.attachmentId,
+      filename: attachment.filename,
+      mimeType: attachment.mimeType,
+      sizeBytes: attachment.sizeBytes
+    })),
     inReplyTo: draft.inReplyTo,
     references: draft.referencesHeader
   }
@@ -566,7 +574,7 @@ function toUiOutboxMessage(message: SharedOutboxMessage): OutboxMessage {
   }
 }
 
-function toSharedSendInput(input: SendMessageInput): MailSendInput {
+export function toSharedSendInput(input: SendMessageInput): MailSendInput {
   return {
     outboxId: input.draftId,
     accountId: input.accountId,

@@ -70,6 +70,8 @@ type OutboxRow = SqliteRow & {
 }
 
 type OutboxAttachmentRow = SqliteRow & {
+  source_message_id: number | null
+  source_attachment_id: number | null
   file_path: string | null
   filename: string
   mime_type: string | null
@@ -435,7 +437,7 @@ function listOutboxAttachments(outboxId: number): ComposeAttachment[] {
   const rows = getDatabase()
     .prepare<OutboxAttachmentRow>(
       `
-      SELECT file_path, filename, mime_type, size_bytes
+      SELECT source_message_id, source_attachment_id, file_path, filename, mime_type, size_bytes
       FROM onemail_outbox_attachments
       WHERE outbox_id = :outboxId
       ORDER BY attachment_id ASC
@@ -444,6 +446,9 @@ function listOutboxAttachments(outboxId: number): ComposeAttachment[] {
     .all({ outboxId })
 
   return rows.map((row) => ({
+    sourceMessageId: row.source_message_id === null ? undefined : toNumber(row.source_message_id),
+    sourceAttachmentId:
+      row.source_attachment_id === null ? undefined : toNumber(row.source_attachment_id),
     filePath: toOptionalString(row.file_path),
     filename: row.filename,
     mimeType: toOptionalString(row.mime_type),
@@ -460,6 +465,8 @@ function replaceOutboxAttachments(outboxId: number, attachments: ComposeAttachme
     INSERT INTO onemail_outbox_attachments (
       outbox_id,
       source_kind,
+      source_message_id,
+      source_attachment_id,
       file_path,
       filename,
       mime_type,
@@ -467,7 +474,9 @@ function replaceOutboxAttachments(outboxId: number, attachments: ComposeAttachme
     )
     VALUES (
       :outboxId,
-      'local_file',
+      :sourceKind,
+      :sourceMessageId,
+      :sourceAttachmentId,
       :filePath,
       :filename,
       :mimeType,
@@ -477,15 +486,18 @@ function replaceOutboxAttachments(outboxId: number, attachments: ComposeAttachme
   )
 
   for (const attachment of attachments) {
-    if (!attachment.filePath) continue
+    if (!attachment.filePath && !attachment.sourceAttachmentId) continue
     const sizeBytes =
       attachment.filePath && existsSync(attachment.filePath)
         ? statSync(attachment.filePath).size
-        : 0
+        : (attachment.sizeBytes ?? 0)
     insert.run({
       outboxId,
-      filePath: attachment.filePath,
-      filename: attachment.filename ?? basename(attachment.filePath),
+      sourceKind: attachment.sourceAttachmentId ? 'forwarded_attachment' : 'local_file',
+      sourceMessageId: attachment.sourceMessageId ?? null,
+      sourceAttachmentId: attachment.sourceAttachmentId ?? null,
+      filePath: attachment.filePath ?? null,
+      filename: attachment.filename ?? basename(attachment.filePath ?? 'attachment'),
       mimeType: attachment.mimeType ?? null,
       sizeBytes
     })

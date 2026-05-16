@@ -14,7 +14,13 @@ export type ComposeAttachment = {
   filePath?: string
   content?: Buffer
   sizeBytes?: number
+  sourceMessageId?: number
+  sourceAttachmentId?: number
 }
+
+type MaterializedAttachment = Required<
+  Pick<ComposeAttachment, 'filename' | 'mimeType' | 'contentId' | 'filePath' | 'content' | 'sizeBytes'>
+>
 
 export type PlainTextMessageInput = {
   from: ComposeAddress
@@ -315,7 +321,7 @@ function encodeQuotedPrintableLine(line: string): string {
   return chunks.join('\r\n')
 }
 
-function materializeAttachments(attachments: ComposeAttachment[]): Required<ComposeAttachment>[] {
+function materializeAttachments(attachments: ComposeAttachment[]): MaterializedAttachment[] {
   const materialized = attachments.map((attachment) => {
     const content = attachment.content ?? readAttachmentFile(attachment)
     const filename = sanitizeHeaderValue(
@@ -346,7 +352,7 @@ function readAttachmentFile(attachment: ComposeAttachment): Buffer {
   return readFileSync(attachment.filePath)
 }
 
-function formatAttachmentPart(boundary: string, attachment: Required<ComposeAttachment>): string {
+function formatAttachmentPart(boundary: string, attachment: MaterializedAttachment): string {
   const encodedName = encodeHeaderValue(attachment.filename)
   const headers = [
     `--${boundary}`,
