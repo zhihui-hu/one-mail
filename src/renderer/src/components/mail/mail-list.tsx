@@ -70,11 +70,6 @@ export function MailList({
   const readCount = Math.max(0, accountMessageCount - account.unread)
   const selectedCount = selectedMessageIds.size
   const hasSelection = selectedCount > 0
-  const permanentDeleteAvailable =
-    hasSelection &&
-    messages
-      .filter((message) => selectedMessageIds.has(message.id))
-      .every((message) => message.folderRole === 'trash')
 
   const handleScroll = React.useCallback(
     (event: React.UIEvent<HTMLDivElement>) => {
@@ -137,7 +132,6 @@ export function MailList({
             selectedCount={selectedCount}
             allVisibleSelected={allVisibleSelected}
             someVisibleSelected={someVisibleSelected}
-            permanentDeleteAvailable={permanentDeleteAvailable}
             disabled={selectionDisabled}
             onSelectAllVisible={onSelectAllVisible}
             onClearSelection={onClearSelection}

@@ -12,7 +12,6 @@ import { getErrorMessage } from './mailbox-utils'
 
 type DeleteRequest = {
   messages: Message[]
-  permanent: boolean
 }
 
 type UseMessageActionsInput = {
@@ -39,8 +38,7 @@ export function useMessageActions({
   const requestDeleteMessages = React.useCallback((messages: Message[]): void => {
     if (messages.length === 0) return
     setDeleteRequest({
-      messages,
-      permanent: messages.every((message) => message.folderRole === 'trash')
+      messages
     })
   }, [])
 
@@ -60,7 +58,7 @@ export function useMessageActions({
       if (deleteRequest.messages.length === 1) {
         const result = await deleteMessage({
           messageId: deleteRequest.messages[0].messageId,
-          permanent: deleteRequest.permanent
+          permanent: true
         })
         handleSingleDeleteResult(result)
         if (result.deleted || result.hidden) {
@@ -73,7 +71,7 @@ export function useMessageActions({
 
       const result = await bulkDeleteMessages({
         messageIds: deleteRequest.messages.map((message) => message.messageId),
-        permanent: deleteRequest.permanent
+        permanent: true
       })
       handleBulkDeleteResult(result)
       if (result.succeededMessageIds.length > 0) {
@@ -105,7 +103,7 @@ export function useMessageActions({
 
 function handleSingleDeleteResult(result: DeleteMessageResult): void {
   if (result.deleted || result.hidden) {
-    toast.success(result.permanent ? '邮件已永久删除' : '邮件已移到废纸篓')
+    toast.success('邮件已永久删除')
     return
   }
 

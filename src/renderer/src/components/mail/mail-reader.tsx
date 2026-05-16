@@ -89,6 +89,7 @@ export function MailReader({
     setExternalContentState({ allowed: true, messageId: message.id })
   }, [message.id])
   const hasRealAttachments = message.attachments.some((attachment) => attachment.size !== '待加载')
+  const displayRecipientAddress = message.to ?? recipientAddress
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
@@ -149,7 +150,7 @@ export function MailReader({
                       label="发件人"
                       value={formatAddress(message.from, message.fromAddress)}
                     />
-                    <MetaLine label="收件人" value={recipientAddress} />
+                    <MetaLine label="收件人" value={displayRecipientAddress} />
                     {message.cc ? <MetaLine label="抄送" value={message.cc} /> : null}
                   </div>
                 </TooltipProvider>
@@ -161,50 +162,42 @@ export function MailReader({
                 >
                   {formatRelativeTime(message.receivedAt)}
                 </div>
-                <div className="flex items-center gap-1">
-                  <Button size="icon-sm" variant="ghost" disabled={actionPending} onClick={onReply}>
-                    {actionPending ? (
-                      <Loader2 className="animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Reply aria-hidden="true" />
-                    )}
-                    <span className="sr-only">回复</span>
-                  </Button>
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    disabled={actionPending}
-                    onClick={onReplyAll}
-                  >
-                    {actionPending ? (
-                      <Loader2 className="animate-spin" aria-hidden="true" />
-                    ) : (
-                      <ReplyAll aria-hidden="true" />
-                    )}
-                    <span className="sr-only">回复全部</span>
-                  </Button>
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    disabled={actionPending}
-                    onClick={onForward}
-                  >
-                    {actionPending ? (
-                      <Loader2 className="animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Forward aria-hidden="true" />
-                    )}
-                    <span className="sr-only">转发</span>
-                  </Button>
-                  <Button size="icon-sm" variant="ghost" disabled={deleting} onClick={onDelete}>
-                    {deleting ? (
-                      <Loader2 className="animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Trash2 aria-hidden="true" />
-                    )}
-                    <span className="sr-only">删除</span>
-                  </Button>
-                </div>
+                <TooltipProvider>
+                  <div className="flex items-center gap-1">
+                    <MailActionButton label="回复" disabled={actionPending} onClick={onReply}>
+                      {actionPending ? (
+                        <Loader2 className="animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Reply aria-hidden="true" />
+                      )}
+                    </MailActionButton>
+                    <MailActionButton
+                      label="回复全部"
+                      disabled={actionPending}
+                      onClick={onReplyAll}
+                    >
+                      {actionPending ? (
+                        <Loader2 className="animate-spin" aria-hidden="true" />
+                      ) : (
+                        <ReplyAll aria-hidden="true" />
+                      )}
+                    </MailActionButton>
+                    <MailActionButton label="转发" disabled={actionPending} onClick={onForward}>
+                      {actionPending ? (
+                        <Loader2 className="animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Forward aria-hidden="true" />
+                      )}
+                    </MailActionButton>
+                    <MailActionButton label="删除" disabled={deleting} onClick={onDelete}>
+                      {deleting ? (
+                        <Loader2 className="animate-spin" aria-hidden="true" />
+                      ) : (
+                        <Trash2 aria-hidden="true" />
+                      )}
+                    </MailActionButton>
+                  </div>
+                </TooltipProvider>
               </div>
             </div>
           </section>
@@ -232,6 +225,35 @@ export function MailReader({
         </article>
       </div>
     </div>
+  )
+}
+
+function MailActionButton({
+  label,
+  disabled,
+  onClick,
+  children
+}: {
+  label: string
+  disabled?: boolean
+  onClick?: () => void
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          aria-label={label}
+          disabled={disabled}
+          onClick={onClick}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -417,7 +439,7 @@ function MetaLine({ label, value }: { label: string; value: string }): React.JSX
   return (
     <div className="grid min-w-0 grid-cols-[52px_minmax(0,1fr)] gap-3">
       <span>{label}:</span>
-      <EllipsisTooltip className="min-w-0 truncate text-foreground" tooltip={value}>
+      <EllipsisTooltip alwaysShow className="min-w-0 truncate text-foreground" tooltip={value}>
         {value}
       </EllipsisTooltip>
     </div>

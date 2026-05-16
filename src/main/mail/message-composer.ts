@@ -23,6 +23,7 @@ export type PlainTextMessageInput = {
   bcc?: ComposeAddress[]
   subject?: string
   bodyText?: string
+  bodyHtml?: string
   messageId?: string
   date?: Date
   inReplyTo?: string
@@ -51,6 +52,7 @@ export function composePlainTextMessage(input: PlainTextMessageInput): ComposedM
   const date = input.date ?? new Date()
   const messageId = input.messageId ?? createMessageId(input.from.email)
   const attachments = materializeAttachments(input.attachments ?? [])
+  const bodyParts = formatBodyParts(input.bodyText ?? '', input.bodyHtml)
   const headers: Array<[string, string]> = [
     ['Message-ID', sanitizeHeaderValue(messageId)],
     ['Date', date.toUTCString()],
@@ -65,13 +67,17 @@ export function composePlainTextMessage(input: PlainTextMessageInput): ComposedM
   ]
 
   if (attachments.length === 0) {
-    headers.push(['Content-Type', 'text/plain; charset=utf-8'])
-    headers.push(['Content-Transfer-Encoding', 'quoted-printable'])
+    if (bodyParts.contentType) {
+      headers.push(['Content-Type', bodyParts.contentType])
+    } else {
+      headers.push(['Content-Type', 'text/plain; charset=utf-8'])
+      headers.push(['Content-Transfer-Encoding', 'quoted-printable'])
+    }
 
     return {
       messageId,
       date,
-      rawMime: `${formatHeaders(headers)}\r\n${encodeQuotedPrintable(input.bodyText ?? '')}`
+      rawMime: `${formatHeaders(headers)}\r\n${bodyParts.content}`
     }
   }
 
@@ -79,13 +85,7 @@ export function composePlainTextMessage(input: PlainTextMessageInput): ComposedM
   headers.push(['Content-Type', `multipart/mixed; boundary="${boundary}"`])
 
   const parts = [
-    [
-      `--${boundary}`,
-      'Content-Type: text/plain; charset=utf-8',
-      'Content-Transfer-Encoding: quoted-printable',
-      '',
-      encodeQuotedPrintable(input.bodyText ?? '')
-    ].join('\r\n'),
+    prefixMimePart(boundary, bodyParts),
     ...attachments.map((attachment) => formatAttachmentPart(boundary, attachment)),
     `--${boundary}--`
   ]
@@ -98,7 +98,11 @@ export function composePlainTextMessage(input: PlainTextMessageInput): ComposedM
 }
 
 export function createMessageId(email: string): string {
-  const domain = email.split('@').at(1)?.replace(/[<>\s]/g, '') || 'onemail.local'
+  const domain =
+    email
+      .split('@')
+      .at(1)
+      ?.replace(/[<>\s]/g, '') || 'onemail.local'
   return `<${Date.now()}.${randomBytes(12).toString('hex')}@${domain}>`
 }
 
@@ -145,6 +149,75 @@ export function dedupeAddresses(addresses: ComposeAddress[]): ComposeAddress[] {
 
 export function normalizeEmail(email: string | undefined): string {
   return email?.trim().toLowerCase() ?? ''
+}
+
+function formatBodyParts(
+  bodyText: string,
+  bodyHtml?: string
+): { contentType?: string; content: string } {
+  const html = bodyHtml?.trim()
+  if (!html) {
+    return {
+      content: encodeQuotedPrintable(bodyText)
+    }
+  }
+
+  const boundary = `onemail-alt-${randomBytes(18).toString('hex')}`
+  return {
+    contentType: `multipart/alternative; boundary="${boundary}"`,
+    content: [
+      [
+        `--${boundary}`,
+        'Content-Type: text/plain; charset=utf-8',
+        'Content-Transfer-Encoding: quoted-printable',
+        '',
+        encodeQuotedPrintable(bodyText || htmlToPlainText(html))
+      ].join('\r\n'),
+      [
+        `--${boundary}`,
+        'Content-Type: text/html; charset=utf-8',
+        'Content-Transfer-Encoding: quoted-printable',
+        '',
+        encodeQuotedPrintable(html)
+      ].join('\r\n'),
+      `--${boundary}--`
+    ].join('\r\n')
+  }
+}
+
+function prefixMimePart(
+  boundary: string,
+  bodyParts: { contentType?: string; content: string }
+): string {
+  if (bodyParts.contentType) {
+    return [`--${boundary}`, `Content-Type: ${bodyParts.contentType}`, '', bodyParts.content].join(
+      '\r\n'
+    )
+  }
+
+  return [
+    `--${boundary}`,
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: quoted-printable',
+    '',
+    bodyParts.content
+  ].join('\r\n')
+}
+
+function htmlToPlainText(value: string): string {
+  return value
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 function validateAddressList(label: string, addresses: ComposeAddress[]): void {
@@ -212,11 +285,7 @@ function foldHeader(line: string): string {
 }
 
 function encodeQuotedPrintable(value: string): string {
-  return value
-    .replace(/\r?\n/g, '\r\n')
-    .split('\r\n')
-    .map(encodeQuotedPrintableLine)
-    .join('\r\n')
+  return value.replace(/\r?\n/g, '\r\n').split('\r\n').map(encodeQuotedPrintableLine).join('\r\n')
 }
 
 function encodeQuotedPrintableLine(line: string): string {
@@ -231,8 +300,9 @@ function encodeQuotedPrintableLine(line: string): string {
     }
   }
 
-  encoded = encoded.replace(/[ \t]$/g, (char) =>
-    `=${char.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`
+  encoded = encoded.replace(
+    /[ \t]$/g,
+    (char) => `=${char.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`
   )
 
   const chunks: string[] = []
@@ -248,7 +318,9 @@ function encodeQuotedPrintableLine(line: string): string {
 function materializeAttachments(attachments: ComposeAttachment[]): Required<ComposeAttachment>[] {
   const materialized = attachments.map((attachment) => {
     const content = attachment.content ?? readAttachmentFile(attachment)
-    const filename = sanitizeHeaderValue(attachment.filename ?? basename(attachment.filePath ?? 'attachment'))
+    const filename = sanitizeHeaderValue(
+      attachment.filename ?? basename(attachment.filePath ?? 'attachment')
+    )
 
     return {
       filename,
@@ -274,19 +346,21 @@ function readAttachmentFile(attachment: ComposeAttachment): Buffer {
   return readFileSync(attachment.filePath)
 }
 
-function formatAttachmentPart(
-  boundary: string,
-  attachment: Required<ComposeAttachment>
-): string {
+function formatAttachmentPart(boundary: string, attachment: Required<ComposeAttachment>): string {
   const encodedName = encodeHeaderValue(attachment.filename)
   const headers = [
     `--${boundary}`,
     `Content-Type: ${attachment.mimeType}; name="${encodedName}"`,
     'Content-Transfer-Encoding: base64',
     `Content-Disposition: attachment; filename="${encodedName}"`,
-    ...(attachment.contentId ? [`Content-ID: <${attachment.contentId.replace(/^<|>$/g, '')}>`] : []),
+    ...(attachment.contentId
+      ? [`Content-ID: <${attachment.contentId.replace(/^<|>$/g, '')}>`]
+      : []),
     '',
-    attachment.content.toString('base64').replace(/.{1,76}/g, '$&\r\n').trimEnd()
+    attachment.content
+      .toString('base64')
+      .replace(/.{1,76}/g, '$&\r\n')
+      .trimEnd()
   ]
 
   return headers.join('\r\n')
@@ -294,6 +368,7 @@ function formatAttachmentPart(
 
 function parseMessageIdList(value?: string | null): string[] {
   if (!value) return []
-  return Array.from(value.matchAll(/<[^<>\s]+>/g), (match) => normalizeMessageId(match[0]))
-    .filter((item): item is string => Boolean(item))
+  return Array.from(value.matchAll(/<[^<>\s]+>/g), (match) => normalizeMessageId(match[0])).filter(
+    (item): item is string => Boolean(item)
+  )
 }

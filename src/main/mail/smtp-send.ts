@@ -37,6 +37,7 @@ export type SmtpSendInput = {
   bcc?: ComposeAddress[]
   subject?: string
   bodyText?: string
+  bodyHtml?: string
   inReplyTo?: string
   references?: string
   attachments?: ComposeAttachment[]
@@ -108,6 +109,7 @@ export async function sendPlainTextEmail(input: SmtpSendInput): Promise<SmtpSend
         bcc: input.bcc,
         subject: input.subject,
         bodyText: input.bodyText,
+        bodyHtml: input.bodyHtml,
         attachments: input.attachments,
         rawMime: composed.rawMime
       })
@@ -170,6 +172,7 @@ export async function retryOutboxEmail(outboxId: number): Promise<SmtpSendResult
     bcc: outbox.bcc,
     subject: outbox.subject,
     bodyText: outbox.bodyText,
+    bodyHtml: outbox.bodyHtml,
     inReplyTo: outbox.inReplyTo,
     references: outbox.referencesHeader,
     attachments: outbox.attachments,

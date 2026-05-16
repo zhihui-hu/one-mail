@@ -204,6 +204,7 @@ export type ComposeDraft = {
   bcc: MailAddressInput[]
   subject?: string
   bodyText?: string
+  bodyHtml?: string
   inReplyTo?: string
   referencesHeader?: string
   forwardAttachments?: ForwardAttachmentCandidate[]

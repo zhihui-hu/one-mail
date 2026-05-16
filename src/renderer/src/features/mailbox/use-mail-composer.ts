@@ -33,6 +33,7 @@ export function useMailComposer({ accounts, selectedAccount, setError }: UseMail
   closeComposer: () => void
   sendComposerDraft: (input: SendMessageInput) => Promise<void>
   saveComposerDraft: (input: SendMessageInput) => Promise<void>
+  discardComposerDraft: () => void
 } {
   const [composer, setComposer] = React.useState<ComposerState>({ open: false, draft: null })
   const [composerPending, setComposerPending] = React.useState(false)
@@ -89,6 +90,7 @@ export function useMailComposer({ accounts, selectedAccount, setError }: UseMail
           bcc: outbox.bcc,
           subject: outbox.subject,
           bodyText: outbox.bodyText,
+          bodyHtml: outbox.bodyHtml,
           attachments: outbox.attachments,
           inReplyTo: outbox.inReplyTo,
           references: outbox.references
@@ -142,6 +144,7 @@ export function useMailComposer({ accounts, selectedAccount, setError }: UseMail
             bcc: savedDraft.bcc,
             subject: savedDraft.subject,
             bodyText: savedDraft.bodyText,
+            bodyHtml: savedDraft.bodyHtml,
             attachments: savedDraft.attachments,
             inReplyTo: savedDraft.inReplyTo,
             references: savedDraft.references
@@ -159,6 +162,11 @@ export function useMailComposer({ accounts, selectedAccount, setError }: UseMail
     [setError]
   )
 
+  const discardComposerDraft = React.useCallback((): void => {
+    if (composerPending) return
+    setComposer({ open: false, draft: null })
+  }, [composerPending])
+
   return {
     composerOpen: composer.open,
     composerDraft: composer.draft,
@@ -167,7 +175,8 @@ export function useMailComposer({ accounts, selectedAccount, setError }: UseMail
     openOutboxDraft,
     closeComposer,
     sendComposerDraft,
-    saveComposerDraft
+    saveComposerDraft,
+    discardComposerDraft
   }
 }
 

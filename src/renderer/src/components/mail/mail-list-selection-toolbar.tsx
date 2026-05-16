@@ -8,7 +8,6 @@ type MailListSelectionToolbarProps = {
   selectedCount: number
   allVisibleSelected: boolean
   someVisibleSelected: boolean
-  permanentDeleteAvailable?: boolean
   disabled?: boolean
   onSelectAllVisible: () => void
   onClearSelection: () => void
@@ -19,7 +18,6 @@ export function MailListSelectionToolbar({
   selectedCount,
   allVisibleSelected,
   someVisibleSelected,
-  permanentDeleteAvailable = false,
   disabled = false,
   onSelectAllVisible,
   onClearSelection,
@@ -38,7 +36,7 @@ export function MailListSelectionToolbar({
       </span>
       <Button size="sm" variant="outline" disabled={disabled} onClick={onDeleteSelected}>
         <Trash2 data-icon="inline-start" />
-        {permanentDeleteAvailable ? '永久删除' : '移到废纸篓'}
+        永久删除
       </Button>
       <Button
         size="icon-sm"

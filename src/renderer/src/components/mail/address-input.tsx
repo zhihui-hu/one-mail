@@ -3,12 +3,15 @@ import { X } from 'lucide-react'
 
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import { cn } from '@renderer/lib/utils'
 
 type AddressInputProps = {
   id: string
   value: string[]
   placeholder?: string
   disabled?: boolean
+  variant?: 'default' | 'ghost'
+  className?: string
   onChange: (value: string[]) => void
 }
 
@@ -17,6 +20,8 @@ export function AddressInput({
   value,
   placeholder,
   disabled,
+  variant = 'default',
+  className,
   onChange
 }: AddressInputProps): React.JSX.Element {
   const [draft, setDraft] = React.useState('')
@@ -39,7 +44,15 @@ export function AddressInput({
   }
 
   return (
-    <div className="flex min-h-8 w-full min-w-0 flex-wrap items-center gap-1.5 rounded-lg border border-input bg-background px-2 py-1 focus-within:ring-2 focus-within:ring-ring/50">
+    <div
+      className={cn(
+        'flex min-h-8 w-full min-w-0 flex-wrap items-center gap-1.5 px-2 py-1',
+        variant === 'default'
+          ? 'rounded-lg border border-input bg-background focus-within:ring-2 focus-within:ring-ring/50'
+          : 'rounded-none border-0 bg-transparent px-0 py-0 focus-within:ring-0',
+        className
+      )}
+    >
       {value.map((address) => (
         <span
           key={address}

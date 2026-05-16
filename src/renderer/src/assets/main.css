@@ -134,6 +134,63 @@
     user-select: text;
   }
 
+  .prose-mail p {
+    margin: 0 0 0.75rem;
+  }
+
+  .prose-mail p:last-child {
+    margin-bottom: 0;
+  }
+
+  .prose-mail ul,
+  .prose-mail ol {
+    margin: 0 0 0.75rem 1.25rem;
+    padding-left: 1rem;
+  }
+
+  .prose-mail ul {
+    list-style: disc;
+  }
+
+  .prose-mail ol {
+    list-style: decimal;
+  }
+
+  .prose-mail a {
+    color: var(--primary);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .prose-mail blockquote {
+    margin: 0 0 0.75rem;
+    border-left: 2px solid var(--border);
+    padding-left: 0.75rem;
+    color: var(--muted-foreground);
+  }
+
+  .prose-mail pre {
+    overflow-x: auto;
+    border-radius: var(--radius-md);
+    background: var(--muted);
+    padding: 0.75rem;
+  }
+
+  .prose-mail code {
+    border-radius: var(--radius-sm);
+    background: var(--muted);
+    padding: 0.1rem 0.25rem;
+    font-size: 0.92em;
+  }
+
+  .prose-mail .is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    color: var(--muted-foreground);
+    pointer-events: none;
+  }
+
   [data-slot='resizable-handle'] {
     cursor: col-resize;
     touch-action: none;
@@ -146,5 +203,4 @@
   #root {
     min-height: 100vh;
   }
-
 }

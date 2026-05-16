@@ -1,5 +1,15 @@
 import * as React from 'react'
-import { AlertTriangle, ChevronRight, Edit3, Mail, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import {
+  AlertTriangle,
+  ChevronRight,
+  Edit3,
+  Mail,
+  MailWarning,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2
+} from 'lucide-react'
 
 import type { Account } from '@renderer/components/mail/types'
 import { Badge } from '@renderer/components/ui/badge'
@@ -25,7 +35,12 @@ type AccountListProps = {
   accounts: Account[]
   selectedAccountId: string
   syncingAccountIds: Set<string>
+  actionsDisabled: boolean
+  composePending: boolean
+  outboxPending: boolean
   onSelectAccount: (accountId: string) => void
+  onCompose: () => void
+  onOpenOutbox: () => void
   onRefreshAccount: (account: Account) => void
   onEditAccount: (account: Account) => void
   onDeleteAccount: (account: Account) => void
@@ -42,7 +57,12 @@ export function AccountList({
   accounts,
   selectedAccountId,
   syncingAccountIds,
+  actionsDisabled,
+  composePending,
+  outboxPending,
   onSelectAccount,
+  onCompose,
+  onOpenOutbox,
   onRefreshAccount,
   onEditAccount,
   onDeleteAccount,
@@ -66,6 +86,36 @@ export function AccountList({
 
   return (
     <aside className="flex h-full min-w-0 flex-col bg-card/60 text-xs text-foreground">
+      <div className="shrink-0 border-b px-2 py-2">
+        <TooltipProvider>
+          <div className="flex items-center gap-1.5">
+            <Button
+              className="min-w-0 flex-1"
+              size="sm"
+              aria-label="写邮件"
+              disabled={actionsDisabled || composePending}
+              onClick={onCompose}
+            >
+              <Pencil data-icon="inline-start" />
+              写信
+            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label="发送记录"
+                  disabled={actionsDisabled || outboxPending}
+                  onClick={onOpenOutbox}
+                >
+                  <MailWarning aria-hidden="true" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">发送记录</TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
+      </div>
       <div className="min-h-0 flex-1 overflow-auto px-1.5 py-1.5">
         <TooltipProvider>
           <div className="flex flex-col gap-0.5">

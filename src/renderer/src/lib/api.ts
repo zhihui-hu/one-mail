@@ -53,6 +53,7 @@ export type ComposeDraft = {
   bcc: string[]
   subject: string
   bodyText: string
+  bodyHtml?: string
   attachments?: MailAttachmentInput[]
   inReplyTo?: string
   references?: string
@@ -68,6 +69,7 @@ export type SendMessageInput = {
   bcc?: string[]
   subject: string
   bodyText: string
+  bodyHtml?: string
   attachments?: MailAttachmentInput[]
   attachmentPaths?: string[]
   inReplyTo?: string
@@ -127,6 +129,7 @@ export type OutboxMessage = {
   bcc: string[]
   subject: string
   bodyText: string
+  bodyHtml?: string
   attachments: MailAttachmentInput[]
   inReplyTo?: string
   references?: string
@@ -362,7 +365,7 @@ export async function deleteDraftMessage(outboxId: number): Promise<boolean> {
 export async function deleteMessage(input: DeleteMessageInput): Promise<DeleteMessageResult> {
   const result = await window.api.messages.delete({
     messageId: input.messageId,
-    mode: input.permanent ? 'permanent' : 'trash'
+    mode: 'permanent'
   })
   return {
     messageId: result.messageId,
@@ -378,7 +381,7 @@ export async function bulkDeleteMessages(
 ): Promise<BulkDeleteMessagesResult> {
   return window.api.messages.bulkDelete({
     messageIds: input.messageIds,
-    mode: input.permanent ? 'permanent' : 'trash'
+    mode: 'permanent'
   })
 }
 
@@ -520,7 +523,8 @@ function createLocalDraft(input: ComposeDraftInput): ComposeDraft {
     cc: [],
     bcc: [],
     subject: '',
-    bodyText: ''
+    bodyText: '',
+    bodyHtml: undefined
   }
 }
 
@@ -534,6 +538,7 @@ function toUiComposeDraft(draft: SharedComposeDraft): ComposeDraft {
     bcc: draft.bcc.map(formatAddressInput),
     subject: draft.subject ?? '',
     bodyText: draft.bodyText ?? '',
+    bodyHtml: draft.bodyHtml,
     inReplyTo: draft.inReplyTo,
     references: draft.referencesHeader
   }
@@ -551,6 +556,7 @@ function toUiOutboxMessage(message: SharedOutboxMessage): OutboxMessage {
     bcc: message.bcc.map(formatAddressInput),
     subject: message.subject ?? '',
     bodyText: message.bodyText ?? '',
+    bodyHtml: message.bodyHtml,
     attachments: message.attachments ?? [],
     inReplyTo: message.inReplyTo,
     references: message.referencesHeader,
@@ -571,6 +577,7 @@ function toSharedSendInput(input: SendMessageInput): MailSendInput {
     bcc: input.bcc?.map(parseAddressInput),
     subject: input.subject,
     bodyText: input.bodyText,
+    bodyHtml: input.bodyHtml,
     inReplyTo: input.inReplyTo,
     referencesHeader: input.references,
     attachments: input.attachments ?? input.attachmentPaths?.map((filePath) => ({ filePath }))

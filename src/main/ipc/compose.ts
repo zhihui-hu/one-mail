@@ -37,6 +37,7 @@ export function registerComposeIpc(): void {
       bcc: draft.bcc,
       subject: draft.subject,
       bodyText: draft.bodyText,
+      bodyHtml: undefined,
       inReplyTo: draft.inReplyTo,
       referencesHeader: draft.references
     } satisfies ComposeDraft
@@ -53,6 +54,7 @@ export function registerComposeIpc(): void {
       bcc: draft.bcc,
       subject: draft.subject,
       bodyText: draft.bodyText,
+      bodyHtml: undefined,
       forwardAttachments: draft.attachmentCandidates.map((attachment) => ({
         attachmentId: attachment.attachmentId,
         filename: attachment.filename,
@@ -74,6 +76,7 @@ export function registerComposeIpc(): void {
       bcc: input.bcc,
       subject: input.subject,
       bodyText: input.bodyText,
+      bodyHtml: input.bodyHtml,
       inReplyTo: input.inReplyTo,
       references: input.referencesHeader,
       attachments: input.attachments?.map((attachment) => ({

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Trash2 } from 'lucide-react'
+import { Loader2, Trash2 } from 'lucide-react'
 
 import type { Message } from '@renderer/components/mail/types'
 import {
@@ -16,7 +16,6 @@ import {
 
 type DeleteMessageDialogProps = {
   messages: Message[]
-  permanent: boolean
   open: boolean
   pending?: boolean
   onOpenChange: (open: boolean) => void
@@ -25,17 +24,18 @@ type DeleteMessageDialogProps = {
 
 export function DeleteMessageDialog({
   messages,
-  permanent,
   open,
   pending = false,
   onOpenChange,
   onConfirm
 }: DeleteMessageDialogProps): React.JSX.Element {
   const count = messages.length
-  const title = permanent ? '永久删除邮件' : '删除邮件'
-  const description = permanent
-    ? `将永久删除 ${count} 封废纸篓中的邮件。这个操作无法撤销。`
-    : `将 ${count} 封邮件移到废纸篓。`
+  const firstMessage = messages[0]
+  const subject = firstMessage?.subject?.trim() || '无主题邮件'
+  const meta =
+    count === 1
+      ? [firstMessage?.from, firstMessage?.dateLabel || firstMessage?.time].filter(Boolean).join(' · ')
+      : '这些邮件会立即从远端邮箱中删除'
 
   return (
     <AlertDialog
@@ -44,15 +44,27 @@ export function DeleteMessageDialog({
         if (!pending) onOpenChange(nextOpen)
       }}
     >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogMedia>
-            <Trash2 aria-hidden="true" />
+      <AlertDialogContent size="sm" className="sm:max-w-[360px]">
+        <AlertDialogHeader className="gap-2">
+          <AlertDialogMedia className="bg-destructive/10 text-destructive ring-1 ring-destructive/20">
+            {pending ? (
+              <Loader2 className="animate-spin" aria-hidden="true" />
+            ) : (
+              <Trash2 aria-hidden="true" />
+            )}
           </AlertDialogMedia>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description}</AlertDialogDescription>
+          <AlertDialogTitle className="font-semibold">永久删除邮件？</AlertDialogTitle>
+          <AlertDialogDescription className="leading-5">
+            删除后无法从 OneMail 恢复，请确认后继续。
+          </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
+        <div className="min-w-0 rounded-lg border bg-muted/40 px-3 py-2.5 text-left">
+          <p className="truncate text-sm font-medium text-foreground">
+            {count === 1 ? subject : `${count} 封邮件`}
+          </p>
+          <p className="mt-1 truncate text-xs text-muted-foreground">{meta}</p>
+        </div>
+        <AlertDialogFooter className="bg-background">
           <AlertDialogCancel disabled={pending}>取消</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
@@ -62,7 +74,7 @@ export function DeleteMessageDialog({
               onConfirm()
             }}
           >
-            {pending ? '删除中...' : permanent ? '永久删除' : '移到废纸篓'}
+            {pending ? '删除中...' : '永久删除'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

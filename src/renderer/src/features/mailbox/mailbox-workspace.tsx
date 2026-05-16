@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { MailWarning, Pencil } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router'
 import { AccountList } from '@renderer/components/account/account-list'
 import { AccountWarningDialog } from '@renderer/components/account/account-warning-dialog'
@@ -19,7 +18,6 @@ import {
   ResizablePanelGroup,
   ResizablePrimitive
 } from '@renderer/components/ui/resizable'
-import { Button } from '@renderer/components/ui/button'
 import type {
   AccountUpdateInput,
   AppSettings,
@@ -174,7 +172,8 @@ export function MailboxWorkspace(): React.JSX.Element {
     openOutboxDraft,
     closeComposer,
     sendComposerDraft,
-    saveComposerDraft
+    saveComposerDraft,
+    discardComposerDraft
   } = useMailComposer({
     accounts,
     selectedAccount,
@@ -570,6 +569,20 @@ export function MailboxWorkspace(): React.JSX.Element {
     await refreshOutbox()
   }
 
+  async function handleDiscardComposerDraft(draftId: number): Promise<void> {
+    setError(null)
+    try {
+      await deleteDraftMessage(draftId)
+      discardComposerDraft()
+      toast.success('草稿已丢弃')
+      await refreshOutbox()
+    } catch (discardError) {
+      const messageText = getErrorMessage(discardError, '丢弃草稿失败。')
+      setError(messageText)
+      toast.error(messageText)
+    }
+  }
+
   async function handleRetryOutbox(message: OutboxMessage): Promise<void> {
     setOutboxPending(true)
     setError(null)
@@ -648,30 +661,6 @@ export function MailboxWorkspace(): React.JSX.Element {
           onAddAccount={handleOpenAddAccountWindow}
           onOpenSettings={() => setDialogKind('settings')}
         />
-        <div className="app-no-drag absolute top-1 right-28 flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            aria-label="发送记录"
-            disabled={!hasAccounts || outboxPending}
-            onClick={() => setOutboxOpen(true)}
-          >
-            <MailWarning data-icon="inline-start" />
-            记录
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            aria-label="写邮件"
-            disabled={!hasAccounts || composerPending}
-            onClick={() => {
-              void openComposer('new')
-            }}
-          >
-            <Pencil data-icon="inline-start" />
-            写信
-          </Button>
-        </div>
       </div>
 
       {showNoAccounts ? (
@@ -700,7 +689,14 @@ export function MailboxWorkspace(): React.JSX.Element {
               accounts={accounts}
               selectedAccountId={selectedAccountId}
               syncingAccountIds={syncingAccountIds}
+              actionsDisabled={!hasAccounts}
+              composePending={composerPending}
+              outboxPending={outboxPending}
               onSelectAccount={handleSelectAccount}
+              onCompose={() => {
+                void openComposer('new')
+              }}
+              onOpenOutbox={() => setOutboxOpen(true)}
               onRefreshAccount={(account) => {
                 void handleRefreshAccount(account)
               }}
@@ -866,6 +862,7 @@ export function MailboxWorkspace(): React.JSX.Element {
         }}
         onSend={sendComposerDraft}
         onSaveDraft={handleSaveComposerDraft}
+        onDiscardDraft={handleDiscardComposerDraft}
       />
       <OutboxPanel
         open={outboxOpen}
@@ -891,7 +888,6 @@ export function MailboxWorkspace(): React.JSX.Element {
       <DeleteMessageDialog
         open={Boolean(deleteRequest)}
         messages={deleteRequest?.messages ?? []}
-        permanent={deleteRequest?.permanent ?? false}
         pending={deleting}
         onOpenChange={(open) => {
           if (!open) cancelDelete()

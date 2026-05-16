@@ -4,7 +4,6 @@ import {
   markMessageDeleteError,
   markMessageRemoteDeleted,
   restoreMessageLocally,
-  markMessageUserDeleted,
   markMessageUserHidden,
   type MessageDeleteTarget
 } from '../db/repositories/message.repository'
@@ -16,12 +15,11 @@ export type MessageDeleteResult = {
   messageId: number
   accountId: number
   folderId: number
-  action: 'move_to_trash' | 'permanent_delete' | 'local_hide' | 'restore'
+  action: 'permanent_delete' | 'local_hide' | 'restore'
   localOnly?: boolean
 }
 
 export type BulkDeleteOptions = {
-  permanent?: boolean
   localOnly?: boolean
 }
 
@@ -37,53 +35,8 @@ export type BulkDeleteResult = {
   failedCount: number
 }
 
-export async function deleteMessageToTrash(messageId: number): Promise<MessageDeleteResult> {
-  const target = requireDeleteTarget(messageId)
-  if (isTrashTarget(target)) return permanentlyDeleteMessage(messageId)
-
-  const trash = findFolderByRole(target.accountId, 'trash')
-  if (!trash) {
-    throw new Error('未找到该账号的废纸篓文件夹，无法移动删除。')
-  }
-
-  const account = getAccount(target.accountId)
-  if (!account) throw new Error(`Account not found: ${target.accountId}`)
-
-  const client = await SimpleImapSession.connect(account, 'D')
-
-  try {
-    await authenticateImapSession(account, client)
-    const capabilities = await client.capability().catch(() => new Set<string>())
-    await client.selectMailbox(target.folderPath)
-
-    if (capabilities.has('MOVE')) {
-      await client.uidMove(target.uid, trash.path)
-    } else {
-      await client.uidCopy(target.uid, trash.path)
-      await client.setDeletedFlag(target.uid, true)
-      await client.expunge()
-    }
-
-    markMessageUserDeleted(messageId)
-    return {
-      messageId,
-      accountId: target.accountId,
-      folderId: target.folderId,
-      action: 'move_to_trash'
-    }
-  } catch (error) {
-    markMessageDeleteError(messageId, getErrorMessage(error))
-    throw error
-  } finally {
-    await client.logout().catch(() => undefined)
-  }
-}
-
 export async function permanentlyDeleteMessage(messageId: number): Promise<MessageDeleteResult> {
   const target = requireDeleteTarget(messageId)
-  if (!isTrashTarget(target)) {
-    throw new Error('只有废纸篓中的邮件可以永久删除。')
-  }
 
   const account = getAccount(target.accountId)
   if (!account) throw new Error(`Account not found: ${target.accountId}`)
@@ -233,29 +186,13 @@ export async function bulkDelete(
 
     try {
       await authenticateImapSession(account, client)
-      const capabilities = await client.capability().catch(() => new Set<string>())
       await client.selectMailbox(group.folderPath)
 
       for (const target of group.targets) {
         try {
-          if (options.permanent || isTrashTarget(target)) {
-            await client.setDeletedFlag(target.uid, true)
-            await client.expunge()
-            markMessageRemoteDeleted(target.messageId)
-          } else {
-            const trash = findFolderByRole(target.accountId, 'trash')
-            if (!trash) throw new Error('未找到该账号的废纸篓文件夹，无法移动删除。')
-
-            if (capabilities.has('MOVE')) {
-              await client.uidMove(target.uid, trash.path)
-            } else {
-              await client.uidCopy(target.uid, trash.path)
-              await client.setDeletedFlag(target.uid, true)
-              await client.expunge()
-            }
-
-            markMessageUserDeleted(target.messageId)
-          }
+          await client.setDeletedFlag(target.uid, true)
+          await client.expunge()
+          markMessageRemoteDeleted(target.messageId)
 
           succeededMessageIds.push(target.messageId)
         } catch (error) {

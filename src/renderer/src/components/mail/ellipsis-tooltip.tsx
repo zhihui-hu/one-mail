@@ -9,10 +9,12 @@ import {
 export function EllipsisTooltip({
   children,
   className,
+  alwaysShow = false,
   tooltip
 }: {
   children: React.ReactNode
   className?: string
+  alwaysShow?: boolean
   tooltip: string
 }): React.JSX.Element {
   const textRef = React.useRef<HTMLSpanElement>(null)
@@ -49,13 +51,14 @@ export function EllipsisTooltip({
     }
   }, [tooltip, children])
 
+  const showTooltip = alwaysShow || isTruncated
   const text = (
-    <span ref={textRef} className={className} title={isTruncated ? tooltip : undefined}>
+    <span ref={textRef} className={className} title={showTooltip ? tooltip : undefined}>
       {children}
     </span>
   )
 
-  if (!isTruncated) return text
+  if (!showTooltip) return text
 
   return (
     <Tooltip>
