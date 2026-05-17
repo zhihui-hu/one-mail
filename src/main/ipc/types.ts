@@ -1,10 +1,12 @@
 export type {
   AccountCreateInput,
   AccountCreatedEvent,
+  AccountSyncRunResult,
   AccountStatus,
   AccountMailboxStats,
   AccountUpdateInput,
   AppSettings,
+  AppUpdateCheckResult,
   AttachmentDownloadResult,
   BackupImportResult,
   CredentialState,

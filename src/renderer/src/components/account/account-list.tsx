@@ -27,6 +27,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from '@renderer/components/ui/tooltip'
+import { useI18n, type TranslationKey } from '@renderer/lib/i18n'
 import { cn } from '@renderer/lib/utils'
 import oneMailIcon from '../../assets/onemail-icon.png'
 import { getAccountWarning } from './account-warning'
@@ -68,9 +69,10 @@ export function AccountList({
   onDeleteAccount,
   onResolveAccountWarning
 }: AccountListProps): React.JSX.Element {
+  const { t } = useI18n()
   const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(() => new Set())
   const allAccount = accounts.find((account) => account.id === 'all')
-  const groups = groupAccountsByProvider(accounts.filter((account) => account.id !== 'all'))
+  const groups = groupAccountsByProvider(accounts.filter((account) => account.id !== 'all'), t)
 
   function toggleGroup(groupKey: string): void {
     setCollapsedGroups((current) => {
@@ -92,26 +94,26 @@ export function AccountList({
             <Button
               className="min-w-0 flex-1"
               size="sm"
-              aria-label="写邮件"
+              aria-label={t('account.list.compose')}
               disabled={actionsDisabled || composePending}
               onClick={onCompose}
             >
               <Pencil data-icon="inline-start" />
-              写信
+              {t('account.list.compose')}
             </Button>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="outline"
                   size="icon-sm"
-                  aria-label="发送记录"
+                  aria-label={t('account.list.outbox')}
                   disabled={actionsDisabled || outboxPending}
                   onClick={onOpenOutbox}
                 >
                   <MailWarning aria-hidden="true" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">发送记录</TooltipContent>
+              <TooltipContent side="bottom">{t('account.list.outbox')}</TooltipContent>
             </Tooltip>
           </div>
         </TooltipProvider>
@@ -197,8 +199,9 @@ function AccountRow({
   onDelete: () => void
   onResolveWarning: () => void
 }): React.JSX.Element {
+  const { t } = useI18n()
   const canModify = Boolean(account.accountId)
-  const warning = getAccountWarning(account)
+  const warning = getAccountWarning(account, t)
   const handleSelect = warning ? onResolveWarning : onClick
   const rowContent = (
     <div
@@ -217,7 +220,7 @@ function AccountRow({
       >
         <ProviderLogo account={account} selected={selected} warning={Boolean(warning)} />
         <span className="flex min-w-0 items-center gap-1">
-          <span className="truncate font-medium">{account.name}</span>
+          <span className="truncate font-medium">{getAccountDisplayName(account, t)}</span>
           {warning ? (
             <AlertTriangle
               className="size-3.5 shrink-0 text-warning-foreground"
@@ -241,7 +244,7 @@ function AccountRow({
         )}
         <button
           type="button"
-          aria-label="刷新账号"
+          aria-label={t('account.list.refreshAccount')}
           className={cn(
             'hidden size-5 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-background hover:text-foreground focus-visible:inline-flex focus-visible:ring-2 focus-visible:ring-ring group-hover:inline-flex [&_svg]:size-3',
             syncing && 'inline-flex'
@@ -273,23 +276,23 @@ function AccountRow({
         <ContextMenuGroup>
           <ContextMenuItem onSelect={warning ? onResolveWarning : onRefresh}>
             {warning ? <AlertTriangle strokeWidth={2} /> : <RefreshCw strokeWidth={2} />}
-            {warning ? '解决异常' : '刷新'}
+            {warning ? t('account.list.resolveWarning') : t('common.refresh')}
           </ContextMenuItem>
           {warning ? (
             <ContextMenuItem onSelect={onRefresh}>
               <RefreshCw strokeWidth={2} />
-              重新同步
+              {t('account.list.resync')}
             </ContextMenuItem>
           ) : null}
           {canModify ? (
             <>
               <ContextMenuItem onSelect={onEdit}>
                 <Edit3 strokeWidth={2} />
-                编辑
+                {t('common.edit')}
               </ContextMenuItem>
               <ContextMenuItem variant="destructive" onSelect={onDelete}>
                 <Trash2 strokeWidth={2} />
-                删除
+                {t('common.delete')}
               </ContextMenuItem>
             </>
           ) : null}
@@ -346,20 +349,30 @@ function ProviderLogo({
   )
 }
 
+function getAccountDisplayName(account: Account, t: (key: TranslationKey) => string): string {
+  if (account.id === 'all') return t('account.all.name')
+  return account.name || account.address || t('account.empty.name')
+}
+
 function EmptyAccounts(): React.JSX.Element {
+  const { t } = useI18n()
+
   return (
     <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-4 text-center text-muted-foreground">
-      <div className="font-medium text-foreground">暂无账号</div>
-      <div className="max-w-44">可添加 Gmail、Outlook、163、QQ 或自定义 IMAP 账号。</div>
+      <div className="font-medium text-foreground">{t('account.list.emptyTitle')}</div>
+      <div className="max-w-44">{t('account.list.emptyDescription')}</div>
       <Button variant="outline" size="sm" disabled>
         <Plus data-icon="inline-start" />
-        使用顶部按钮
+        {t('account.list.useTopButton')}
       </Button>
     </div>
   )
 }
 
-function groupAccountsByProvider(accounts: Account[]): AccountGroup[] {
+function groupAccountsByProvider(
+  accounts: Account[],
+  t: (key: TranslationKey) => string
+): AccountGroup[] {
   const groups = new Map<string, Account[]>()
 
   for (const account of accounts) {
@@ -371,7 +384,7 @@ function groupAccountsByProvider(accounts: Account[]): AccountGroup[] {
     .sort(([first], [second]) => first.localeCompare(second))
     .map(([key, groupAccounts]) => ({
       key,
-      label: getProviderLabel(key),
+      label: getProviderLabel(key, t),
       accounts: groupAccounts.sort((first, second) => first.address.localeCompare(second.address))
     }))
 }
@@ -387,17 +400,18 @@ function normalizeProviderKey(providerKey?: string): string {
   return normalized
 }
 
-function getProviderLabel(providerKey: string): string {
-  const labels: Record<string, string> = {
-    gmail: 'Gmail',
-    outlook: 'Outlook',
-    '163': '163 邮箱',
-    qq: 'QQ 邮箱',
-    custom: '自定义 IMAP',
-    manual: '自定义 IMAP'
+function getProviderLabel(providerKey: string, t: (key: TranslationKey) => string): string {
+  const labels: Record<string, TranslationKey> = {
+    gmail: 'account.provider.gmail',
+    outlook: 'account.provider.outlook',
+    '163': 'account.provider.netease163',
+    qq: 'account.provider.qq',
+    custom: 'account.provider.custom',
+    manual: 'account.provider.custom'
   }
 
-  return labels[providerKey] ?? providerKey
+  const labelKey = labels[providerKey]
+  return labelKey ? t(labelKey) : providerKey
 }
 
 function getProviderLogoDomain(account: Account): string {

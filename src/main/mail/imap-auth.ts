@@ -2,6 +2,7 @@ import type { getAccount } from '../db/repositories/account.repository'
 import { readAccountPassword } from '../services/credential-store'
 import {
   getMicrosoftAccessToken,
+  MICROSOFT_LONG_OPERATION_REFRESH_SKEW_MS,
   refreshMicrosoftAccessToken,
   type MicrosoftAccessTokenResult
 } from '../services/microsoft-oauth'
@@ -31,7 +32,9 @@ async function authenticateXOAuth2WithRefreshRetry(
   account: ImapAccount,
   session: ImapLoginSession
 ): Promise<void> {
-  const token = await getMicrosoftAccessToken(account.accountId)
+  const token = await getMicrosoftAccessToken(account.accountId, {
+    refreshSkewMs: MICROSOFT_LONG_OPERATION_REFRESH_SKEW_MS
+  })
   try {
     await authenticateWithMicrosoftToken(account, session, token)
   } catch (error) {

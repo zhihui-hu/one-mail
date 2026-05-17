@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import { useI18n } from '@renderer/lib/i18n'
 import { cn } from '@renderer/lib/utils'
 
 type AddressInputProps = {
@@ -24,6 +25,7 @@ export function AddressInput({
   className,
   onChange
 }: AddressInputProps): React.JSX.Element {
+  const { t } = useI18n()
   const [draft, setDraft] = React.useState('')
 
   function commitDraft(): void {
@@ -63,7 +65,7 @@ export function AddressInput({
             type="button"
             size="icon-xs"
             variant="ghost"
-            aria-label={`移除 ${address}`}
+            aria-label={t('common.removeAddress', { address })}
             disabled={disabled}
             onClick={() => removeAddress(address)}
           >

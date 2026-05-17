@@ -24,4 +24,16 @@ describe('composePlainTextMessage', () => {
     expect(message.rawMime).toContain('original.txt')
     expect(message.rawMime).toContain(Buffer.from('forwarded content', 'utf8').toString('base64'))
   })
+
+  it('keeps plain text messages single-part when no attachments are selected', () => {
+    const message = composePlainTextMessage({
+      from: { email: 'sender@example.com' },
+      to: [{ email: 'recipient@example.com' }],
+      subject: 'No attachments',
+      bodyText: 'Just text.'
+    })
+
+    expect(message.rawMime).not.toContain('Content-Type: multipart/mixed;')
+    expect(message.rawMime).toContain('Content-Type: text/plain; charset=utf-8')
+  })
 })

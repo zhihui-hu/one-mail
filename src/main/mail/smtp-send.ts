@@ -15,7 +15,11 @@ import {
 } from '../db/repositories/outbox.repository'
 import { getMessageComposeSource, markMessageAnswered } from '../db/repositories/message.repository'
 import { readAccountPassword } from '../services/credential-store'
-import { getMicrosoftAccessToken } from '../services/microsoft-oauth'
+import {
+  getMicrosoftAccessToken,
+  refreshMicrosoftAccessToken,
+  type MicrosoftAccessTokenResult
+} from '../services/microsoft-oauth'
 import {
   composePlainTextMessage,
   type ComposeAddress,
@@ -205,40 +209,59 @@ async function deliverRawEmail(input: SmtpDeliveryInput): Promise<{ envelopeId?:
   const from = input.from ?? resolveFromAddress(input.accountId)
   const auth = await resolveSmtpAuth(account, smtpAccount)
   const nodemailer = await loadNodemailer()
-  const transport = nodemailer.createTransport({
-    host: smtpConfig.host,
-    port: smtpConfig.port,
-    secure: smtpConfig.security === 'ssl_tls',
-    requireTLS: smtpConfig.security === 'starttls',
-    auth
-  })
-
-  const result = await transport.sendMail({
+  const message = {
     envelope: {
       from: from.email,
       to: [...input.to, ...(input.cc ?? []), ...(input.bcc ?? [])].map((address) => address.email)
     },
     raw: input.rawMime
-  })
+  }
+  let result: Awaited<ReturnType<SmtpTransport['sendMail']>>
+
+  try {
+    result = await createSmtpTransport(nodemailer, smtpConfig, auth).sendMail(message)
+  } catch (error) {
+    if (!isOAuthSmtpAuthError(error) || getSmtpAuthType(account, smtpAccount) !== 'oauth2') {
+      throw error
+    }
+
+    const refreshedAuth = await resolveSmtpAuth(account, smtpAccount, true)
+    result = await createSmtpTransport(nodemailer, smtpConfig, refreshedAuth).sendMail(message)
+  }
 
   return {
     envelopeId: result.messageId ?? result.response
   }
 }
 
+function createSmtpTransport(
+  nodemailer: Required<Pick<NodemailerModule, 'createTransport'>>,
+  smtpConfig: ReturnType<typeof resolveSmtpConfig>,
+  auth: Record<string, string | number | undefined>
+): SmtpTransport {
+  return nodemailer.createTransport({
+    host: smtpConfig.host,
+    port: smtpConfig.port,
+    secure: smtpConfig.security === 'ssl_tls',
+    requireTLS: smtpConfig.security === 'starttls',
+    auth
+  })
+}
+
 async function resolveSmtpAuth(
   account: NonNullable<ReturnType<typeof getAccount>>,
-  smtpAccount: SmtpAccountRow
+  smtpAccount: SmtpAccountRow,
+  forceRefresh = false
 ): Promise<Record<string, string | number | undefined>> {
-  const authType = smtpAccount.smtp_auth_type ?? account.authType
+  const authType = getSmtpAuthType(account, smtpAccount)
 
   if (authType === 'oauth2') {
-    const token = await getMicrosoftAccessToken(account.accountId)
-    return {
-      type: 'OAuth2',
-      user: account.email,
-      accessToken: token.accessToken
-    }
+    return formatOAuth2SmtpAuth(
+      account.email,
+      forceRefresh
+        ? await refreshMicrosoftAccessToken(account.accountId)
+        : await getMicrosoftAccessToken(account.accountId)
+    )
   }
 
   if (authType === 'password' || authType === 'app_password') {
@@ -249,6 +272,32 @@ async function resolveSmtpAuth(
   }
 
   throw new Error('当前账号缺少可用的 SMTP 发信认证方式。')
+}
+
+function getSmtpAuthType(
+  account: NonNullable<ReturnType<typeof getAccount>>,
+  smtpAccount: SmtpAccountRow
+): string {
+  return smtpAccount.smtp_auth_type ?? account.authType
+}
+
+function formatOAuth2SmtpAuth(
+  email: string,
+  token: MicrosoftAccessTokenResult
+): Record<string, string | number | undefined> {
+  return {
+    type: 'OAuth2',
+    user: email,
+    accessToken: token.accessToken
+  }
+}
+
+export function isOAuthSmtpAuthError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const code = (error as { code?: unknown }).code
+  if (code === 'EAUTH') return true
+
+  return /Invalid login|Authentication failed|AUTH|OAuth|XOAUTH2/i.test(error.message)
 }
 
 function resolveFromAddress(accountId: number, from?: ComposeAddress): ComposeAddress {

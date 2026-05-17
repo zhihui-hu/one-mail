@@ -1,8 +1,13 @@
 import { ipcMain } from 'electron'
 import { getDatabase, toNumber } from '../db/connection'
-import { getSyncStatus, syncAccountNow } from '../db/repositories/sync.repository'
+import {
+  getSyncStatus,
+  syncAccountNow,
+  type AccountSyncResult
+} from '../db/repositories/sync.repository'
 import type { AccountMailboxSyncMode } from '../mail/imap-sync'
 import { notifyNewMail } from '../services/notification-center'
+import type { AccountSyncRunResult } from './types'
 
 export function registerSyncIpc(): void {
   ipcMain.handle('sync/startAll', async (_event, mode?: AccountMailboxSyncMode) => {
@@ -23,9 +28,19 @@ export function registerSyncIpc(): void {
   })
   ipcMain.handle(
     'sync/startAccount',
-    async (_event, accountId: number, mode?: AccountMailboxSyncMode) => {
-      await syncAccountWithNotification(accountId, 'manual', normalizeSyncMode(mode))
-      return getSyncStatus()
+    async (
+      _event,
+      accountId: number,
+      mode?: AccountMailboxSyncMode
+    ): Promise<AccountSyncRunResult> => {
+      const result = await syncAccountWithNotification(accountId, 'manual', normalizeSyncMode(mode))
+      return {
+        ...getSyncStatus(),
+        accountId: result.accountId,
+        scannedCount: result.scannedCount,
+        insertedCount: result.insertedCount,
+        updatedCount: result.updatedCount
+      }
     }
   )
   ipcMain.handle('sync/status', () => getSyncStatus())
@@ -35,13 +50,16 @@ async function syncAccountWithNotification(
   accountId: number,
   reason: 'manual',
   mode: AccountMailboxSyncMode
-): Promise<void> {
+): Promise<AccountSyncResult> {
   const result = await syncAccountNow(accountId, mode)
-  notifyNewMail({
-    accountId,
-    reason,
-    messageCount: result.insertedCount
-  })
+  if (mode !== 'initial') {
+    notifyNewMail({
+      accountId,
+      reason,
+      messageCount: result.insertedCount
+    })
+  }
+  return result
 }
 
 function normalizeSyncMode(mode: unknown): AccountMailboxSyncMode {

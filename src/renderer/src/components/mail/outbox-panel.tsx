@@ -11,6 +11,7 @@ import {
   SheetTitle
 } from '@renderer/components/ui/sheet'
 import type { OutboxMessage } from '@renderer/lib/api'
+import { useI18n, type TranslationKey } from '@renderer/lib/i18n'
 
 type OutboxPanelProps = {
   open: boolean
@@ -33,6 +34,8 @@ export function OutboxPanel({
   onRetry,
   onDelete
 }: OutboxPanelProps): React.JSX.Element {
+  const { t } = useI18n()
+
   React.useEffect(() => {
     if (open) onRefresh()
   }, [onRefresh, open])
@@ -41,13 +44,13 @@ export function OutboxPanel({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-lg">
         <SheetHeader className="border-b">
-          <SheetTitle>发送记录</SheetTitle>
-          <SheetDescription>管理草稿、发送失败和发送中的邮件。</SheetDescription>
+          <SheetTitle>{t('mail.outbox.title')}</SheetTitle>
+          <SheetDescription>{t('mail.outbox.description')}</SheetDescription>
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
           {outboxMessages.length === 0 ? (
             <div className="flex h-32 items-center justify-center text-xs text-muted-foreground">
-              没有需要处理的发送记录。
+              {t('mail.outbox.empty')}
             </div>
           ) : (
             <div className="grid gap-2">
@@ -56,14 +59,14 @@ export function OutboxPanel({
                   <div className="flex items-start gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium">
-                        {message.subject || '(无主题)'}
+                        {message.subject || t('mail.outbox.noSubject')}
                       </div>
                       <div className="mt-1 truncate text-xs text-muted-foreground">
-                        {message.to.length > 0 ? message.to.join(', ') : '未填写收件人'}
+                        {message.to.length > 0 ? message.to.join(', ') : t('mail.outbox.noRecipients')}
                       </div>
                     </div>
                     <Badge variant={message.status === 'failed' ? 'destructive' : 'outline'}>
-                      {getStatusLabel(message.status)}
+                      {getStatusLabel(message.status, t)}
                     </Badge>
                   </div>
                   {message.lastError ? (
@@ -86,7 +89,7 @@ export function OutboxPanel({
                         onClick={() => onOpenDraft(message)}
                       >
                         <FilePenLine data-icon="inline-start" />
-                        编辑
+                        {t('common.edit')}
                       </Button>
                     ) : null}
                     {message.status === 'failed' ? (
@@ -98,7 +101,7 @@ export function OutboxPanel({
                         onClick={() => onRetry(message)}
                       >
                         <RotateCcw data-icon="inline-start" />
-                        重试
+                        {t('common.retry')}
                       </Button>
                     ) : null}
                     <Button
@@ -109,7 +112,7 @@ export function OutboxPanel({
                       onClick={() => onDelete(message)}
                     >
                       <Trash2 data-icon="inline-start" />
-                      删除
+                      {t('common.delete')}
                     </Button>
                   </div>
                 </div>
@@ -122,10 +125,10 @@ export function OutboxPanel({
   )
 }
 
-function getStatusLabel(status: OutboxMessage['status']): string {
-  if (status === 'draft') return '草稿'
-  if (status === 'failed') return '失败'
-  if (status === 'sending') return '发送中'
-  if (status === 'sent') return '已发送'
+function getStatusLabel(status: OutboxMessage['status'], t: (key: TranslationKey) => string): string {
+  if (status === 'draft') return t('mail.outbox.statusDraft')
+  if (status === 'failed') return t('mail.outbox.statusFailed')
+  if (status === 'sending') return t('mail.outbox.statusSending')
+  if (status === 'sent') return t('mail.outbox.statusSent')
   return status
 }

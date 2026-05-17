@@ -37,6 +37,7 @@ import {
   onAccountCreated,
   onMailboxChanged,
   openAddAccountWindow,
+  openExternalUrl,
   reauthorizeAccount,
   removeAccount,
   revealDatabaseInFileManager,
@@ -47,6 +48,7 @@ import {
   toMessageQuery,
   updateAccount
 } from '@renderer/lib/api'
+import { normalizeLocale, useI18n } from '@renderer/lib/i18n'
 import type { OutboxMessage } from '@renderer/lib/api'
 import { toast } from 'sonner'
 import { NoAccountsBody, StatusBar, TitleBar } from './mailbox-chrome'
@@ -75,6 +77,7 @@ function normalizeRouteId(value: string | undefined): string | undefined {
 export function MailboxWorkspace(): React.JSX.Element {
   const navigate = useNavigate()
   const routeParams = useParams<{ accountId?: string; messageId?: string }>()
+  const { setLocale, t } = useI18n()
   const internalRouteRef = React.useRef<string | null>(null)
   const [accounts, setAccounts] = React.useState<Account[]>([])
   const [settings, setSettings] = React.useState<AppSettings | null>(null)
@@ -224,6 +227,7 @@ export function MailboxWorkspace(): React.JSX.Element {
     const data = await loadInitialData()
     setAccounts(data.accounts)
     setSettings(data.settings)
+    setLocale(normalizeLocale(data.settings.locale))
     setSystemInfo(data.systemInfo)
     setSelectedAccountId(data.selectedAccountId)
     replaceMessages(data.messages)
@@ -240,12 +244,13 @@ export function MailboxWorkspace(): React.JSX.Element {
         if (cancelled) return
         setAccounts(data.accounts)
         setSettings(data.settings)
+        setLocale(normalizeLocale(data.settings.locale))
         setSystemInfo(data.systemInfo)
         setSelectedAccountId(data.selectedAccountId)
         replaceMessages(data.messages)
       } catch (loadError) {
         if (!cancelled) {
-          setError(getErrorMessage(loadError, '加载邮箱数据失败。'))
+          setError(getErrorMessage(loadError, t('mailbox.loadDataError')))
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -257,15 +262,15 @@ export function MailboxWorkspace(): React.JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [replaceMessages])
+  }, [replaceMessages, t])
 
   React.useEffect(() => {
     return onMailboxChanged((event) => {
       void refreshVisibleMailbox(event.accountId).catch((refreshError) => {
-        setError(getErrorMessage(refreshError, '刷新邮件失败。'))
+        setError(getErrorMessage(refreshError, t('mailbox.refreshMailError')))
       })
     })
-  }, [refreshVisibleMailbox])
+  }, [refreshVisibleMailbox, t])
 
   const openRouteTarget = React.useCallback(
     async (accountId: string, messageId?: string): Promise<void> => {
@@ -304,9 +309,9 @@ export function MailboxWorkspace(): React.JSX.Element {
       return
     }
     void openRouteTarget(routeAccountId, routeMessageId).catch((openError) => {
-      setError(getErrorMessage(openError, '打开链接对应邮件失败。'))
+      setError(getErrorMessage(openError, t('mailbox.openRouteError')))
     })
-  }, [loading, openRouteTarget, routeAccountId, routeMessageId])
+  }, [loading, openRouteTarget, routeAccountId, routeMessageId, t])
 
   React.useEffect(() => {
     if (routeAccountId && routeMessageId) return
@@ -320,21 +325,25 @@ export function MailboxWorkspace(): React.JSX.Element {
       startSyncing(accountKey, {
         label: accountEmail,
         startedAt,
-        message: `${accountEmail} 已保存，正在后台同步...`
+        message: t('mailbox.accountSavedSyncing', { email: accountEmail })
       })
 
       void syncAccount(accountId, 'initial')
-        .then(async () => {
+        .then(async (syncResult) => {
           await refreshAccounts()
           await refreshMessages(String(accountId), filters, searchKeyword)
           finishSyncing(accountKey, 'success', {
-            label: accountEmail,
-            startedAt,
-            message: `${accountEmail} 后台同步完成`
+          label: accountEmail,
+          startedAt,
+          message: t('mailbox.initialSyncComplete', {
+            email: accountEmail,
+            inserted: syncResult.insertedCount,
+            scanned: syncResult.scannedCount
           })
         })
-        .catch((syncError) => {
-          const message = getErrorMessage(syncError, '同步账号失败。')
+      })
+      .catch((syncError) => {
+          const message = getErrorMessage(syncError, t('mailbox.syncAccountError'))
           const account = accounts.find((item) => item.accountId === accountId)
           if (shouldShowOutlookImapHelp(message, account)) {
             setOutlookImapHelpAccount(account ?? createOutlookHelpAccount(accountId, accountEmail))
@@ -343,7 +352,7 @@ export function MailboxWorkspace(): React.JSX.Element {
           finishSyncing(accountKey, 'error', {
             label: accountEmail,
             startedAt,
-            message: `${accountEmail} 后台同步失败：${message}`
+            message: t('mailbox.backgroundSyncFailed', { email: accountEmail, message })
           })
         })
     },
@@ -354,7 +363,8 @@ export function MailboxWorkspace(): React.JSX.Element {
       refreshAccounts,
       refreshMessages,
       searchKeyword,
-      startSyncing
+      startSyncing,
+      t
     ]
   )
 
@@ -371,7 +381,7 @@ export function MailboxWorkspace(): React.JSX.Element {
           await refreshMessages(nextSelectedAccountId, filters, searchKeyword)
         })
         .catch((refreshError) => {
-          setError(getErrorMessage(refreshError, '刷新账号失败。'))
+          setError(getErrorMessage(refreshError, t('mailbox.refreshAccountError')))
         })
 
       if (event.requestedSync) {
@@ -382,15 +392,15 @@ export function MailboxWorkspace(): React.JSX.Element {
           label: event.account.email,
           startedAt,
           finishedAt: new Date(),
-          message: `${event.account.email} 已保存`
+          message: t('mailbox.accountSaved', { email: event.account.email })
         })
       }
     })
-  }, [filters, refreshMessages, searchKeyword, setNotice, syncCreatedAccountInBackground])
+  }, [filters, refreshMessages, searchKeyword, setNotice, syncCreatedAccountInBackground, t])
 
   function handleOpenAddAccountWindow(): void {
     void openAddAccountWindow().catch((openError) => {
-      setError(getErrorMessage(openError, '打开添加账号窗口失败。'))
+      setError(getErrorMessage(openError, t('mailbox.openAddAccountWindowError')))
     })
   }
 
@@ -402,21 +412,21 @@ export function MailboxWorkspace(): React.JSX.Element {
       startSyncing(String(account.accountId), {
         label: account.email,
         startedAt,
-        message: `正在同步 ${account.email}...`
+        message: t('mailbox.syncingAccount', { account: account.email })
       })
       try {
         await syncAccount(account.accountId)
         finishSyncing(String(account.accountId), 'success', {
           label: account.email,
           startedAt,
-          message: `${account.email} 同步完成`
+          message: t('mailbox.accountSyncComplete', { account: account.email })
         })
       } catch (syncError) {
-        const message = getErrorMessage(syncError, '同步账号失败。')
+        const message = getErrorMessage(syncError, t('mailbox.syncAccountError'))
         finishSyncing(String(account.accountId), 'error', {
           label: account.email,
           startedAt,
-          message: `${account.email} 同步失败：${message}`
+          message: t('mailbox.accountSyncFailed', { account: account.email, message })
         })
         throw syncError
       }
@@ -460,7 +470,7 @@ export function MailboxWorkspace(): React.JSX.Element {
     startSyncing(account.id, {
       label: account.name,
       startedAt,
-      message: `正在重新授权 ${account.name}...`
+      message: t('mailbox.reauthorizing', { account: account.name })
     })
     setError(null)
 
@@ -470,7 +480,7 @@ export function MailboxWorkspace(): React.JSX.Element {
       finishSyncing(account.id, 'success', {
         label: account.name,
         startedAt,
-        message: `${account.name} 授权已更新`
+        message: t('mailbox.reauthorized', { account: account.name })
       })
       await handleRefreshAccount({
         ...account,
@@ -479,12 +489,12 @@ export function MailboxWorkspace(): React.JSX.Element {
         lastError: authorizedAccount.lastError
       })
     } catch (reauthorizeError) {
-      const message = getErrorMessage(reauthorizeError, '重新授权失败。')
+      const message = getErrorMessage(reauthorizeError, t('mailbox.reauthorizeError'))
       setError(message)
       finishSyncing(account.id, 'error', {
         label: account.name,
         startedAt,
-        message: `${account.name} 重新授权失败：${message}`
+        message: t('mailbox.reauthorizeFailed', { account: account.name, message })
       })
       throw reauthorizeError
     }
@@ -492,7 +502,10 @@ export function MailboxWorkspace(): React.JSX.Element {
 
   async function handleRefreshAccount(account: Account): Promise<void> {
     const startedAt = new Date()
-    const syncMessage = account.id === 'all' ? '正在同步全部账号...' : `正在同步 ${account.name}...`
+    const syncMessage =
+      account.id === 'all'
+        ? t('mailbox.syncingAll')
+        : t('mailbox.syncingAccount', { account: account.name })
 
     startSyncing(account.id, {
       label: account.name,
@@ -514,10 +527,13 @@ export function MailboxWorkspace(): React.JSX.Element {
       finishSyncing(account.id, 'success', {
         label: account.name,
         startedAt,
-        message: account.id === 'all' ? '全部账号同步完成' : `${account.name} 同步完成`
+        message:
+          account.id === 'all'
+            ? t('mailbox.allSyncComplete')
+            : t('mailbox.accountSyncComplete', { account: account.name })
       })
     } catch (refreshError) {
-      const message = getErrorMessage(refreshError, '刷新账号失败。')
+      const message = getErrorMessage(refreshError, t('mailbox.refreshAccountError'))
       if (shouldShowOutlookImapHelp(message, account)) {
         setOutlookImapHelpAccount(account)
       }
@@ -531,8 +547,8 @@ export function MailboxWorkspace(): React.JSX.Element {
         startedAt,
         message:
           account.id === 'all'
-            ? `全部账号同步失败：${message}`
-            : `${account.name} 同步失败：${message}`
+            ? t('mailbox.allSyncFailed', { message })
+            : t('mailbox.accountSyncFailed', { account: account.name, message })
       })
     } finally {
       clearSyncing(account.id)
@@ -542,6 +558,7 @@ export function MailboxWorkspace(): React.JSX.Element {
   async function handleUpdateSettings(input: SettingsUpdateInput): Promise<void> {
     const nextSettings = await saveSettings(input)
     setSettings(nextSettings)
+    setLocale(normalizeLocale(nextSettings.locale))
   }
 
   async function handleImportSqlBackup(): Promise<void> {
@@ -556,7 +573,7 @@ export function MailboxWorkspace(): React.JSX.Element {
         await reloadInitialData()
       }
     } catch (importError) {
-      setError(getErrorMessage(importError, '导入 SQL 失败。'))
+      setError(getErrorMessage(importError, t('mailbox.importSqlError')))
     } finally {
       setImportingSql(false)
     }
@@ -574,10 +591,10 @@ export function MailboxWorkspace(): React.JSX.Element {
     try {
       await deleteDraftMessage(draftId)
       discardComposerDraft()
-      toast.success('草稿已丢弃')
+      toast.success(t('mailbox.draftDiscarded'))
       await refreshOutbox()
     } catch (discardError) {
-      const messageText = getErrorMessage(discardError, '丢弃草稿失败。')
+      const messageText = getErrorMessage(discardError, t('mailbox.discardDraftError'))
       setError(messageText)
       toast.error(messageText)
     }
@@ -588,10 +605,14 @@ export function MailboxWorkspace(): React.JSX.Element {
     setError(null)
     try {
       const result = await retryOutboxMessage(message.outboxId)
-      toast.success(result.warning ? `邮件已发送：${result.warning}` : '邮件已发送')
+      toast.success(
+        result.warning
+          ? t('mail.composer.sentWithWarning', { warning: result.warning })
+          : t('mail.composer.sent')
+      )
       await refreshOutbox()
     } catch (retryError) {
-      const messageText = getErrorMessage(retryError, '重试发送失败。')
+      const messageText = getErrorMessage(retryError, t('mailbox.retrySendError'))
       setError(messageText)
       toast.error(messageText)
       await refreshOutbox()
@@ -609,10 +630,10 @@ export function MailboxWorkspace(): React.JSX.Element {
       } else {
         await deleteOutboxMessage(message.outboxId)
       }
-      toast.success('发送记录已删除')
+      toast.success(t('mailbox.outboxDeleted'))
       await refreshOutbox()
     } catch (deleteError) {
-      const messageText = getErrorMessage(deleteError, '删除发送记录失败。')
+      const messageText = getErrorMessage(deleteError, t('mailbox.deleteOutboxError'))
       setError(messageText)
       toast.error(messageText)
     } finally {
@@ -625,7 +646,7 @@ export function MailboxWorkspace(): React.JSX.Element {
     navigateToMailboxRoute()
     setSelectedAccountId(accountId)
     void refreshMessages(accountId, filters, searchKeyword).catch((refreshError) => {
-      setError(getErrorMessage(refreshError, '刷新邮件失败。'))
+      setError(getErrorMessage(refreshError, t('mailbox.refreshMailError')))
     })
   }
 
@@ -643,14 +664,14 @@ export function MailboxWorkspace(): React.JSX.Element {
   function handleChangeFilters(nextFilters: MailFilterTag[]): void {
     setFilters(nextFilters)
     void refreshMessages(selectedAccountId, nextFilters, searchKeyword).catch((refreshError) => {
-      setError(getErrorMessage(refreshError, '刷新邮件失败。'))
+      setError(getErrorMessage(refreshError, t('mailbox.refreshMailError')))
     })
   }
 
   function handleChangeSearchKeyword(nextSearchKeyword: string): void {
     setSearchKeyword(nextSearchKeyword)
     void refreshMessages(selectedAccountId, filters, nextSearchKeyword).catch((refreshError) => {
-      setError(getErrorMessage(refreshError, '搜索邮件失败。'))
+      setError(getErrorMessage(refreshError, t('mailbox.searchMailError')))
     })
   }
 
@@ -779,7 +800,7 @@ export function MailboxWorkspace(): React.JSX.Element {
                 />
               ) : (
                 <div className="flex h-full items-center justify-center p-8 text-xs text-muted-foreground">
-                  选择一封邮件进行预览。
+                  {t('mailbox.selectPreview')}
                 </div>
               )}
             </article>
@@ -795,6 +816,9 @@ export function MailboxWorkspace(): React.JSX.Element {
         syncNotice={syncNotice}
         onRevealDatabase={() => {
           void revealDatabaseInFileManager()
+        }}
+        onOpenVersion={() => {
+          void openExternalUrl('https://github.com/zhihui-hu/one-mail')
         }}
       />
 
@@ -841,6 +865,7 @@ export function MailboxWorkspace(): React.JSX.Element {
       <SettingsDialog
         open={dialogKind === 'settings'}
         settings={settings}
+        systemInfo={systemInfo}
         onOpenChange={(open) => setDialogKind(open ? 'settings' : null)}
         onSubmit={handleUpdateSettings}
         onImported={reloadInitialData}
@@ -871,7 +896,7 @@ export function MailboxWorkspace(): React.JSX.Element {
         onOpenChange={setOutboxOpen}
         onRefresh={() => {
           void refreshOutbox().catch((refreshError) => {
-            setError(getErrorMessage(refreshError, '加载发送记录失败。'))
+            setError(getErrorMessage(refreshError, t('mailbox.loadOutboxError')))
           })
         }}
         onOpenDraft={(message) => {

@@ -75,10 +75,14 @@ const api = {
     exportSql: () => ipcRenderer.invoke('settings/exportSql'),
     importSql: () => ipcRenderer.invoke('settings/importSql')
   },
+  updates: {
+    check: () => ipcRenderer.invoke('updates/check')
+  },
   system: {
     info: () => ipcRenderer.invoke('system/info'),
     revealDatabase: () => ipcRenderer.invoke('system/revealDatabase'),
-    revealPath: (path) => ipcRenderer.invoke('system/revealPath', path)
+    revealPath: (path) => ipcRenderer.invoke('system/revealPath', path),
+    openExternal: (url) => ipcRenderer.invoke('system/openExternal', url)
   }
 }
 

@@ -11,7 +11,6 @@ import type {
   NotificationStatus
 } from '../ipc/types'
 
-const MAX_NOTIFICATION_MESSAGES = 5
 let openWindowHandler: ((route: string) => BrowserWindow | null) | null = null
 
 export function getNotificationStatus(): NotificationStatus {
@@ -38,10 +37,7 @@ export function notifyNewMail({
   if (messageCount <= 0) return
 
   const account = getAccount(accountId)
-  const messages = listRecentNotificationMessages(
-    accountId,
-    Math.min(messageCount, MAX_NOTIFICATION_MESSAGES)
-  )
+  const messages = listRecentNotificationMessages(accountId, messageCount)
   const notification: NewMailNotification = {
     notificationId: `${accountId}-${Date.now()}`,
     accountId,
@@ -55,7 +51,7 @@ export function notifyNewMail({
 
   playNotificationSound()
   broadcastNewMail(notification)
-  void showDesktopNotification(notification, account)
+  void showDesktopNotifications(notification, account)
 }
 
 function playNotificationSound(): void {
@@ -70,40 +66,52 @@ function broadcastNewMail(notification: NewMailNotification): void {
   }
 }
 
-async function showDesktopNotification(
+async function showDesktopNotifications(
   notification: NewMailNotification,
   account: MailAccount | null
 ): Promise<void> {
   if (!Notification.isSupported()) return
 
-  const firstMessage = notification.messages[0]
-  const displayMessage = getNotificationDisplayMessage(notification)
-  const sender = displayMessage?.fromName ?? displayMessage?.fromEmail ?? notification.accountLabel
-  const verificationCode = displayMessage?.verificationCode
-  const title =
-    notification.messageCount === 1
-      ? firstMessage?.subject || '收到新邮件'
-      : `收到 ${notification.messageCount} 封新邮件`
+  const icon = await getNotificationIcon(account, notification)
+  const messages = notification.messages.length > 0 ? notification.messages : [undefined]
+
+  for (const message of messages) {
+    showDesktopNotification(notification, message, icon)
+  }
+}
+
+function showDesktopNotification(
+  notification: NewMailNotification,
+  message: NewMailNotificationMessage | undefined,
+  icon: string | NativeImage
+): void {
+  const sender = message?.fromName ?? message?.fromEmail ?? notification.accountLabel
+  const verificationCode = message?.verificationCode
+  const title = message?.subject || '收到新邮件'
   const body = verificationCode
     ? [sender, `验证码 ${verificationCode}`].filter(Boolean).join(' - ')
-    : notification.messageCount === 1
-      ? [sender, firstMessage?.snippet].filter(Boolean).join(' - ')
-      : notification.accountLabel || notification.accountEmail || 'OneMail'
+    : [sender, message?.snippet].filter(Boolean).join(' - ') ||
+      notification.accountLabel ||
+      notification.accountEmail ||
+      'OneMail'
 
   const desktopNotification = new Notification({
     title,
     body,
-    icon: await getNotificationIcon(account, notification)
+    icon
   })
 
   desktopNotification.on('click', () => {
-    openNotificationTarget(notification)
+    openNotificationTarget(notification, message)
   })
   desktopNotification.show()
 }
 
-function openNotificationTarget(notification: NewMailNotification): void {
-  const route = toNotificationRoute(notification)
+function openNotificationTarget(
+  notification: NewMailNotification,
+  message?: NewMailNotificationMessage
+): void {
+  const route = toNotificationRoute(notification, message)
 
   const window = getOpenTargetWindow(route)
   if (!window) return
@@ -121,8 +129,11 @@ function getOpenTargetWindow(route: string): BrowserWindow | null {
   return BrowserWindow.getAllWindows().find((window) => !window.isDestroyed()) ?? null
 }
 
-function toNotificationRoute(notification: NewMailNotification): string {
-  const messageId = getNotificationDisplayMessage(notification)?.messageId
+function toNotificationRoute(
+  notification: NewMailNotification,
+  message?: NewMailNotificationMessage
+): string {
+  const messageId = message?.messageId ?? getNotificationDisplayMessage(notification)?.messageId
   return messageId ? `/${notification.accountId}/${messageId}` : '/'
 }
 

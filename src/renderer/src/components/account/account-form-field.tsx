@@ -1,6 +1,7 @@
 import * as React from 'react'
 
 import { Field, FieldError, FieldLabel } from '@renderer/components/ui/field'
+import { useI18n } from '@renderer/lib/i18n'
 
 type AccountFormFieldProps = {
   id: string
@@ -17,6 +18,8 @@ export function AccountFormField({
   required = false,
   children
 }: AccountFormFieldProps): React.JSX.Element {
+  const { t } = useI18n()
+
   return (
     <Field data-invalid={Boolean(error) || undefined}>
       <FieldLabel htmlFor={id}>
@@ -26,7 +29,7 @@ export function AccountFormField({
             <span aria-hidden="true" className="text-destructive">
               *
             </span>
-            <span className="sr-only">必填</span>
+            <span className="sr-only">{t('common.required')}</span>
           </>
         ) : null}
       </FieldLabel>

@@ -1,9 +1,11 @@
 import type {
   AccountMailboxStats,
+  AccountSyncRunResult,
   AccountCreatedEvent,
   AccountCreateInput,
   AccountUpdateInput,
   AppSettings,
+  AppUpdateCheckResult,
   BackupImportResult,
   AttachmentDownloadResult,
   ComposeDraft as SharedComposeDraft,
@@ -25,7 +27,9 @@ import type {
   SystemInfo
 } from '../../../shared/types'
 import { normalizeMailBodyText, normalizeMailDisplayText } from '../../../shared/mail-text'
+import { ATTACHMENT_METADATA_PENDING_SIZE } from '@renderer/components/mail/mail-display'
 import type { Account, Message, MessageFolderRole } from '@renderer/components/mail/types'
+import { normalizeLocale, translate } from '@renderer/lib/i18n'
 
 const platformLabel: Partial<Record<NodeJS.Platform, string>> = {
   darwin: 'macOS',
@@ -199,10 +203,10 @@ export async function removeAccount(accountId: number): Promise<boolean> {
 export async function syncAccount(
   accountId: number,
   mode: SyncMode = 'refresh'
-): Promise<SyncStatus> {
+): Promise<AccountSyncRunResult> {
   const startAccount = window.api?.sync?.startAccount
   if (typeof startAccount !== 'function') {
-    throw new Error('同步服务暂不可用，请重启应用后重试。')
+    throw new Error(getStaticTranslation('sync.serviceUnavailable'))
   }
 
   return startAccount(accountId, mode)
@@ -211,7 +215,7 @@ export async function syncAccount(
 export async function syncAllAccounts(mode: SyncMode = 'refresh'): Promise<SyncStatus> {
   const startAll = window.api?.sync?.startAll
   if (typeof startAll !== 'function') {
-    throw new Error('同步服务暂不可用，请重启应用后重试。')
+    throw new Error(getStaticTranslation('sync.serviceUnavailable'))
   }
 
   return startAll(mode)
@@ -242,6 +246,23 @@ export async function revealDatabaseInFileManager(): Promise<boolean> {
 
 export async function revealPathInFileManager(path: string): Promise<boolean> {
   return window.api.system.revealPath(path)
+}
+
+export async function openExternalUrl(url: string): Promise<boolean> {
+  return window.api.system.openExternal(url)
+}
+
+export async function checkForAppUpdates(): Promise<AppUpdateCheckResult> {
+  const checkUpdates = window.api?.updates?.check
+  if (typeof checkUpdates !== 'function') {
+    return {
+      status: 'unsupported',
+      currentVersion: '',
+      message: getStaticTranslation('settings.about.updateServiceUnavailable')
+    }
+  }
+
+  return checkUpdates()
 }
 
 export async function loadAccounts(): Promise<Account[]> {
@@ -440,8 +461,8 @@ function toAccountList(accounts: MailAccount[], accountStats: AccountMailboxStat
       id: 'all',
       providerKey: 'all',
       authType: 'manual',
-      name: '全部账号',
-      address: '统一收件箱',
+      name: '',
+      address: '',
       unread: totalUnread,
       messageCount: totalMessages,
       status: accounts.length > 0 ? 'active' : 'empty',
@@ -466,7 +487,7 @@ function toMessage(message: MailMessageSummary | MailMessageDetail): Message {
   const body = detailLoaded ? message.body : undefined
   const fromName = normalizeMailDisplayText(message.fromName)
   const fromEmail = normalizeMailDisplayText(message.fromEmail)
-  const subject = normalizeMailDisplayText(message.subject) ?? '(无主题)'
+  const subject = normalizeMailDisplayText(message.subject) ?? ''
   const snippet = normalizeMailDisplayText(message.snippet) ?? ''
   const bodyText = normalizeMailBodyText(body?.bodyText)
 
@@ -477,7 +498,7 @@ function toMessage(message: MailMessageSummary | MailMessageDetail): Message {
     folderId: message.folderId,
     folderRole: readOptionalString(message, 'folderRole') as MessageFolderRole | undefined,
     folderName: readOptionalString(message, 'folderName'),
-    from: fromName ?? fromEmail ?? '未知发件人',
+    from: fromName ?? fromEmail ?? '',
     fromAddress: fromEmail,
     to: normalizeMailDisplayText(readOptionalString(message, 'to')),
     cc: normalizeMailDisplayText(readOptionalString(message, 'cc')),
@@ -506,11 +527,11 @@ function toMessage(message: MailMessageSummary | MailMessageDetail): Message {
               id: attachment.attachmentId,
               name: normalizeMailDisplayText(attachment.filename) ?? attachment.filename,
               size: formatBytes(attachment.sizeBytes),
-              type: attachment.mimeType ?? '附件',
+              type: attachment.mimeType ?? '',
               disposition: attachment.contentDisposition
             }))
         : message.hasAttachments
-          ? [{ name: '附件元数据', size: '待加载', type: '附件' }]
+          ? [{ name: '', size: ATTACHMENT_METADATA_PENDING_SIZE, type: '' }]
           : []
   }
 }
@@ -594,7 +615,7 @@ export function toSharedSendInput(input: SendMessageInput): MailSendInput {
 
 function requireRelatedMessageId(input: ComposeDraftInput): number {
   if (!input.relatedMessageId) {
-    throw new Error('缺少原邮件，无法创建回复或转发草稿。')
+    throw new Error('Missing source message for reply or forward draft.')
   }
 
   return input.relatedMessageId
@@ -636,7 +657,7 @@ function mergeMessageBody(message: Message, body: MailMessageBody): Message {
 }
 
 function bodyTextToParagraphs(value?: string): string[] {
-  if (!value) return ['邮件正文尚未加载。']
+  if (!value) return []
   return value
     .split(/\n{2,}/)
     .map((paragraph) => paragraph.trim())
@@ -644,7 +665,7 @@ function bodyTextToParagraphs(value?: string): string[] {
 }
 
 function formatBytes(value: number): string {
-  if (!value) return '未知大小'
+  if (!value) return ''
   if (value < 1024) return `${value} B`
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
   return `${(value / 1024 / 1024).toFixed(1)} MB`
@@ -662,12 +683,12 @@ function formatMessageTime(value?: string): string {
 }
 
 function formatMessageDate(value?: string): string {
-  if (!value) return '未知日期'
+  if (!value) return ''
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '未知日期'
+  if (Number.isNaN(date.getTime())) return ''
 
   const today = new Date()
-  if (date.toDateString() === today.toDateString()) return '今天'
+  if (date.toDateString() === today.toDateString()) return ''
 
   return new Intl.DateTimeFormat(undefined, {
     month: 'short',
@@ -690,4 +711,8 @@ export function toMessageQuery(
     limit: pagination?.limit ?? MESSAGE_LIST_PAGE_SIZE,
     offset: pagination?.offset ?? 0
   }
+}
+
+function getStaticTranslation(key: Parameters<typeof translate>[1]): string {
+  return translate(normalizeLocale(document.documentElement.lang), key)
 }

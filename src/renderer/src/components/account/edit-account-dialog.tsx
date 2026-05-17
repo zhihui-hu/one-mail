@@ -8,15 +8,14 @@ import { ResponsiveDialog } from '@renderer/components/responsive-dialog'
 import { Button } from '@renderer/components/ui/button'
 import { FieldError, FieldGroup } from '@renderer/components/ui/field'
 import { Input } from '@renderer/components/ui/input'
+import { useI18n, type TranslationKey } from '@renderer/lib/i18n'
 import type { AccountUpdateInput } from '../../../../shared/types'
 import { AccountFormField } from './account-form-field'
 
-const editAccountSchema = z.object({
-  accountLabel: z.string().trim().max(80, '别名不能超过 80 个字符').optional(),
-  password: z.string().trim().optional()
-})
-
-type EditAccountValues = z.infer<typeof editAccountSchema>
+type EditAccountValues = {
+  accountLabel?: string
+  password?: string
+}
 
 type EditAccountDialogProps = {
   account: Account
@@ -31,6 +30,8 @@ export function EditAccountDialog({
   onOpenChange,
   onSubmit
 }: EditAccountDialogProps): React.JSX.Element {
+  const { t } = useI18n()
+  const editAccountSchema = React.useMemo(() => createEditAccountSchema(t), [t])
   const [pending, setPending] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const isOAuthAccount = account.authType === 'oauth2'
@@ -67,7 +68,7 @@ export function EditAccountDialog({
 
     const password = optionalText(values.password)
     if (!isOAuthAccount && account.credentialState !== 'stored' && !password) {
-      setError('这个账号还没有保存密码或授权码，请填写后再保存。')
+      setError(t('account.edit.missingCredentialError'))
       setPending(false)
       return
     }
@@ -79,7 +80,7 @@ export function EditAccountDialog({
         password: isOAuthAccount ? undefined : password
       })
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : '保存账号失败。')
+      setError(submitError instanceof Error ? submitError.message : t('account.add.saveError'))
     } finally {
       setPending(false)
     }
@@ -89,21 +90,25 @@ export function EditAccountDialog({
     <ResponsiveDialog
       open={open}
       onOpenChange={handleOpenChange}
-      title="编辑账号"
+      title={t('account.edit.title')}
       description={
         isOAuthAccount
-          ? 'Microsoft OAuth 账号在这里仅修改别名；重新授权请删除后重新添加。'
+          ? t('account.edit.oauthDescription')
           : account.credentialState === 'stored'
-          ? '保存前会测试邮箱连接是否正常；留空则使用已保存的密码或授权码。'
-          : '这个账号还没有保存密码或授权码，保存前需要重新填写并测试连接。'
+            ? t('account.edit.storedDescription')
+            : t('account.edit.missingCredentialDescription')
       }
       footer={
         <>
           <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={pending}>
-            取消
+            {t('common.cancel')}
           </Button>
           <Button type="submit" form="edit-account-form" disabled={pending || !account.accountId}>
-            {pending ? (isOAuthAccount ? '保存中...' : '测试中...') : '保存更改'}
+            {pending
+              ? isOAuthAccount
+                ? t('common.saving')
+                : t('common.testing')
+              : t('account.edit.saveChanges')}
           </Button>
         </>
       }
@@ -114,17 +119,17 @@ export function EditAccountDialog({
         onSubmit={form.handleSubmit(handleSubmit)}
       >
         <FieldGroup className="gap-2.5">
-          <AccountFormField id="edit-account-email" label="邮箱地址">
+          <AccountFormField id="edit-account-email" label={t('account.form.email')}>
             <Input id="edit-account-email" type="email" value={account.address} disabled />
           </AccountFormField>
           <AccountFormField
             id="edit-account-label"
-            label="别名"
+            label={t('account.form.label')}
             error={form.formState.errors.accountLabel?.message}
           >
             <Input
               id="edit-account-label"
-              placeholder="默认显示邮箱地址"
+              placeholder={t('account.form.labelPlaceholder')}
               aria-invalid={Boolean(form.formState.errors.accountLabel)}
               {...form.register('accountLabel')}
             />
@@ -132,7 +137,7 @@ export function EditAccountDialog({
           {isOAuthAccount ? null : (
             <AccountFormField
               id="edit-account-password"
-              label="密码或授权码"
+              label={t('account.form.passwordOrAuthCode')}
               required={account.credentialState !== 'stored'}
               error={form.formState.errors.password?.message}
             >
@@ -142,8 +147,8 @@ export function EditAccountDialog({
                 autoComplete="current-password"
                 placeholder={
                   account.credentialState === 'stored'
-                    ? '留空则使用已保存凭据'
-                    : '请输入密码或授权码'
+                    ? t('account.edit.keepSavedCredential')
+                    : t('account.edit.passwordPlaceholder')
                 }
                 required={account.credentialState !== 'stored'}
                 aria-invalid={Boolean(form.formState.errors.password)}
@@ -157,6 +162,13 @@ export function EditAccountDialog({
       </form>
     </ResponsiveDialog>
   )
+}
+
+function createEditAccountSchema(t: (key: TranslationKey) => string) {
+  return z.object({
+    accountLabel: z.string().trim().max(80, t('account.form.labelMax')).optional(),
+    password: z.string().trim().optional()
+  })
 }
 
 function getInitialLabel(account: Account): string {

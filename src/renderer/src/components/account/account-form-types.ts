@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import type { TranslationKey } from '@renderer/lib/i18n'
 import type { AuthType, ImapSecurity } from '../../../../shared/types'
 
 export type AccountKind = 'gmail' | 'outlook' | 'netease163' | 'qq' | 'custom'
@@ -35,7 +36,7 @@ export const providerPresets: ProviderPreset[] = [
   },
   {
     kind: 'netease163',
-    label: '163 邮箱',
+    label: '163 Mail',
     providerKey: '163',
     authType: 'app_password',
     imapHost: 'imap.163.com',
@@ -44,7 +45,7 @@ export const providerPresets: ProviderPreset[] = [
   },
   {
     kind: 'qq',
-    label: 'QQ 邮箱',
+    label: 'QQ Mail',
     providerKey: 'qq',
     authType: 'app_password',
     imapHost: 'imap.qq.com',
@@ -53,7 +54,7 @@ export const providerPresets: ProviderPreset[] = [
   },
   {
     kind: 'custom',
-    label: '自定义 IMAP',
+    label: 'Custom IMAP',
     providerKey: 'custom_imap',
     authType: 'manual',
     imapHost: '',
@@ -62,20 +63,21 @@ export const providerPresets: ProviderPreset[] = [
   }
 ]
 
-export const accountSchema = z
-  .object({
+export function createAccountSchema(t: (key: TranslationKey) => string) {
+  return z
+    .object({
     kind: z.enum(['gmail', 'outlook', 'netease163', 'qq', 'custom']),
     email: z.string().trim().optional(),
     password: z.string().trim().optional(),
-    accountLabel: z.string().trim().max(80, '别名不能超过 80 个字符').optional(),
+    accountLabel: z.string().trim().max(80, t('account.form.labelMax')).optional(),
     providerKey: z.string().trim(),
     authType: z.enum(['oauth2', 'app_password', 'password', 'bridge', 'manual']),
     imapHost: z.string().trim().optional(),
     imapPort: z.coerce
-      .number<number>('请输入端口')
-      .int('端口必须是整数')
-      .min(1, '端口不能小于 1')
-      .max(65535, '端口不能大于 65535'),
+      .number<number>(t('account.form.portRequired'))
+      .int(t('account.form.portInteger'))
+      .min(1, t('account.form.portMin'))
+      .max(65535, t('account.form.portMax')),
     imapSecurity: z.enum(['ssl_tls', 'starttls', 'none'])
   })
   .superRefine((value, context) => {
@@ -83,7 +85,7 @@ export const accountSchema = z
       context.addIssue({
         code: 'custom',
         path: ['email'],
-        message: '请输入有效的邮箱地址'
+        message: t('account.form.requiredEmail')
       })
     }
 
@@ -91,7 +93,7 @@ export const accountSchema = z
       context.addIssue({
         code: 'custom',
         path: ['password'],
-        message: '请输入密码或授权码'
+        message: t('account.form.requiredPassword')
       })
     }
 
@@ -101,12 +103,13 @@ export const accountSchema = z
       context.addIssue({
         code: 'custom',
         path: ['imapHost'],
-        message: '请输入 IMAP 服务器'
+        message: t('account.form.requiredImapHost')
       })
     }
   })
+}
 
-export type AccountFormValues = z.infer<typeof accountSchema>
+export type AccountFormValues = z.infer<ReturnType<typeof createAccountSchema>>
 
 export const defaultAccountFormValues: AccountFormValues = {
   kind: 'gmail',

@@ -24,4 +24,12 @@ export function registerSystemIpc(): void {
     shell.showItemInFolder(targetPath)
     return true
   })
+
+  ipcMain.handle('system/openExternal', async (_event, targetUrl: string): Promise<boolean> => {
+    const url = new URL(targetUrl)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return false
+
+    await shell.openExternal(url.toString())
+    return true
+  })
 }

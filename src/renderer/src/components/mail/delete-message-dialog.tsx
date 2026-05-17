@@ -2,6 +2,7 @@ import * as React from 'react'
 import { Loader2, Trash2 } from 'lucide-react'
 
 import type { Message } from '@renderer/components/mail/types'
+import { getDisplaySubject } from '@renderer/components/mail/mail-display'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,6 +14,7 @@ import {
   AlertDialogMedia,
   AlertDialogTitle
 } from '@renderer/components/ui/alert-dialog'
+import { useI18n } from '@renderer/lib/i18n'
 
 type DeleteMessageDialogProps = {
   messages: Message[]
@@ -29,13 +31,14 @@ export function DeleteMessageDialog({
   onOpenChange,
   onConfirm
 }: DeleteMessageDialogProps): React.JSX.Element {
+  const { t } = useI18n()
   const count = messages.length
   const firstMessage = messages[0]
-  const subject = firstMessage?.subject?.trim() || '无主题邮件'
+  const subject = firstMessage ? getDisplaySubject(firstMessage, t) : t('mail.delete.subjectFallback')
   const meta =
     count === 1
       ? [firstMessage?.from, firstMessage?.dateLabel || firstMessage?.time].filter(Boolean).join(' · ')
-      : '这些邮件会立即从远端邮箱中删除'
+      : t('mail.delete.remoteMeta')
 
   return (
     <AlertDialog
@@ -53,19 +56,19 @@ export function DeleteMessageDialog({
               <Trash2 aria-hidden="true" />
             )}
           </AlertDialogMedia>
-          <AlertDialogTitle className="font-semibold">永久删除邮件？</AlertDialogTitle>
+          <AlertDialogTitle className="font-semibold">{t('mail.delete.title')}</AlertDialogTitle>
           <AlertDialogDescription className="leading-5">
-            删除后无法从 OneMail 恢复，请确认后继续。
+            {t('mail.delete.description')}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="min-w-0 rounded-lg border bg-muted/40 px-3 py-2.5 text-left">
           <p className="truncate text-sm font-medium text-foreground">
-            {count === 1 ? subject : `${count} 封邮件`}
+            {count === 1 ? subject : t('mail.delete.summaryCount', { count })}
           </p>
           <p className="mt-1 truncate text-xs text-muted-foreground">{meta}</p>
         </div>
         <AlertDialogFooter className="bg-background">
-          <AlertDialogCancel disabled={pending}>取消</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>{t('common.cancel')}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             disabled={pending || count === 0}
@@ -74,7 +77,7 @@ export function DeleteMessageDialog({
               onConfirm()
             }}
           >
-            {pending ? '删除中...' : '永久删除'}
+            {pending ? t('common.deleting') : t('mail.selection.deletePermanently')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

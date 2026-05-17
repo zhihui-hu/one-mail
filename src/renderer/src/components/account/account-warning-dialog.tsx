@@ -5,6 +5,7 @@ import type { Account } from '@renderer/components/mail/types'
 import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import { FieldError } from '@renderer/components/ui/field'
+import { useI18n } from '@renderer/lib/i18n'
 import { getAccountWarning, type AccountWarningAction } from './account-warning'
 
 type AccountWarningDialogProps = {
@@ -28,9 +29,10 @@ export function AccountWarningDialog({
   onDelete,
   onReauthorize
 }: AccountWarningDialogProps): React.JSX.Element {
+  const { t } = useI18n()
   const [pending, setPending] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
-  const warning = getAccountWarning(account)
+  const warning = getAccountWarning(account, t)
 
   function handleOpenChange(nextOpen: boolean): void {
     if (pending && !nextOpen) return
@@ -50,7 +52,9 @@ export function AccountWarningDialog({
         handleOpenChange(false)
       } catch (reauthorizeError) {
         setError(
-          reauthorizeError instanceof Error ? reauthorizeError.message : '重新授权失败，请重试。'
+          reauthorizeError instanceof Error
+            ? reauthorizeError.message
+            : t('account.warning.reauthorizeError')
         )
         setPending(false)
       }
@@ -80,9 +84,11 @@ export function AccountWarningDialog({
     <aside className="app-no-drag fixed right-4 bottom-10 z-40 w-[min(380px,calc(100vw-2rem))] rounded-lg border bg-popover p-3 text-popover-foreground shadow-lg">
       <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="truncate text-sm font-semibold">{warning?.title ?? '账号异常'}</h2>
+          <h2 className="truncate text-sm font-semibold">
+            {warning?.title ?? t('account.warning.dialogFallbackTitle')}
+          </h2>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
-            {account.name} 需要处理后才能稳定同步。
+            {t('account.warning.dialogDescription', { account: account.name })}
           </p>
         </div>
         <Button
@@ -92,7 +98,7 @@ export function AccountWarningDialog({
           onClick={() => handleOpenChange(false)}
           disabled={pending}
         >
-          稍后
+          {t('common.later')}
         </Button>
       </div>
 
@@ -112,7 +118,7 @@ export function AccountWarningDialog({
           {error ? <FieldError>{error}</FieldError> : null}
         </div>
       ) : (
-        <p className="text-xs text-muted-foreground">这个账号当前没有可处理的异常。</p>
+        <p className="text-xs text-muted-foreground">{t('account.warning.noAction')}</p>
       )}
 
       <div className="mt-3 flex justify-end gap-2">
@@ -144,12 +150,12 @@ export function AccountWarningDialog({
               {warning.primaryAction === 'reauthorize' ? (
                 <KeyRound data-icon="inline-start" />
               ) : null}
-              {pending ? '授权中...' : warning.primaryLabel}
+              {pending ? t('account.warning.authorizing') : warning.primaryLabel}
             </Button>
           </>
         ) : (
           <Button size="sm" onClick={() => handleOpenChange(false)}>
-            知道了
+            {t('common.ok')}
           </Button>
         )}
       </div>

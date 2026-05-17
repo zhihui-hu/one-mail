@@ -2,6 +2,7 @@ import type * as React from 'react'
 import type { UseFormReturn } from 'react-hook-form'
 
 import { Input } from '@renderer/components/ui/input'
+import { useI18n } from '@renderer/lib/i18n'
 import type { AccountFormValues } from './account-form-types'
 import { AccountFormField } from './account-form-field'
 
@@ -16,11 +17,13 @@ export function CommonAccountFields({
   passwordLabel,
   passwordPlaceholder
 }: CommonAccountFieldsProps): React.JSX.Element {
+  const { t } = useI18n()
+
   return (
     <>
       <AccountFormField
         id="account-email"
-        label="邮箱地址"
+        label={t('account.form.email')}
         required
         error={form.formState.errors.email?.message}
       >
@@ -54,13 +57,13 @@ export function CommonAccountFields({
 
       <AccountFormField
         id="account-label"
-        label="别名"
+        label={t('account.form.label')}
         error={form.formState.errors.accountLabel?.message}
       >
         <Input
           id="account-label"
           autoComplete="off"
-          placeholder="默认显示邮箱地址"
+          placeholder={t('account.form.labelPlaceholder')}
           aria-invalid={Boolean(form.formState.errors.accountLabel)}
           {...form.register('accountLabel')}
         />

@@ -4,6 +4,7 @@ import { MoonStar, SunMedium } from 'lucide-react'
 
 import { Button } from '@renderer/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
+import { useI18n } from '@renderer/lib/i18n'
 
 type ThemeName = 'light' | 'dark'
 
@@ -46,6 +47,7 @@ const THEME_TOGGLE_VIEW_TRANSITION_CSS = `
 `
 
 export function ThemeToggleButton(): React.JSX.Element {
+  const { t } = useI18n()
   const [theme, setTheme] = React.useState<ThemeName>(() => getDomTheme())
 
   function applyTheme(nextTheme: ThemeName): void {
@@ -114,11 +116,16 @@ export function ThemeToggleButton(): React.JSX.Element {
       <style>{THEME_TOGGLE_VIEW_TRANSITION_CSS}</style>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button aria-label="切换主题" size="icon-sm" variant="outline" onClick={handleToggle}>
+          <Button
+            aria-label={t('common.switchTheme')}
+            size="icon-sm"
+            variant="outline"
+            onClick={handleToggle}
+          >
             {theme === 'dark' ? <SunMedium aria-hidden="true" /> : <MoonStar aria-hidden="true" />}
           </Button>
         </TooltipTrigger>
-        <TooltipContent side="bottom">切换主题</TooltipContent>
+        <TooltipContent side="bottom">{t('common.switchTheme')}</TooltipContent>
       </Tooltip>
     </>
   )

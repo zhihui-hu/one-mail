@@ -38,6 +38,7 @@ import {
 } from '@renderer/components/ui/tooltip'
 import { cn } from '@renderer/lib/utils'
 import { selectMailAttachments, type ComposeDraft, type SendMessageInput } from '@renderer/lib/api'
+import { useI18n, type TranslationKey } from '@renderer/lib/i18n'
 import type { MailAttachmentInput } from '../../../../shared/types'
 
 type MailComposerProps = {
@@ -74,6 +75,7 @@ export function MailComposer({
   onSaveDraft,
   onDiscardDraft
 }: MailComposerProps): React.JSX.Element {
+  const { t } = useI18n()
   const sendAccounts = accounts.filter((account) => account.accountId)
   const draftKey = getDraftKey(draft)
   const [expanded, setExpanded] = React.useState(false)
@@ -96,7 +98,7 @@ export function MailComposer({
   async function handleSubmit(action: 'send' | 'draft'): Promise<void> {
     if (!draft) return
     if (action === 'send' && form.to.length === 0) {
-      updateForm({ error: '请至少填写一个收件人。' })
+      updateForm({ error: t('mail.composer.errorRecipientRequired') })
       return
     }
 
@@ -115,7 +117,7 @@ export function MailComposer({
     if (!draft) return null
     const numericAccountId = Number(form.accountId)
     if (!numericAccountId) {
-      updateForm({ error: '请选择发件账号。' })
+      updateForm({ error: t('mail.composer.errorAccountRequired') })
       return null
     }
 
@@ -153,7 +155,7 @@ export function MailComposer({
       })
     } catch (error) {
       updateForm({
-        error: error instanceof Error ? error.message : '选择附件失败。'
+        error: error instanceof Error ? error.message : t('mail.composer.errorSelectAttachment')
       })
     }
   }
@@ -228,7 +230,7 @@ export function MailComposer({
       >
         <header className="flex h-10 shrink-0 items-center justify-between gap-3 bg-muted px-3 text-foreground">
           <div id="mail-composer-title" className="min-w-0 truncate text-sm font-medium">
-            新邮件
+            {t('mail.composer.newMessage')}
           </div>
           <div className="flex items-center gap-1">
             <Tooltip>
@@ -237,13 +239,17 @@ export function MailComposer({
                   type="button"
                   variant="ghost"
                   size="icon-xs"
-                  aria-label={expanded ? '还原窗口' : '展开窗口'}
+                  aria-label={
+                    expanded ? t('mail.composer.restoreWindow') : t('mail.composer.expandWindow')
+                  }
                   onClick={() => setExpanded((value) => !value)}
                 >
                   {expanded ? <Minimize2 /> : <Maximize2 />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{expanded ? '还原窗口' : '展开窗口'}</TooltipContent>
+              <TooltipContent>
+                {expanded ? t('mail.composer.restoreWindow') : t('mail.composer.expandWindow')}
+              </TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -251,7 +257,7 @@ export function MailComposer({
                   type="button"
                   variant="ghost"
                   size="icon-xs"
-                  aria-label="关闭写信窗口"
+                  aria-label={t('mail.composer.closeComposer')}
                   disabled={pending}
                   onClick={() => {
                     void handleSaveAndClose()
@@ -260,7 +266,9 @@ export function MailComposer({
                   <X />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{hasDraftContent(form) ? '保存并关闭' : '关闭'}</TooltipContent>
+              <TooltipContent>
+                {hasDraftContent(form) ? t('mail.composer.saveAndClose') : t('common.close')}
+              </TooltipContent>
             </Tooltip>
           </div>
         </header>
@@ -268,7 +276,7 @@ export function MailComposer({
         <div className="min-h-0 flex-1 overflow-auto">
           <FieldGroup className="gap-0">
             <Field className="min-h-10 border-b px-4 py-1.5" orientation="horizontal">
-              <ComposerFieldLabel htmlFor="composer-account">发件人</ComposerFieldLabel>
+              <ComposerFieldLabel htmlFor="composer-account">{t('mail.composer.from')}</ComposerFieldLabel>
               <NativeSelect
                 id="composer-account"
                 size="sm"
@@ -286,7 +294,7 @@ export function MailComposer({
               </NativeSelect>
             </Field>
             <Field className="min-h-10 border-b px-4 py-1.5" orientation="horizontal">
-              <ComposerFieldLabel htmlFor="composer-to">收件人</ComposerFieldLabel>
+              <ComposerFieldLabel htmlFor="composer-to">{t('mail.composer.to')}</ComposerFieldLabel>
               <AddressInput
                 id="composer-to"
                 value={form.to}
@@ -305,7 +313,7 @@ export function MailComposer({
             </Field>
             {ccVisible ? (
               <Field className="min-h-10 border-b px-4 py-1.5" orientation="horizontal">
-                <ComposerFieldLabel htmlFor="composer-cc">抄送</ComposerFieldLabel>
+                <ComposerFieldLabel htmlFor="composer-cc">{t('mail.composer.cc')}</ComposerFieldLabel>
                 <AddressInput
                   id="composer-cc"
                   value={form.cc}
@@ -317,7 +325,7 @@ export function MailComposer({
             ) : null}
             {bccVisible ? (
               <Field className="min-h-10 border-b px-4 py-1.5" orientation="horizontal">
-                <ComposerFieldLabel htmlFor="composer-bcc">密送</ComposerFieldLabel>
+                <ComposerFieldLabel htmlFor="composer-bcc">{t('mail.composer.bcc')}</ComposerFieldLabel>
                 <AddressInput
                   id="composer-bcc"
                   value={form.bcc}
@@ -332,7 +340,7 @@ export function MailComposer({
                 id="composer-subject"
                 value={form.subject}
                 disabled={pending}
-                placeholder="主题"
+                placeholder={t('mail.composer.subject')}
                 className="h-7 border-0 px-0 py-0 shadow-none focus-visible:ring-0"
                 onChange={(event) => updateForm({ subject: event.target.value })}
               />
@@ -350,7 +358,10 @@ export function MailComposer({
             {form.attachments.length > 0 ? (
               <div className="border-t px-3 py-2">
                 <div className="mb-2 text-xs text-muted-foreground">
-                  {form.attachments.length} 个附件，合计 {formatAttachmentTotal(form.attachments)}
+                  {t('mail.composer.attachmentsSummary', {
+                    count: form.attachments.length,
+                    size: formatAttachmentTotal(form.attachments)
+                  })}
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {form.attachments.map((attachment) => (
@@ -360,7 +371,7 @@ export function MailComposer({
                     >
                       <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />
                       <span className="min-w-0 flex-1 truncate">
-                        {attachment.filename ?? attachment.filePath ?? '附件'}
+                        {attachment.filename ?? attachment.filePath ?? t('mail.composer.attachmentFallback')}
                       </span>
                       <span className="shrink-0 text-muted-foreground">
                         {formatBytes(attachment.sizeBytes)}
@@ -369,7 +380,7 @@ export function MailComposer({
                         <Checkbox
                           checked
                           disabled={pending}
-                          aria-label="包含原邮件附件"
+                          aria-label={t('mail.composer.includeOriginalAttachment')}
                           onCheckedChange={(checked) => {
                             if (checked === false) removeAttachment(attachment)
                           }}
@@ -380,7 +391,7 @@ export function MailComposer({
                           variant="ghost"
                           size="icon-sm"
                           disabled={pending}
-                          aria-label="移除附件"
+                          aria-label={t('mail.composer.removeAttachment')}
                           onClick={() => removeAttachment(attachment)}
                         >
                           <X />
@@ -393,7 +404,9 @@ export function MailComposer({
             ) : null}
             {unselectedForwardAttachments.length > 0 ? (
               <div className="border-t px-3 py-2">
-                <div className="mb-2 text-xs text-muted-foreground">原邮件附件</div>
+                <div className="mb-2 text-xs text-muted-foreground">
+                  {t('mail.composer.originalAttachments')}
+                </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {unselectedForwardAttachments.map((attachment) => (
                     <div
@@ -402,14 +415,14 @@ export function MailComposer({
                     >
                       <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />
                       <span className="min-w-0 flex-1 truncate">
-                        {attachment.filename ?? '附件'}
+                        {attachment.filename ?? t('mail.composer.attachmentFallback')}
                       </span>
                       <span className="shrink-0 text-muted-foreground">
                         {formatBytes(attachment.sizeBytes)}
                       </span>
                       <Checkbox
                         disabled={pending}
-                        aria-label="包含原邮件附件"
+                        aria-label={t('mail.composer.includeOriginalAttachment')}
                         onCheckedChange={(checked) => {
                           if (checked !== true) return
                           updateForm((current) => ({
@@ -439,14 +452,18 @@ export function MailComposer({
                 disabled={pending || !draft}
               >
                 <Send data-icon="inline-start" />
-                {pending ? '发送中...' : '发送'}
+                {pending ? t('common.sending') : t('mail.composer.send')}
               </Button>
-              <Button type="button" size="icon" aria-label="更多发送选项" disabled>
+              <Button type="button" size="icon" aria-label={t('mail.composer.moreSendOptions')} disabled>
                 <span aria-hidden="true">▾</span>
               </Button>
             </ButtonGroup>
             <ComposerToolButton
-              label={formattingVisible ? '隐藏格式选项' : '显示格式选项'}
+              label={
+                formattingVisible
+                  ? t('mail.composer.hideFormatting')
+                  : t('mail.composer.showFormatting')
+              }
               active={formattingVisible}
               disabled={pending}
               onClick={() => setFormattingVisible((value) => !value)}
@@ -454,7 +471,7 @@ export function MailComposer({
               <ALargeSmall />
             </ComposerToolButton>
             <ComposerToolButton
-              label="添加附件"
+              label={t('mail.composer.addAttachment')}
               disabled={pending}
               onClick={() => {
                 void handleSelectAttachments()
@@ -463,16 +480,16 @@ export function MailComposer({
               <Paperclip />
             </ComposerToolButton>
             <ComposerToolButton
-              label="插入链接"
+              label={t('mail.composer.insertLink')}
               disabled={pending || !bodyEditor}
-              onClick={() => setEditorLink(bodyEditor)}
+              onClick={() => setEditorLink(bodyEditor, t)}
             >
               <LinkIcon />
             </ComposerToolButton>
           </div>
           <div className="flex items-center gap-1">
             <ComposerToolButton
-              label="保存草稿"
+              label={t('mail.composer.saveDraft')}
               disabled={pending || !draft}
               onClick={() => {
                 void handleSubmit('draft')
@@ -481,7 +498,7 @@ export function MailComposer({
               <Save />
             </ComposerToolButton>
             <ComposerToolButton
-              label={hasDraftContent(form) ? '丢弃草稿' : '关闭'}
+              label={hasDraftContent(form) ? t('mail.composer.discardDraft') : t('common.close')}
               disabled={pending}
               onClick={() => {
                 void handleDiscard()
@@ -523,6 +540,8 @@ function RecipientDisclosure({
   onShowCc: () => void
   onShowBcc: () => void
 }): React.JSX.Element | null {
+  const { t } = useI18n()
+
   if (ccVisible && bccVisible) return null
 
   return (
@@ -534,7 +553,7 @@ function RecipientDisclosure({
           disabled={disabled}
           onClick={onShowCc}
         >
-          抄送
+          {t('mail.composer.cc')}
         </button>
       ) : null}
       {!bccVisible ? (
@@ -544,7 +563,7 @@ function RecipientDisclosure({
           disabled={disabled}
           onClick={onShowBcc}
         >
-          密送
+          {t('mail.composer.bcc')}
         </button>
       ) : null}
     </div>
@@ -570,6 +589,7 @@ function MailBodyEditor({
   onEditorChange: (editor: Editor | null) => void
   onChange: (patch: Pick<ComposerFormState, 'bodyHtml' | 'bodyText'>) => void
 }): React.JSX.Element {
+  const { t } = useI18n()
   const lastDraftKeyRef = React.useRef(draftKey)
   const editor = useEditor({
     extensions: [
@@ -582,7 +602,7 @@ function MailBodyEditor({
         defaultProtocol: 'https'
       }),
       Placeholder.configure({
-        placeholder: '撰写邮件'
+        placeholder: t('mail.composer.bodyPlaceholder')
       })
     ],
     content: bodyHtml || textToHtml(bodyText),
@@ -601,7 +621,7 @@ function MailBodyEditor({
         bodyText: currentEditor.getText({ blockSeparator: '\n\n' })
       })
     }
-  })
+  }, [t])
 
   React.useEffect(() => {
     editor?.setEditable(!disabled)
@@ -639,10 +659,12 @@ function EditorToolbar({
   editor: Editor | null
   disabled: boolean
 }): React.JSX.Element {
+  const { t } = useI18n()
+
   return (
     <div className="flex min-h-10 shrink-0 items-center gap-1 border-b bg-muted/50 px-3">
       <FormatButton
-        label="加粗"
+        label={t('mail.composer.bold')}
         active={editor?.isActive('bold')}
         disabled={disabled || !editor}
         onClick={() => editor?.chain().focus().toggleBold().run()}
@@ -650,7 +672,7 @@ function EditorToolbar({
         <Bold />
       </FormatButton>
       <FormatButton
-        label="斜体"
+        label={t('mail.composer.italic')}
         active={editor?.isActive('italic')}
         disabled={disabled || !editor}
         onClick={() => editor?.chain().focus().toggleItalic().run()}
@@ -658,7 +680,7 @@ function EditorToolbar({
         <Italic />
       </FormatButton>
       <FormatButton
-        label="下划线"
+        label={t('mail.composer.underline')}
         active={editor?.isActive('underline')}
         disabled={disabled || !editor}
         onClick={() => editor?.chain().focus().toggleUnderline().run()}
@@ -666,7 +688,7 @@ function EditorToolbar({
         <Underline />
       </FormatButton>
       <FormatButton
-        label="删除线"
+        label={t('mail.composer.strikethrough')}
         active={editor?.isActive('strike')}
         disabled={disabled || !editor}
         onClick={() => editor?.chain().focus().toggleStrike().run()}
@@ -675,7 +697,7 @@ function EditorToolbar({
       </FormatButton>
       <Separator orientation="vertical" className="mx-1 h-5" />
       <FormatButton
-        label="项目符号"
+        label={t('mail.composer.bulletList')}
         active={editor?.isActive('bulletList')}
         disabled={disabled || !editor}
         onClick={() => editor?.chain().focus().toggleBulletList().run()}
@@ -683,7 +705,7 @@ function EditorToolbar({
         <List />
       </FormatButton>
       <FormatButton
-        label="编号列表"
+        label={t('mail.composer.orderedList')}
         active={editor?.isActive('orderedList')}
         disabled={disabled || !editor}
         onClick={() => editor?.chain().focus().toggleOrderedList().run()}
@@ -691,10 +713,10 @@ function EditorToolbar({
         <ListOrdered />
       </FormatButton>
       <FormatButton
-        label="链接"
+        label={t('mail.composer.link')}
         active={editor?.isActive('link')}
         disabled={disabled || !editor}
-        onClick={() => setEditorLink(editor)}
+        onClick={() => setEditorLink(editor, t)}
       >
         <LinkIcon />
       </FormatButton>
@@ -768,10 +790,13 @@ function FormatButton({
   )
 }
 
-function setEditorLink(editor: Editor | null): void {
+function setEditorLink(
+  editor: Editor | null,
+  t: (key: TranslationKey) => string
+): void {
   if (!editor) return
   const previousUrl = editor.getAttributes('link').href as string | undefined
-  const url = window.prompt('链接地址', previousUrl ?? 'https://')
+  const url = window.prompt(t('mail.composer.linkPrompt'), previousUrl ?? 'https://')
   if (url === null) return
   if (!url.trim()) {
     editor.chain().focus().extendMarkRange('link').unsetLink().run()
@@ -880,11 +905,11 @@ function escapeHtml(value: string): string {
 
 function formatAttachmentTotal(attachments: MailAttachmentInput[]): string {
   const total = attachments.reduce((sum, attachment) => sum + (attachment.sizeBytes ?? 0), 0)
-  return formatBytes(total)
+  return formatBytes(total, '')
 }
 
-function formatBytes(value?: number): string {
-  if (!value) return '未知大小'
+function formatBytes(value?: number, fallback = ''): string {
+  if (!value) return fallback
   if (value < 1024) return `${value} B`
   if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
   return `${(value / 1024 / 1024).toFixed(1)} MB`

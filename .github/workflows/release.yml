@@ -12,6 +12,8 @@ jobs:
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    env:
+      TZ: Asia/Shanghai
     strategy:
       fail-fast: false
       matrix:
@@ -29,6 +31,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set timezone (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: sudo timedatectl set-timezone Asia/Shanghai
+
+      - name: Set timezone (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: sudo systemsetup -settimezone Asia/Shanghai
+
+      - name: Set timezone (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          tzutil /s "China Standard Time"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

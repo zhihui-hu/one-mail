@@ -8,6 +8,7 @@ import {
   type BulkDeleteMessagesResult,
   type DeleteMessageResult
 } from '@renderer/lib/api'
+import { useI18n } from '@renderer/lib/i18n'
 import { getErrorMessage } from './mailbox-utils'
 
 type DeleteRequest = {
@@ -32,6 +33,7 @@ export function useMessageActions({
   cancelDelete: () => void
   confirmDelete: () => Promise<void>
 } {
+  const { t } = useI18n()
   const [deleteRequest, setDeleteRequest] = React.useState<DeleteRequest | null>(null)
   const [deletingMessageIds, setDeletingMessageIds] = React.useState<Set<string>>(() => new Set())
 
@@ -60,7 +62,7 @@ export function useMessageActions({
           messageId: deleteRequest.messages[0].messageId,
           permanent: true
         })
-        handleSingleDeleteResult(result)
+        handleSingleDeleteResult(result, t)
         if (result.deleted || result.hidden) {
           removeMessages(messageIds)
           clearSelection()
@@ -73,7 +75,7 @@ export function useMessageActions({
         messageIds: deleteRequest.messages.map((message) => message.messageId),
         permanent: true
       })
-      handleBulkDeleteResult(result)
+      handleBulkDeleteResult(result, t)
       if (result.succeededMessageIds.length > 0) {
         const succeededIds = new Set(result.succeededMessageIds.map(String))
         removeMessages(messageIds.filter((messageId) => succeededIds.has(messageId)))
@@ -83,13 +85,13 @@ export function useMessageActions({
         setDeleteRequest(null)
       }
     } catch (deleteError) {
-      const message = getErrorMessage(deleteError, '删除邮件失败。')
+      const message = getErrorMessage(deleteError, t('mail.delete.error'))
       setError(message)
       toast.error(message)
     } finally {
       setDeletingMessageIds(new Set())
     }
-  }, [clearSelection, deleteRequest, deletingMessageIds.size, removeMessages, setError])
+  }, [clearSelection, deleteRequest, deletingMessageIds.size, removeMessages, setError, t])
 
   return {
     deleteRequest,
@@ -101,18 +103,24 @@ export function useMessageActions({
   }
 }
 
-function handleSingleDeleteResult(result: DeleteMessageResult): void {
+function handleSingleDeleteResult(
+  result: DeleteMessageResult,
+  t: ReturnType<typeof useI18n>['t']
+): void {
   if (result.deleted || result.hidden) {
-    toast.success('邮件已永久删除')
+    toast.success(t('mail.delete.successSingle'))
     return
   }
 
-  toast.error(result.error ?? '删除邮件失败。')
+  toast.error(result.error ?? t('mail.delete.error'))
 }
 
-function handleBulkDeleteResult(result: BulkDeleteMessagesResult): void {
+function handleBulkDeleteResult(
+  result: BulkDeleteMessagesResult,
+  t: ReturnType<typeof useI18n>['t']
+): void {
   if (result.failedCount === 0) {
-    toast.success(`已删除 ${result.deletedCount} 封邮件`)
+    toast.success(t('mail.delete.successBulk', { count: result.deletedCount }))
     return
   }
 
@@ -120,5 +128,11 @@ function handleBulkDeleteResult(result: BulkDeleteMessagesResult): void {
     .slice(0, 3)
     .map((item) => item.error)
     .join('；')
-  toast.error(`已删除 ${result.deletedCount} 封，${result.failedCount} 封失败。${examples}`)
+  toast.error(
+    t('mail.delete.partialFailed', {
+      deleted: result.deletedCount,
+      failed: result.failedCount,
+      examples
+    })
+  )
 }

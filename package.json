@@ -14,6 +14,7 @@
   ],
   "main": "./out/main/index.js",
   "author": "Huzhihui",
+  "license": "AGPL-3.0-only",
   "homepage": "https://onemail.huzhihui.com",
   "scripts": {
     "format": "prettier --write .",

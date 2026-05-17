@@ -1,4 +1,5 @@
 import * as React from 'react'
+import type { TranslationKey } from '@renderer/lib/i18n'
 
 export type SyncNotice = {
   state: 'idle' | 'running' | 'success' | 'error'
@@ -74,15 +75,25 @@ export function useSyncFeedback(): SyncFeedback {
   }
 }
 
-export function formatSyncNotice(notice: SyncNotice): string {
+export function formatSyncNotice(
+  notice: SyncNotice,
+  t?: (key: TranslationKey, values?: Record<string, string | number>) => string
+): string {
   if (notice.state === 'idle') return ''
-  if (notice.state === 'running') return notice.message ?? '正在同步...'
+  if (notice.state === 'running') return notice.message ?? t?.('sync.running') ?? 'Syncing...'
 
-  const message = notice.message ?? (notice.state === 'success' ? '同步完成' : '同步失败')
+  const message =
+    notice.message ??
+    (notice.state === 'success'
+      ? (t?.('sync.success') ?? 'Sync complete')
+      : (t?.('sync.error') ?? 'Sync failed'))
   const elapsedSeconds =
     notice.startedAt && notice.finishedAt
       ? Math.max(1, Math.round((notice.finishedAt.getTime() - notice.startedAt.getTime()) / 1000))
       : undefined
 
-  return elapsedSeconds ? `${message}，耗时 ${elapsedSeconds} 秒` : message
+  return elapsedSeconds
+    ? (t?.('sync.elapsed', { message, seconds: elapsedSeconds }) ??
+        `${message}, took ${elapsedSeconds}s`)
+    : message
 }

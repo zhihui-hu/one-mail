@@ -6,6 +6,7 @@ import { ResponsiveDialog } from '@renderer/components/responsive-dialog'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import { FieldError, FieldGroup } from '@renderer/components/ui/field'
+import { useI18n, type TranslationKey } from '@renderer/lib/i18n'
 import {
   Select,
   SelectContent,
@@ -16,7 +17,7 @@ import {
 } from '@renderer/components/ui/select'
 import type { AccountCreateInput } from '../../../../shared/types'
 import {
-  accountSchema,
+  createAccountSchema,
   defaultAccountFormValues,
   getProviderPreset,
   providerPresets,
@@ -52,6 +53,8 @@ export function AddAccountForm({
   bodyClassName = 'flex flex-col gap-3',
   footerClassName = 'flex justify-end'
 }: AddAccountFormProps): React.JSX.Element {
+  const { t } = useI18n()
+  const accountSchema = React.useMemo(() => createAccountSchema(t), [t])
   const [pending, setPending] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [kind, setKind] = React.useState<AccountKind>(defaultAccountFormValues.kind)
@@ -97,7 +100,7 @@ export function AddAccountForm({
       form.reset(defaultAccountFormValues)
       setKind(defaultAccountFormValues.kind)
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : '保存账号失败。')
+      setError(submitError instanceof Error ? submitError.message : t('account.add.saveError'))
     } finally {
       setPending(false)
     }
@@ -112,16 +115,16 @@ export function AddAccountForm({
       <div className={bodyClassName}>
         <AccountAddGuideHint kind={kind} />
 
-        <AccountFormField id="account-kind" label="邮箱类型" required>
+        <AccountFormField id="account-kind" label={t('account.form.type')} required>
           <Select value={kind} onValueChange={handleKindChange} required>
-            <SelectTrigger id="account-kind" aria-label="邮箱类型" className="w-full">
-              <SelectValue placeholder="邮箱类型" />
+            <SelectTrigger id="account-kind" aria-label={t('account.form.type')} className="w-full">
+              <SelectValue placeholder={t('account.form.type')} />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
                 {providerPresets.map((preset) => (
                   <SelectItem key={preset.kind} value={preset.kind}>
-                    {preset.label}
+                    {getProviderPresetLabel(preset.kind, t)}
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -138,11 +141,11 @@ export function AddAccountForm({
         <Button type="submit" disabled={pending}>
           {pending
             ? kind === 'outlook'
-              ? '等待授权...'
-              : '测试中...'
+              ? t('account.add.waitingAuth')
+              : t('common.testing')
             : kind === 'outlook'
-              ? '使用 Microsoft 登录'
-              : '保存账号'}
+              ? t('account.add.microsoftLogin')
+              : t('account.add.saveAccount')}
         </Button>
       </div>
     </form>
@@ -154,6 +157,8 @@ export function AddAccountDialog({
   onOpenChange,
   onSubmit
 }: AddAccountDialogProps): React.JSX.Element {
+  const { t } = useI18n()
+
   function handleOpenChange(nextOpen: boolean): void {
     onOpenChange(nextOpen)
   }
@@ -162,7 +167,7 @@ export function AddAccountDialog({
     <ResponsiveDialog
       open={open}
       onOpenChange={handleOpenChange}
-      title="添加账号"
+      title={t('account.add.title')}
       contentClassName="h-[min(560px,calc(100vh-2rem))] grid-rows-[auto_minmax(0,1fr)] gap-3 p-4 sm:w-[440px] sm:max-w-[440px]"
       bodyClassName="min-h-0"
     >
@@ -189,27 +194,47 @@ function renderProviderForm(
 }
 
 function AccountAddGuideHint({ kind }: { kind: AccountKind }): React.JSX.Element {
-  const preset = getProviderPreset(kind)
+  const { t } = useI18n()
+  const label = getProviderPresetLabel(kind, t)
 
   return (
     <Alert variant="warning">
       <AlertDescription className="text-xs leading-5">
-        {getAccountGuideText(kind, preset.label)}
+        {getAccountGuideText(kind, label, t)}
         <a href={ACCOUNT_ADD_GUIDE_URL} target="_blank" rel="noreferrer">
-          查看添加指南
+          {t('account.add.guideLink')}
         </a>
       </AlertDescription>
     </Alert>
   )
 }
 
-function getAccountGuideText(kind: AccountKind, label: string): string {
-  if (kind === 'gmail') return `添加 ${label} 前，建议先开启 IMAP 并准备应用密码。`
-  if (kind === 'netease163') return `添加 ${label} 前，建议先开启 IMAP/SMTP 并准备客户端授权码。`
-  if (kind === 'qq') return `添加 ${label} 前，建议先开启 IMAP/SMTP 并准备授权码。`
-  if (kind === 'custom') return '添加自定义 IMAP 前，建议先确认服务器、端口、连接安全和密码/授权码。'
+function getAccountGuideText(
+  kind: AccountKind,
+  label: string,
+  t: ReturnType<typeof useI18n>['t']
+): string {
+  if (kind === 'gmail') return t('account.add.guide.gmail', { label })
+  if (kind === 'netease163') return t('account.add.guide.netease163', { label })
+  if (kind === 'qq') return t('account.add.guide.qq', { label })
+  if (kind === 'custom') return t('account.add.guide.custom')
 
-  return `添加 ${label} 前，如需检查邮箱访问设置，`
+  return t('account.add.guide.default', { label })
+}
+
+function getProviderPresetLabel(
+  kind: AccountKind,
+  t: (key: TranslationKey, values?: Record<string, string | number>) => string
+): string {
+  const labels: Record<AccountKind, TranslationKey> = {
+    gmail: 'account.provider.gmail',
+    outlook: 'account.provider.outlook',
+    netease163: 'account.provider.netease163',
+    qq: 'account.provider.qq',
+    custom: 'account.provider.custom'
+  }
+
+  return t(labels[kind])
 }
 
 function optionalText(value?: string): string | undefined {

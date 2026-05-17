@@ -299,6 +299,13 @@ export type SyncStatus = {
   lastStartedAt?: string
 }
 
+export type AccountSyncRunResult = SyncStatus & {
+  accountId: number
+  scannedCount: number
+  insertedCount: number
+  updatedCount: number
+}
+
 export type MailboxChangedEvent = {
   accountId: number
   reason: 'idle' | 'poll' | 'manual'
@@ -355,6 +362,13 @@ export type SystemInfo = {
   userDataPath: string
 }
 
+export type AppUpdateCheckResult = {
+  status: 'unsupported' | 'available' | 'not_available' | 'error'
+  currentVersion: string
+  latestVersion?: string
+  message: string
+}
+
 export type OneMailApi = {
   accounts: {
     list: () => Promise<MailAccount[]>
@@ -396,7 +410,7 @@ export type OneMailApi = {
   }
   sync: {
     startAll: (mode?: SyncMode) => Promise<SyncStatus>
-    startAccount: (accountId: number, mode?: SyncMode) => Promise<SyncStatus>
+    startAccount: (accountId: number, mode?: SyncMode) => Promise<AccountSyncRunResult>
     status: () => Promise<SyncStatus>
     onMailboxChanged: (callback: (event: MailboxChangedEvent) => void) => () => void
   }
@@ -410,9 +424,13 @@ export type OneMailApi = {
     exportSql: () => Promise<string | null>
     importSql: () => Promise<BackupImportResult>
   }
+  updates: {
+    check: () => Promise<AppUpdateCheckResult>
+  }
   system: {
     info: () => Promise<SystemInfo>
     revealDatabase: () => Promise<boolean>
     revealPath: (path: string) => Promise<boolean>
+    openExternal: (url: string) => Promise<boolean>
   }
 }

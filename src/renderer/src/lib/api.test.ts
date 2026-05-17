@@ -64,4 +64,17 @@ describe('compose API mapping', () => {
       }
     ])
   })
+
+  it('falls back to attachmentPaths for legacy local-file sends', () => {
+    const input = toSharedSendInput({
+      kind: 'new',
+      accountId: 1,
+      to: ['recipient@example.com'],
+      subject: 'Local file',
+      bodyText: 'body',
+      attachmentPaths: ['/tmp/report.pdf']
+    })
+
+    expect(input.attachments).toEqual([{ filePath: '/tmp/report.pdf' }])
+  })
 })

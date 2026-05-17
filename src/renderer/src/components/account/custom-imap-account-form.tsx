@@ -10,6 +10,7 @@ import {
   SelectValue
 } from '@renderer/components/ui/select'
 import { Input } from '@renderer/components/ui/input'
+import { useI18n } from '@renderer/lib/i18n'
 import type { AccountFormValues } from './account-form-types'
 import { AccountFormField } from './account-form-field'
 import { CommonAccountFields } from './common-account-fields'
@@ -19,18 +20,20 @@ type CustomImapAccountFormProps = {
 }
 
 export function CustomImapAccountForm({ form }: CustomImapAccountFormProps): React.JSX.Element {
+  const { t } = useI18n()
+
   return (
     <>
       <CommonAccountFields
         form={form}
-        passwordLabel="密码"
-        passwordPlaceholder="邮箱密码或客户端授权码"
+        passwordLabel={t('account.form.password')}
+        passwordPlaceholder={t('account.form.passwordPlaceholder')}
       />
 
       <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_112px]">
         <AccountFormField
           id="imap-host"
-          label="IMAP 服务器"
+          label={t('account.form.imapHost')}
           required
           error={form.formState.errors.imapHost?.message}
         >
@@ -45,7 +48,7 @@ export function CustomImapAccountForm({ form }: CustomImapAccountFormProps): Rea
 
         <AccountFormField
           id="imap-port"
-          label="端口"
+          label={t('account.form.port')}
           required
           error={form.formState.errors.imapPort?.message}
         >
@@ -63,7 +66,7 @@ export function CustomImapAccountForm({ form }: CustomImapAccountFormProps): Rea
 
       <AccountFormField
         id="imap-security"
-        label="连接安全"
+        label={t('account.form.security')}
         required
         error={form.formState.errors.imapSecurity?.message}
       >
@@ -75,16 +78,16 @@ export function CustomImapAccountForm({ form }: CustomImapAccountFormProps): Rea
               <SelectTrigger
                 id="imap-security"
                 className="w-full"
-                aria-label="连接安全"
+                aria-label={t('account.form.security')}
                 aria-invalid={Boolean(form.formState.errors.imapSecurity)}
               >
-                <SelectValue placeholder="连接安全" />
+                <SelectValue placeholder={t('account.form.security')} />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
                   <SelectItem value="ssl_tls">SSL/TLS</SelectItem>
                   <SelectItem value="starttls">STARTTLS</SelectItem>
-                  <SelectItem value="none">无加密</SelectItem>
+                  <SelectItem value="none">{t('account.form.securityNone')}</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>

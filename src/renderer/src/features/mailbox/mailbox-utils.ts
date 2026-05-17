@@ -18,7 +18,7 @@ export function createOutlookHelpAccount(accountId: number, email: string): Acco
     address: email,
     unread: 0,
     status: 'auth_error',
-    lastError: 'Outlook IMAP 登录认证失败。',
+    lastError: 'Outlook IMAP authentication failed.',
     accent: 'bg-muted-foreground'
   }
 }
@@ -74,7 +74,7 @@ export function getMessageListScopeKey(
 export function getFallbackAccount(): Account {
   return {
     id: '',
-    name: '暂无账号',
+    name: '',
     address: '',
     unread: 0,
     messageCount: 0,

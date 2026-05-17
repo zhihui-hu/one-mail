@@ -34,4 +34,35 @@ describe('MailComposer forwarded attachments', () => {
       )
     ).toEqual([second])
   })
+
+  it('does not confuse forwarded attachments with local attachments of the same filename', () => {
+    const forwarded = {
+      sourceMessageId: 1,
+      sourceAttachmentId: 10,
+      filename: 'report.pdf',
+      sizeBytes: 100
+    }
+    const local = {
+      filePath: '/tmp/report.pdf',
+      filename: 'report.pdf',
+      sizeBytes: 100
+    }
+
+    expect(getAttachmentKey(forwarded)).not.toBe(getAttachmentKey(local))
+    expect(
+      getUnselectedForwardAttachments(
+        {
+          kind: 'forward',
+          accountId: 1,
+          to: [],
+          cc: [],
+          bcc: [],
+          subject: 'Fwd',
+          bodyText: '',
+          forwardAttachments: [forwarded]
+        },
+        [local]
+      )
+    ).toEqual([forwarded])
+  })
 })

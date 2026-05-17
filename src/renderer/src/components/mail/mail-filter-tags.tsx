@@ -8,25 +8,26 @@ import {
   DropdownMenuTrigger
 } from '@renderer/components/ui/dropdown-menu'
 import { ToggleGroup, ToggleGroupItem } from '@renderer/components/ui/toggle-group'
+import { useI18n, type TranslationKey } from '@renderer/lib/i18n'
 import { cn } from '@renderer/lib/utils'
 import type { MailFilterTag } from './types'
 
 const quickFilters: Array<{
   value: MailFilterTag
-  label: string
+  labelKey: TranslationKey
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
 }> = [
-  { value: 'unread', label: '未读', icon: Mail },
-  { value: 'starred', label: '星标', icon: Star }
+  { value: 'unread', labelKey: 'mail.filter.unread', icon: Mail },
+  { value: 'starred', labelKey: 'mail.filter.starred', icon: Star }
 ]
 
 const dateFilters: Array<{
   value: MailFilterTag
-  label: string
+  labelKey: TranslationKey
 }> = [
-  { value: 'today', label: '今天' },
-  { value: 'yesterday', label: '昨天' },
-  { value: 'last7', label: '近七天' }
+  { value: 'today', labelKey: 'mail.filter.today' },
+  { value: 'yesterday', labelKey: 'mail.filter.yesterday' },
+  { value: 'last7', labelKey: 'mail.filter.last7' }
 ]
 
 const dateFilterValues = dateFilters.map((filter) => filter.value)
@@ -40,11 +41,16 @@ export function MailFilterTags({
   value: MailFilterTag[]
   onValueChange: (value: MailFilterTag[]) => void
 }): React.JSX.Element {
+  const { t } = useI18n()
   const dateFilter = value.find(isDateFilter)
-  const dateLabel = dateFilters.find((filter) => filter.value === dateFilter)?.label ?? '时间'
+  const dateLabelKey = dateFilters.find((filter) => filter.value === dateFilter)?.labelKey
+  const dateLabel = dateLabelKey ? t(dateLabelKey) : t('mail.filter.time')
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-start gap-1.5" aria-label="邮件筛选">
+    <div
+      className="flex w-full flex-wrap items-center justify-start gap-1.5"
+      aria-label={t('mail.filter.region')}
+    >
       <ToggleGroup
         type="multiple"
         value={value.filter((filter) => !isDateFilter(filter))}
@@ -55,20 +61,21 @@ export function MailFilterTags({
           ])
         }
         className="flex flex-wrap justify-start gap-1.5"
-        aria-label="邮件状态筛选"
+        aria-label={t('mail.filter.status')}
       >
         {quickFilters.map((filter) => {
           const Icon = filter.icon
+          const label = t(filter.labelKey)
 
           return (
             <ToggleGroupItem
               key={filter.value}
               value={filter.value}
-              aria-label={filter.label}
+              aria-label={label}
               className={filterBadgeClassName}
             >
               <Icon data-icon="inline-start" />
-              <span>{filter.label}</span>
+              <span>{label}</span>
             </ToggleGroupItem>
           )
         })}
@@ -81,7 +88,7 @@ export function MailFilterTags({
             filterBadgeClassName,
             dateFilter && 'border-transparent bg-primary text-primary-foreground hover:bg-primary/90'
           )}
-          aria-label="时间筛选"
+          aria-label={t('mail.filter.date')}
         >
           <CalendarDays data-icon="inline-start" />
           <span>{dateLabel}</span>
@@ -89,7 +96,7 @@ export function MailFilterTags({
             <span
               role="button"
               tabIndex={0}
-              aria-label="清除时间筛选"
+              aria-label={t('mail.filter.clearDate')}
               className="-mr-0.5 inline-flex size-3.5 items-center justify-center rounded-full outline-none hover:bg-primary-foreground/20 focus-visible:ring-2 focus-visible:ring-primary-foreground/70"
               onPointerDown={(event) => {
                 event.preventDefault()
@@ -131,7 +138,7 @@ export function MailFilterTags({
                 value={filter.value}
                 className="py-1 text-xs"
               >
-                {filter.label}
+                {t(filter.labelKey)}
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>

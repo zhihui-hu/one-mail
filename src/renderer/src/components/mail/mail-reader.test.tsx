@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { Message } from './types'
 import { MailReader } from './mail-reader'
+import { I18nProvider } from '@renderer/lib/i18n'
 
 function createMessage(overrides: Partial<Message> = {}): Message {
   return {
@@ -31,7 +32,7 @@ function createMessage(overrides: Partial<Message> = {}): Message {
 
 describe('MailReader metadata', () => {
   it('uses the message To header before falling back to the account address', () => {
-    render(
+    renderMailReader(
       <MailReader
         message={createMessage()}
         recipientAddress="account@example.com"
@@ -44,7 +45,7 @@ describe('MailReader metadata', () => {
   })
 
   it('keeps sender and recipient values available as tooltip titles', () => {
-    render(
+    renderMailReader(
       <MailReader
         message={createMessage()}
         recipientAddress="account@example.com"
@@ -62,3 +63,7 @@ describe('MailReader metadata', () => {
     )
   })
 })
+
+function renderMailReader(ui: React.ReactElement): ReturnType<typeof render> {
+  return render(<I18nProvider>{ui}</I18nProvider>)
+}

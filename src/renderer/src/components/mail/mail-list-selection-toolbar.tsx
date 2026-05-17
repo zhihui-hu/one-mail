@@ -3,6 +3,7 @@ import { Trash2, X } from 'lucide-react'
 
 import { Button } from '@renderer/components/ui/button'
 import { Checkbox } from '@renderer/components/ui/checkbox'
+import { useI18n } from '@renderer/lib/i18n'
 
 type MailListSelectionToolbarProps = {
   selectedCount: number
@@ -23,26 +24,28 @@ export function MailListSelectionToolbar({
   onClearSelection,
   onDeleteSelected
 }: MailListSelectionToolbarProps): React.JSX.Element {
+  const { t } = useI18n()
+
   return (
     <div className="app-no-drag flex min-h-10 items-center gap-2 border-t px-4 py-2">
       <Checkbox
         checked={allVisibleSelected ? true : someVisibleSelected ? 'indeterminate' : false}
         disabled={disabled}
-        aria-label="选择当前加载的邮件"
+        aria-label={t('mail.selection.selectVisible')}
         onCheckedChange={onSelectAllVisible}
       />
       <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-        已选 {selectedCount} 封
+        {t('mail.selection.selectedCount', { count: selectedCount })}
       </span>
       <Button size="sm" variant="outline" disabled={disabled} onClick={onDeleteSelected}>
         <Trash2 data-icon="inline-start" />
-        永久删除
+        {t('mail.selection.deletePermanently')}
       </Button>
       <Button
         size="icon-sm"
         variant="ghost"
         disabled={disabled}
-        aria-label="清空选择"
+        aria-label={t('mail.selection.clear')}
         onClick={onClearSelection}
       >
         <X aria-hidden="true" />

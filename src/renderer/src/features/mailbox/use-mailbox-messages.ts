@@ -10,6 +10,7 @@ import {
   setMessageReadState,
   toMessageQuery
 } from '@renderer/lib/api'
+import { useI18n } from '@renderer/lib/i18n'
 import { isVerificationMailCandidate } from '../../../../shared/verification-code'
 import {
   decrementUnreadCount,
@@ -61,6 +62,7 @@ export function useMailboxMessages({
   loadMessageBody: (message: Message) => void
   downloadMessageAttachment: (message: Message, attachmentId: number) => void
 } {
+  const { t } = useI18n()
   const [messages, setMessages] = React.useState<Message[]>([])
   const [selectedMessageId, setSelectedMessageId] = React.useState('')
   const [messagePage, setMessagePage] = React.useState<MessageListPageState>({
@@ -200,7 +202,7 @@ export function useMailboxMessages({
       })
       .catch((loadError) => {
         if (loadMoreRequestTokenRef.current !== requestToken) return
-        setError(getErrorMessage(loadError, '加载更多邮件失败。'))
+        setError(getErrorMessage(loadError, t('mailbox.loadMoreError')))
         setMessagePage((current) => ({ ...current, loadingMore: false }))
       })
       .finally(() => {
@@ -216,7 +218,8 @@ export function useMailboxMessages({
     messages.length,
     searchKeyword,
     selectedAccountId,
-    setError
+    setError,
+    t
   ])
 
   const loadMessageDetail = React.useCallback(
@@ -235,14 +238,14 @@ export function useMailboxMessages({
           )
         })
         .catch((loadError) => {
-          setError(getErrorMessage(loadError, '加载邮件详情失败。'))
+          setError(getErrorMessage(loadError, t('mailbox.loadDetailError')))
         })
         .finally(() => {
           loadingMessageIdsRef.current.delete(messageId)
           setLoadingMessageId((current) => (current === messageId ? null : current))
         })
     },
-    [setError]
+    [setError, t]
   )
 
   const loadMessageBodyForReader = React.useCallback(
@@ -255,14 +258,14 @@ export function useMailboxMessages({
           replaceMessage(message.id, detail, setMessages)
         })
         .catch((loadError) => {
-          setError(getErrorMessage(loadError, '加载邮件正文失败。'))
+          setError(getErrorMessage(loadError, t('mailbox.loadBodyError')))
         })
         .finally(() => {
           loadingBodyMessageIdsRef.current.delete(message.id)
           setLoadingBodyMessageId((current) => (current === message.id ? null : current))
         })
     },
-    [beginLoadingBody, setError]
+    [beginLoadingBody, setError, t]
   )
 
   React.useEffect(() => {
@@ -308,13 +311,13 @@ export function useMailboxMessages({
           setAccounts((current) => decrementUnreadCount(current, message.accountId))
         })
         .catch((readStateError) => {
-          setError(getErrorMessage(readStateError, '同步已读状态失败。'))
+          setError(getErrorMessage(readStateError, t('mailbox.readStateError')))
         })
         .finally(() => {
           markingReadMessageIdsRef.current.delete(message.id)
         })
     },
-    [setAccounts, setError]
+    [setAccounts, setError, t]
   )
 
   const reloadMessageDetail = React.useCallback((message: Message): Promise<void> => {
@@ -337,7 +340,7 @@ export function useMailboxMessages({
           await reloadMessageDetail(message)
         })
         .catch((downloadError) => {
-          setError(getErrorMessage(downloadError, '下载附件失败。'))
+          setError(getErrorMessage(downloadError, t('mailbox.downloadAttachmentError')))
           void reloadMessageDetail(message)
         })
         .finally(() => {

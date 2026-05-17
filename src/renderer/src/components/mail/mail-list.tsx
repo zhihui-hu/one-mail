@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 
 import { formatAbsoluteTime, formatRelativeTime } from '@renderer/components/mail/date-format'
 import { EllipsisTooltip } from '@renderer/components/mail/ellipsis-tooltip'
+import { getDisplayPreview, getDisplaySender, getDisplaySubject } from '@renderer/components/mail/mail-display'
 import { MailFilterTags } from '@renderer/components/mail/mail-filter-tags'
 import { MailListSelectionToolbar } from '@renderer/components/mail/mail-list-selection-toolbar'
 import type { Account, MailFilterTag, Message } from '@renderer/components/mail/types'
@@ -16,6 +17,7 @@ import {
 } from '@renderer/components/ui/input-group'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { TooltipProvider } from '@renderer/components/ui/tooltip'
+import { useI18n, type AppLocale } from '@renderer/lib/i18n'
 import { cn } from '@renderer/lib/utils'
 
 type MailListProps = {
@@ -65,6 +67,7 @@ export function MailList({
   onClearSelection,
   onDeleteSelected
 }: MailListProps): React.JSX.Element {
+  const { locale, t } = useI18n()
   const scrollContainerRef = React.useRef<HTMLDivElement | null>(null)
   const accountMessageCount = account.messageCount ?? messages.length
   const readCount = Math.max(0, accountMessageCount - account.unread)
@@ -95,10 +98,12 @@ export function MailList({
       <header className="app-drag-region shrink-0 border-b bg-card/60">
         <div className="app-no-drag flex h-9 items-center gap-3 px-4">
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-sm font-semibold">{account.name}</h1>
+            <h1 className="truncate text-sm font-semibold">
+              {account.id === 'all' ? t('account.all.name') : account.name || account.address}
+            </h1>
           </div>
           <p className="shrink-0 text-xs text-muted-foreground">
-            已读 {readCount} · 未读 {account.unread}
+            {t('mail.stats.readUnread', { read: readCount, unread: account.unread })}
           </p>
         </div>
         <div className="app-no-drag flex flex-col gap-2 px-4 pb-2">
@@ -110,14 +115,14 @@ export function MailList({
               type="search"
               value={searchKeyword}
               onChange={(event) => onChangeSearchKeyword(event.target.value)}
-              placeholder="搜索邮件"
-              aria-label="搜索邮件"
+              placeholder={t('mail.search.placeholder')}
+              aria-label={t('mail.search.placeholder')}
             />
             {searchKeyword ? (
               <InputGroupAddon align="inline-end">
                 <InputGroupButton
                   size="icon-xs"
-                  aria-label="清空搜索"
+                  aria-label={t('mail.search.clear')}
                   onClick={() => onChangeSearchKeyword('')}
                 >
                   <X aria-hidden="true" />
@@ -147,7 +152,7 @@ export function MailList({
       >
         <TooltipProvider>
           {loading ? (
-            <ListState>正在加载本地邮箱数据...</ListState>
+            <ListState>{t('mail.list.loadingLocal')}</ListState>
           ) : error ? (
             <ListState destructive>{error}</ListState>
           ) : messages.length > 0 ? (
@@ -156,6 +161,7 @@ export function MailList({
                 <MessageListItem
                   key={message.id}
                   message={message}
+                  locale={locale}
                   selected={message.id === selectedMessageId}
                   checked={selectedMessageIds.has(message.id)}
                   selectionDisabled={selectionDisabled}
@@ -167,7 +173,7 @@ export function MailList({
             </div>
           ) : (
             <ListState>
-              {searchKeyword.trim() ? '没有找到匹配的邮件。' : '当前邮箱暂无邮件。'}
+              {searchKeyword.trim() ? t('mail.list.noSearchResults') : t('mail.list.emptyMailbox')}
             </ListState>
           )}
         </TooltipProvider>
@@ -183,11 +189,13 @@ function LoadMoreState({
   loading: boolean
   hasMore: boolean
 }): React.JSX.Element {
+  const { t } = useI18n()
+
   if (loading) {
     return (
       <div className="flex h-12 items-center justify-center gap-2 border-b px-4 text-xs text-muted-foreground">
         <Spinner aria-hidden="true" />
-        <span>正在加载更多邮件...</span>
+        <span>{t('mail.list.loadingMore')}</span>
       </div>
     )
   }
@@ -195,7 +203,7 @@ function LoadMoreState({
   if (!hasMore) {
     return (
       <div className="flex h-10 items-center justify-center border-b px-4 text-xs text-muted-foreground">
-        已加载全部邮件
+        {t('mail.list.allLoaded')}
       </div>
     )
   }
@@ -205,6 +213,7 @@ function LoadMoreState({
 
 function MessageListItem({
   message,
+  locale,
   selected,
   checked,
   selectionDisabled,
@@ -212,24 +221,29 @@ function MessageListItem({
   onSelect
 }: {
   message: Message
+  locale: AppLocale
   selected: boolean
   checked: boolean
   selectionDisabled?: boolean
   onToggleSelection?: (range?: boolean) => void
   onSelect: () => void
 }): React.JSX.Element {
+  const { t } = useI18n()
   const absoluteTime = formatAbsoluteTime(message.receivedAt)
+  const displaySubject = getDisplaySubject(message, t)
+  const displaySender = getDisplaySender(message, t)
   const fromLabel =
-    message.fromAddress && message.fromAddress !== message.from
-      ? `${message.from} · ${message.fromAddress}`
-      : message.from
-  const preview = message.preview || '暂无预览。'
+    message.fromAddress && message.fromAddress !== displaySender
+      ? `${displaySender} · ${message.fromAddress}`
+      : displaySender
+  const preview = getDisplayPreview(message, t)
+  const verificationCode = message.verificationCode
   const verificationLabel = message.verificationCode
-    ? `验证码 ${message.verificationCode}`
+    ? t('mail.list.verificationCodeWithValue', { code: message.verificationCode })
     : undefined
   const secondLineTooltip = verificationLabel
-    ? `${verificationLabel} - ${message.subject}${message.preview ? ` - ${message.preview}` : ''}`
-    : `${message.subject}${message.preview ? ` - ${message.preview}` : ''}`
+    ? `${verificationLabel} - ${displaySubject}${preview ? ` - ${preview}` : ''}`
+    : `${displaySubject}${preview ? ` - ${preview}` : ''}`
 
   function handleSelectClick(event: React.MouseEvent<HTMLDivElement>): void {
     if (hasSelectionInside(event.currentTarget)) return
@@ -247,14 +261,14 @@ function MessageListItem({
 
   function handleCopyVerificationCode(event: React.MouseEvent<HTMLButtonElement>): void {
     event.stopPropagation()
-    if (!message.verificationCode) return
+    if (!verificationCode) return
 
-    void copyText(message.verificationCode)
+    void copyText(verificationCode)
       .then(() => {
-        toast.success('验证码已复制')
+        toast.success(t('mail.list.verificationCodeCopied'))
       })
       .catch(() => {
-        toast.error('复制验证码失败')
+        toast.error(t('mail.list.verificationCodeCopyFailed'))
       })
   }
 
@@ -274,7 +288,7 @@ function MessageListItem({
         <Checkbox
           checked={checked}
           disabled={selectionDisabled}
-          aria-label={`选择 ${message.subject}`}
+          aria-label={t('mail.list.selectMessage', { subject: displaySubject })}
           onClick={(event) => event.stopPropagation()}
           onCheckedChange={() => onToggleSelection?.(false)}
           onKeyDown={(event) => {
@@ -313,23 +327,25 @@ function MessageListItem({
             <Paperclip className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
           ) : null}
           <span className="shrink-0 text-muted-foreground" title={absoluteTime}>
-            {formatRelativeTime(message.receivedAt)}
+            {formatRelativeTime(message.receivedAt, locale)}
           </span>
         </span>
-        {verificationLabel ? (
+        {verificationLabel && verificationCode ? (
           <span className="mt-0.5 flex min-w-0 items-center gap-1 text-xs">
             <span
               className={cn('shrink-0 font-medium select-text', message.unread && 'font-semibold')}
             >
-              验证码{' '}
+              {t('mail.list.verificationCode')}{' '}
               <button
                 type="button"
                 className="cursor-copy bg-transparent p-0 text-foreground underline underline-offset-2 outline-none select-text hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
-                title="复制验证码"
-                aria-label={`复制验证码 ${message.verificationCode}`}
+                title={t('mail.list.copyVerificationCode')}
+                aria-label={t('mail.list.copyVerificationCodeWithValue', {
+                  code: verificationCode
+                })}
                 onClick={handleCopyVerificationCode}
               >
-                {message.verificationCode}
+                {verificationCode}
               </button>
             </span>
             <span className="shrink-0 text-muted-foreground">-</span>
@@ -340,7 +356,7 @@ function MessageListItem({
               )}
               tooltip={secondLineTooltip}
             >
-              {message.subject}
+              {displaySubject}
             </EllipsisTooltip>
           </span>
         ) : (
@@ -350,9 +366,9 @@ function MessageListItem({
                 'min-w-0 truncate font-medium select-text',
                 message.unread && 'font-semibold'
               )}
-              tooltip={message.subject}
+              tooltip={displaySubject}
             >
-              {message.subject}
+              {displaySubject}
             </EllipsisTooltip>
             <span className="shrink-0 text-muted-foreground">-</span>
             <EllipsisTooltip

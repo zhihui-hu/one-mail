@@ -4,6 +4,7 @@ import type { Account } from '@renderer/components/mail/types'
 import { ResponsiveDialog } from '@renderer/components/responsive-dialog'
 import { Button } from '@renderer/components/ui/button'
 import { FieldError } from '@renderer/components/ui/field'
+import { useI18n } from '@renderer/lib/i18n'
 
 type RemoveAccountDialogProps = {
   account: Account
@@ -18,6 +19,7 @@ export function RemoveAccountDialog({
   onOpenChange,
   onConfirm
 }: RemoveAccountDialogProps): React.JSX.Element {
+  const { t } = useI18n()
   const [pending, setPending] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
@@ -37,7 +39,7 @@ export function RemoveAccountDialog({
     try {
       await onConfirm(account)
     } catch (confirmError) {
-      setError(confirmError instanceof Error ? confirmError.message : '删除账号失败。')
+      setError(confirmError instanceof Error ? confirmError.message : t('account.remove.error'))
     } finally {
       setPending(false)
     }
@@ -47,12 +49,12 @@ export function RemoveAccountDialog({
     <ResponsiveDialog
       open={open}
       onOpenChange={handleOpenChange}
-      title="删除账号"
-      description="从 OneMail 删除这个本地账号配置。"
+      title={t('account.remove.title')}
+      description={t('account.remove.description')}
       footer={
         <>
           <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={pending}>
-            取消
+            {t('common.cancel')}
           </Button>
           <Button
             variant="destructive"
@@ -61,16 +63,16 @@ export function RemoveAccountDialog({
             }}
             disabled={pending || !account.accountId}
           >
-            {pending ? '删除中...' : '删除本地配置'}
+            {pending ? t('common.deleting') : t('account.remove.confirm')}
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-2 text-xs text-muted-foreground">
         <p>
-          将删除 <span className="text-foreground">{account.name}</span> 的本地账号配置和缓存邮件。
+          {t('account.remove.summary', { name: account.name })}
         </p>
-        <p>这个操作不会删除远端邮箱中的邮件。</p>
+        <p>{t('account.remove.remoteSafe')}</p>
         {error ? <FieldError>{error}</FieldError> : null}
       </div>
     </ResponsiveDialog>

@@ -3,12 +3,15 @@ import { toast } from 'sonner'
 
 import { AddAccountForm } from '@renderer/components/account/add-account-dialog'
 import { createAccount } from '@renderer/lib/api'
+import { useI18n } from '@renderer/lib/i18n'
 import type { AccountCreateInput } from '../../../../shared/types'
 
 export function AddAccountWindow(): React.JSX.Element {
+  const { t } = useI18n()
+
   async function handleSubmit(input: AccountCreateInput): Promise<void> {
     const account = await createAccount(input)
-    toast.success(`${account.email} 已保存，正在主窗口后台同步...`)
+    toast.success(t('account.add.windowSaved', { email: account.email }))
     window.setTimeout(() => {
       void window.api.accounts.closeAddWindow()
     }, 450)
@@ -17,7 +20,7 @@ export function AddAccountWindow(): React.JSX.Element {
   return (
     <main className="flex h-screen min-h-screen flex-col overflow-hidden bg-background text-foreground">
       <header className="app-drag-region flex h-10 shrink-0 items-center border-b bg-card/60 px-5 pl-24">
-        <h1 className="truncate text-sm font-semibold tracking-normal">添加账号</h1>
+        <h1 className="truncate text-sm font-semibold tracking-normal">{t('account.add.title')}</h1>
       </header>
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">
         <AddAccountForm

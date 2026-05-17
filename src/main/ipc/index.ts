@@ -7,6 +7,7 @@ import { registerNotificationIpc } from './notifications'
 import { registerSettingsIpc } from './settings'
 import { registerSyncIpc } from './sync'
 import { registerSystemIpc } from './system'
+import { registerUpdateIpc } from './updates'
 
 let registered = false
 
@@ -24,6 +25,7 @@ export function registerIpcHandlers(): void {
   registerSyncIpc()
   registerSettingsIpc()
   registerSystemIpc()
+  registerUpdateIpc()
 
   registered = true
 }

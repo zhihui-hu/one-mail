@@ -1,11 +1,13 @@
 import { format, formatDistanceToNow } from 'date-fns'
-import { zhCN } from 'date-fns/locale'
+import { enUS, zhCN } from 'date-fns/locale'
+import type { AppLocale } from '@renderer/lib/i18n'
 
-export function formatRelativeTime(value?: string): string {
+export function formatRelativeTime(value?: string, locale: AppLocale = 'zh-CN'): string {
   const date = parseDate(value)
-  if (!date) return '未知时间'
+  if (!date) return locale === 'en-US' ? 'Unknown time' : ''
 
-  return normalizeRelativeTime(formatDistanceToNow(date, { addSuffix: true, locale: zhCN }))
+  const dateLocale = locale === 'en-US' ? enUS : zhCN
+  return normalizeRelativeTime(formatDistanceToNow(date, { addSuffix: true, locale: dateLocale }))
 }
 
 export function formatAbsoluteTime(value?: string): string | undefined {

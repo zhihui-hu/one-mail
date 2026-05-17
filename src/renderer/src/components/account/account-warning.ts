@@ -1,4 +1,5 @@
 import type { Account } from '@renderer/components/mail/types'
+import type { TranslationKey } from '@renderer/lib/i18n'
 
 export type AccountWarningAction = 'edit' | 'retry' | 'delete' | 'reauthorize'
 
@@ -16,7 +17,9 @@ export type AccountWarningInfo = {
 
 const CREDENTIAL_WARNING_STATES = new Set(['pending', 'invalid', 'expired', 'revoked'])
 
-export function getAccountWarning(account: Account): AccountWarningInfo | null {
+type Translate = (key: TranslationKey, values?: Record<string, string | number>) => string
+
+export function getAccountWarning(account: Account, t: Translate): AccountWarningInfo | null {
   if (!account.accountId) return null
 
   const status = account.status?.toLowerCase()
@@ -33,88 +36,96 @@ export function getAccountWarning(account: Account): AccountWarningInfo | null {
     CREDENTIAL_WARNING_STATES.has(credentialState ?? '') ||
     needsOAuthReauthorization
   ) {
-    const message = getCredentialWarningMessage(isOAuthAccount, lastError)
+    const message = getCredentialWarningMessage(isOAuthAccount, t, lastError)
     const primaryAction = isOAuthAccount ? 'reauthorize' : 'edit'
 
-    return withTooltip({
-      label: '异常',
-      title: isOAuthAccount ? '需要重新授权' : '账号凭据异常',
+    return withTooltip(t, {
+      label: t('account.warning.label'),
+      title: isOAuthAccount
+        ? t('account.warning.reauthorizeTitle')
+        : t('account.warning.credentialTitle'),
       message,
       primaryAction,
-      primaryLabel: isOAuthAccount ? '重新授权' : '编辑凭据',
+      primaryLabel: isOAuthAccount
+        ? t('account.warning.primaryReauthorize')
+        : t('account.warning.primaryEditCredential'),
       secondaryAction: 'retry',
-      secondaryLabel: '重新同步',
+      secondaryLabel: t('account.warning.resync'),
       steps: isOAuthAccount
         ? [
-            'Microsoft 授权已过期、被撤销，或缺少 Outlook IMAP 权限。',
-            '点击重新授权，并在 Microsoft 授权页同意 OneMail 访问邮箱。',
-            '授权完成后 OneMail 会保存新的 token 并重新同步该账号。'
+            t('account.warning.oauthStep1'),
+            t('account.warning.oauthStep2'),
+            t('account.warning.oauthStep3')
           ]
         : [
-            '确认邮箱密码或客户端授权码仍然有效。',
-            '重新保存凭据后会测试 IMAP 连接。',
-            '保存成功后再同步该账号。'
+            t('account.warning.credentialStep1'),
+            t('account.warning.credentialStep2'),
+            t('account.warning.credentialStep3')
           ]
     })
   }
 
   if (status === 'network_error') {
-    return withTooltip({
-      label: '异常',
-      title: '网络连接异常',
-      message: lastError || '暂时无法连接到邮箱服务器。',
+    return withTooltip(t, {
+      label: t('account.warning.label'),
+      title: t('account.warning.networkTitle'),
+      message: lastError || t('account.warning.networkMessage'),
       primaryAction: 'retry',
-      primaryLabel: '重新同步',
+      primaryLabel: t('account.warning.resync'),
       secondaryAction: 'edit',
-      secondaryLabel: '检查配置',
+      secondaryLabel: t('account.warning.checkConfig'),
       steps: [
-        '确认当前网络可以访问邮箱服务器。',
-        '检查代理、VPN、防火墙或公司网络限制。',
-        '网络恢复后重新同步该账号。'
+        t('account.warning.networkStep1'),
+        t('account.warning.networkStep2'),
+        t('account.warning.networkStep3')
       ]
     })
   }
 
   if (status === 'sync_error') {
-    return withTooltip({
-      label: '异常',
-      title: '同步异常',
-      message: lastError || '同步邮件时遇到错误。',
+    return withTooltip(t, {
+      label: t('account.warning.label'),
+      title: t('account.warning.syncTitle'),
+      message: lastError || t('account.warning.syncMessage'),
       primaryAction: 'retry',
-      primaryLabel: '重新同步',
+      primaryLabel: t('account.warning.resync'),
       secondaryAction: 'edit',
-      secondaryLabel: '检查配置',
+      secondaryLabel: t('account.warning.checkConfig'),
       steps: [
-        '先重新同步一次，排除临时服务器错误。',
-        '如果持续失败，检查 IMAP 主机、端口和加密方式。',
-        '必要时重新保存密码或授权码。'
+        t('account.warning.syncStep1'),
+        t('account.warning.syncStep2'),
+        t('account.warning.syncStep3')
       ]
     })
   }
 
   if (lastError) {
-    return withTooltip({
-      label: '异常',
-      title: '账号异常',
+    return withTooltip(t, {
+      label: t('account.warning.label'),
+      title: t('account.warning.genericTitle'),
       message: lastError,
       primaryAction: 'retry',
-      primaryLabel: '重新同步',
+      primaryLabel: t('account.warning.resync'),
       secondaryAction: 'edit',
-      secondaryLabel: '编辑账号',
-      steps: ['重新同步该账号。', '如果问题仍然存在，检查账号配置和凭据。']
+      secondaryLabel: t('account.warning.editAccount'),
+      steps: [t('account.warning.genericStep1'), t('account.warning.genericStep2')]
     })
   }
 
   return null
 }
 
-function getCredentialWarningMessage(isOAuthAccount: boolean, lastError?: string): string {
-  if (!isOAuthAccount) return lastError || '账号密码或客户端授权码需要重新保存。'
+function getCredentialWarningMessage(
+  isOAuthAccount: boolean,
+  t: Translate,
+  lastError?: string
+): string {
+  if (!isOAuthAccount) return lastError || t('account.warning.credentialMessage')
 
-  if (!lastError) return 'Microsoft 授权已失效，需要重新登录并授权 Outlook IMAP 权限。'
+  if (!lastError) return t('account.warning.oauthMissingMessage')
 
   if (isMicrosoftReauthorizationError(lastError)) {
-    return 'Microsoft 授权已过期或缺少 Outlook IMAP 权限，需要重新登录并授权。'
+    return t('account.warning.oauthScopeMessage')
   }
 
   return lastError
@@ -126,9 +137,15 @@ function isMicrosoftReauthorizationError(message: string): boolean {
   )
 }
 
-function withTooltip(warning: Omit<AccountWarningInfo, 'tooltip'>): AccountWarningInfo {
+function withTooltip(
+  t: Translate,
+  warning: Omit<AccountWarningInfo, 'tooltip'>
+): AccountWarningInfo {
   return {
     ...warning,
-    tooltip: `${warning.title}：${warning.message} 点击查看解决办法。`
+    tooltip: t('account.warning.tooltip', {
+      title: warning.title,
+      message: warning.message
+    })
   }
 }

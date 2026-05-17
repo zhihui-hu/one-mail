@@ -33,6 +33,10 @@ export type MicrosoftAccessTokenResult = {
   loginHints: string[]
 }
 
+export type MicrosoftAccessTokenOptions = {
+  refreshSkewMs?: number
+}
+
 const MICROSOFT_AUTHORITY = 'https://login.microsoftonline.com/common/oauth2/v2.0'
 const MICROSOFT_SCOPES = [
   'openid',
@@ -51,7 +55,8 @@ const MICROSOFT_REQUIRED_RESOURCE_SCOPE = 'https://outlook.office.com/IMAP.Acces
 const MICROSOFT_REQUIRED_SCOPE_NAME = 'IMAP.AccessAsUser.All'
 const MICROSOFT_REQUIRED_SMTP_SCOPE = 'https://outlook.office.com/SMTP.Send'
 const MICROSOFT_REQUIRED_SMTP_SCOPE_NAME = 'SMTP.Send'
-const TOKEN_REFRESH_SKEW_MS = 2 * 60 * 1000
+export const MICROSOFT_TOKEN_REFRESH_SKEW_MS = 10 * 60 * 1000
+export const MICROSOFT_LONG_OPERATION_REFRESH_SKEW_MS = 15 * 60 * 1000
 
 export async function authorizeMicrosoftAccount(
   mode: OAuthAuthorizationMode = 'internal_browser'
@@ -79,10 +84,14 @@ export function saveMicrosoftAuthorization(accountId: number, token: OAuthTokenP
 }
 
 export async function getMicrosoftAccessToken(
-  accountId: number
+  accountId: number,
+  options: MicrosoftAccessTokenOptions = {}
 ): Promise<MicrosoftAccessTokenResult> {
   const token = readOAuthToken(accountId)
-  if (!shouldRefreshToken(token) && hasMicrosoftOutlookScopes(token)) {
+  if (
+    !shouldRefreshToken(token, options.refreshSkewMs ?? MICROSOFT_TOKEN_REFRESH_SKEW_MS) &&
+    hasMicrosoftOutlookScopes(token)
+  ) {
     return {
       accessToken: token.accessToken,
       loginHints: getMicrosoftLoginHints(token)
@@ -506,10 +515,18 @@ function isNonEmptyString(value: string | undefined): value is string {
   return typeof value === 'string' && value.length > 0
 }
 
-function shouldRefreshToken(token: OAuthTokenPayload): boolean {
+export function shouldRefreshMicrosoftToken(
+  token: Pick<OAuthTokenPayload, 'expiresAt'>,
+  refreshSkewMs = MICROSOFT_TOKEN_REFRESH_SKEW_MS,
+  nowMs = Date.now()
+): boolean {
   if (!token.expiresAt) return false
   const expiresAt = new Date(token.expiresAt).getTime()
-  return Number.isNaN(expiresAt) || expiresAt - Date.now() <= TOKEN_REFRESH_SKEW_MS
+  return Number.isNaN(expiresAt) || expiresAt - nowMs <= refreshSkewMs
+}
+
+function shouldRefreshToken(token: OAuthTokenPayload, refreshSkewMs: number): boolean {
+  return shouldRefreshMicrosoftToken(token, refreshSkewMs)
 }
 
 function base64Url(value: Buffer): string {

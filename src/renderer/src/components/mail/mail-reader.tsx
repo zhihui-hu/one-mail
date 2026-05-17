@@ -14,6 +14,15 @@ import * as React from 'react'
 
 import { formatAbsoluteTime, formatRelativeTime } from '@renderer/components/mail/date-format'
 import { EllipsisTooltip } from '@renderer/components/mail/ellipsis-tooltip'
+import {
+  ATTACHMENT_METADATA_PENDING_SIZE,
+  getDisplayAttachmentName,
+  getDisplayAttachmentSize,
+  getDisplayAttachmentType,
+  getDisplayBodyParagraphs,
+  getDisplaySender,
+  getDisplaySubject
+} from '@renderer/components/mail/mail-display'
 import { prepareMailHtml, type PreparedMailHtml } from '@renderer/components/mail/mail-html'
 import type { Attachment, Message } from '@renderer/components/mail/types'
 import { Button } from '@renderer/components/ui/button'
@@ -32,6 +41,7 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from '@renderer/components/ui/tooltip'
+import { useI18n, type TranslationKey } from '@renderer/lib/i18n'
 
 const REMOTE_IMAGES_HELP_URL = 'https://huzhihui.com/blog/click-load-images-ip-leak-email-tracking'
 
@@ -66,6 +76,7 @@ export function MailReader({
   onForward,
   onDelete
 }: MailReaderProps): React.JSX.Element {
+  const { locale, t } = useI18n()
   const canShowHtml = Boolean(message.html)
   const hasLoadedBody = message.bodyLoaded || canShowHtml
   const canLoadBody = !hasLoadedBody && !loadingBody
@@ -88,8 +99,12 @@ export function MailReader({
   const allowExternalContent = React.useCallback(() => {
     setExternalContentState({ allowed: true, messageId: message.id })
   }, [message.id])
-  const hasRealAttachments = message.attachments.some((attachment) => attachment.size !== '待加载')
+  const hasRealAttachments = message.attachments.some(
+    (attachment) => attachment.size !== ATTACHMENT_METADATA_PENDING_SIZE
+  )
   const displayRecipientAddress = message.to ?? recipientAddress
+  const displaySubject = getDisplaySubject(message, t)
+  const displaySender = getDisplaySender(message, t)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-background">
@@ -99,27 +114,24 @@ export function MailReader({
             <ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />
             <span className="truncate">
               {externalContentAllowed
-                ? 'HTML 已安全净化，远程图片和外部资源已显示。'
+                ? t('mail.reader.safeFull')
                 : canLoadFullContent
-                  ? `HTML 已安全净化，已阻止 ${blockedCount} 个远程图片或外部资源。`
-                  : 'HTML 已安全净化。'}
+                  ? t('mail.reader.safeBlocked', { count: blockedCount })
+                  : t('mail.reader.safePreview')}
             </span>
           </div>
           <div className="app-no-drag flex shrink-0 items-center gap-2">
-            {/* <Badge variant={externalContentAllowed ? 'secondary' : 'outline'}>
-              {externalContentAllowed ? '完整内容' : '安全预览'}
-            </Badge> */}
             {loadingBody ? (
               <Button size="sm" variant="outline" disabled>
                 <Loader2 data-icon="inline-start" className="animate-spin" />
-                正在加载正文
+                {t('mail.reader.loadingBody')}
               </Button>
             ) : canLoadFullContent ? (
               <>
                 <RemoteImagesHelpLink />
                 <Button size="sm" variant="outline" onClick={allowExternalContent}>
                   <Image data-icon="inline-start" />
-                  加载完整内容
+                  {t('mail.reader.loadFullContent')}
                 </Button>
               </>
             ) : !hasLoadedBody && message.bodyStatus === 'error' ? (
@@ -129,7 +141,7 @@ export function MailReader({
                 ) : (
                   <FileText data-icon="inline-start" />
                 )}
-                重试加载正文
+                {t('mail.reader.retryLoadBody')}
               </Button>
             ) : null}
           </div>
@@ -142,16 +154,16 @@ export function MailReader({
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-semibold leading-snug tracking-normal">
-                  {message.subject}
+                  {displaySubject}
                 </h2>
                 <TooltipProvider>
                   <div className="mt-2 flex flex-col gap-0.5 text-xs text-muted-foreground">
                     <MetaLine
-                      label="发件人"
-                      value={formatAddress(message.from, message.fromAddress)}
+                      label={t('mail.reader.from')}
+                      value={formatAddress(displaySender, message.fromAddress)}
                     />
-                    <MetaLine label="收件人" value={displayRecipientAddress} />
-                    {message.cc ? <MetaLine label="抄送" value={message.cc} /> : null}
+                    <MetaLine label={t('mail.reader.to')} value={displayRecipientAddress} />
+                    {message.cc ? <MetaLine label={t('mail.reader.cc')} value={message.cc} /> : null}
                   </div>
                 </TooltipProvider>
               </div>
@@ -160,11 +172,11 @@ export function MailReader({
                   className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
                   title={formatAbsoluteTime(message.receivedAt)}
                 >
-                  {formatRelativeTime(message.receivedAt)}
+                  {formatRelativeTime(message.receivedAt, locale)}
                 </div>
                 <TooltipProvider>
                   <div className="flex items-center gap-1">
-                    <MailActionButton label="回复" disabled={actionPending} onClick={onReply}>
+                    <MailActionButton label={t('mail.reader.reply')} disabled={actionPending} onClick={onReply}>
                       {actionPending ? (
                         <Loader2 className="animate-spin" aria-hidden="true" />
                       ) : (
@@ -172,7 +184,7 @@ export function MailReader({
                       )}
                     </MailActionButton>
                     <MailActionButton
-                      label="回复全部"
+                      label={t('mail.reader.replyAll')}
                       disabled={actionPending}
                       onClick={onReplyAll}
                     >
@@ -182,14 +194,14 @@ export function MailReader({
                         <ReplyAll aria-hidden="true" />
                       )}
                     </MailActionButton>
-                    <MailActionButton label="转发" disabled={actionPending} onClick={onForward}>
+                    <MailActionButton label={t('mail.reader.forward')} disabled={actionPending} onClick={onForward}>
                       {actionPending ? (
                         <Loader2 className="animate-spin" aria-hidden="true" />
                       ) : (
                         <Forward aria-hidden="true" />
                       )}
                     </MailActionButton>
-                    <MailActionButton label="删除" disabled={deleting} onClick={onDelete}>
+                    <MailActionButton label={t('common.delete')} disabled={deleting} onClick={onDelete}>
                       {deleting ? (
                         <Loader2 className="animate-spin" aria-hidden="true" />
                       ) : (
@@ -203,7 +215,7 @@ export function MailReader({
           </section>
 
           {loading && !message.detailLoaded ? (
-            <section className="text-xs text-muted-foreground">正在加载邮件详情...</section>
+            <section className="text-xs text-muted-foreground">{t('mail.reader.loadingDetails')}</section>
           ) : (
             <MessageBody
               message={message}
@@ -211,6 +223,7 @@ export function MailReader({
               canLoadBody={canLoadBody}
               loadingBody={loadingBody}
               preparedHtml={preparedHtml}
+              t={t}
               onLoadBody={onLoadBody}
             />
           )}
@@ -219,6 +232,7 @@ export function MailReader({
             <AttachmentList
               attachments={message.attachments}
               downloadingAttachmentIds={downloadingAttachmentIds}
+              t={t}
               onDownloadAttachment={onDownloadAttachment}
             />
           ) : null}
@@ -258,6 +272,8 @@ function MailActionButton({
 }
 
 function RemoteImagesHelpLink(): React.JSX.Element {
+  const { t } = useI18n()
+
   return (
     <TooltipProvider>
       <Tooltip>
@@ -268,11 +284,11 @@ function RemoteImagesHelpLink(): React.JSX.Element {
             rel="noreferrer"
             className="text-xs text-muted-foreground underline underline-offset-4 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
-            了解影响
+            {t('mail.reader.remoteHelp')}
           </a>
         </TooltipTrigger>
         <TooltipContent side="bottom" align="end" className="max-w-72 whitespace-normal leading-5">
-          加载远程图片可能让发件方或追踪服务知道你的 IP、设备信息和打开时间。
+          {t('mail.reader.remoteHelpTooltip')}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -285,6 +301,7 @@ function MessageBody({
   canLoadBody,
   loadingBody,
   preparedHtml,
+  t,
   onLoadBody
 }: {
   message: Message
@@ -292,6 +309,7 @@ function MessageBody({
   canLoadBody: boolean
   loadingBody: boolean
   preparedHtml: PreparedMailHtml | null
+  t: (key: TranslationKey, values?: Record<string, string | number>) => string
   onLoadBody: () => void
 }): React.JSX.Element {
   if (!canShowHtml && loadingBody) {
@@ -314,7 +332,11 @@ function MessageBody({
         }}
       >
         <FileText aria-hidden="true" />
-        <span>{message.bodyStatus === 'error' ? '正文加载失败，点击重试' : '点击加载正文'}</span>
+        <span>
+          {message.bodyStatus === 'error'
+            ? t('mail.reader.bodyErrorRetry')
+            : t('mail.reader.bodyClickLoad')}
+        </span>
       </section>
     )
   }
@@ -328,7 +350,7 @@ function MessageBody({
         />
       ) : (
         <div className="mail-text min-h-40 w-full max-w-full select-text">
-          {message.body.map((paragraph) => (
+          {getDisplayBodyParagraphs(message, t).map((paragraph) => (
             <p key={paragraph}>{paragraph}</p>
           ))}
         </div>
@@ -365,24 +387,30 @@ function MessageBodySkeleton(): React.JSX.Element {
 function AttachmentList({
   attachments,
   downloadingAttachmentIds,
+  t,
   onDownloadAttachment
 }: {
   attachments: Message['attachments']
   downloadingAttachmentIds?: Set<number>
+  t: (key: TranslationKey, values?: Record<string, string | number>) => string
   onDownloadAttachment?: (attachment: Attachment) => void
 }): React.JSX.Element {
   return (
     <section className="mt-5 border-t pt-4">
       <div className="mb-3 flex items-center gap-2 text-[12px] font-semibold text-muted-foreground">
         <Paperclip className="size-3.5 shrink-0" aria-hidden="true" />
-        附件
+        {t('mail.reader.attachments')}
       </div>
       <div className="overflow-hidden rounded-md border bg-card">
         <Table className="text-[12px]">
           <TableHeader>
             <TableRow>
-              <TableHead className="h-8 min-w-56 text-[12px]">文件名称</TableHead>
-              <TableHead className="h-8 w-24 text-right text-[12px]">操作</TableHead>
+              <TableHead className="h-8 min-w-56 text-[12px]">
+                {t('mail.reader.attachmentFileName')}
+              </TableHead>
+              <TableHead className="h-8 w-24 text-right text-[12px]">
+                {t('mail.reader.attachmentAction')}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -390,6 +418,9 @@ function AttachmentList({
               const isDownloading =
                 attachment.id !== undefined && downloadingAttachmentIds?.has(attachment.id)
               const canDownload = Boolean(attachment.id && onDownloadAttachment && !isDownloading)
+              const attachmentName = getDisplayAttachmentName(attachment, t)
+              const attachmentSize = getDisplayAttachmentSize(attachment, t)
+              const attachmentType = getDisplayAttachmentType(attachment, t)
 
               return (
                 <TableRow
@@ -401,9 +432,9 @@ function AttachmentList({
                 >
                   <TableCell className="max-w-0 py-2">
                     <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className="truncate font-medium leading-4">{attachment.name}</span>
+                      <span className="truncate font-medium leading-4">{attachmentName}</span>
                       <span className="truncate leading-4 text-muted-foreground">
-                        {attachment.size} · {attachment.type}
+                        {attachmentSize} · {attachmentType}
                       </span>
                     </div>
                   </TableCell>
@@ -422,7 +453,7 @@ function AttachmentList({
                       ) : (
                         <Download data-icon="inline-start" />
                       )}
-                      下载
+                      {t('common.download')}
                     </Button>
                   </TableCell>
                 </TableRow>

@@ -11,6 +11,7 @@ import {
   type OutboxMessage,
   type SendMessageInput
 } from '@renderer/lib/api'
+import { useI18n } from '@renderer/lib/i18n'
 import { getErrorMessage } from './mailbox-utils'
 
 type ComposerState = {
@@ -35,6 +36,7 @@ export function useMailComposer({ accounts, selectedAccount, setError }: UseMail
   saveComposerDraft: (input: SendMessageInput) => Promise<void>
   discardComposerDraft: () => void
 } {
+  const { t } = useI18n()
   const [composer, setComposer] = React.useState<ComposerState>({ open: false, draft: null })
   const [composerPending, setComposerPending] = React.useState(false)
 
@@ -42,7 +44,7 @@ export function useMailComposer({ accounts, selectedAccount, setError }: UseMail
     async (kind: ComposeKind, message?: Message): Promise<void> => {
       const accountId = getComposeAccountId(accounts, selectedAccount, message)
       if (!accountId) {
-        toast.error('没有可用于发信的账号。')
+        toast.error(t('mail.composer.noSendingAccount'))
         return
       }
 
@@ -60,14 +62,14 @@ export function useMailComposer({ accounts, selectedAccount, setError }: UseMail
           draft: prepareDraft(draft, kind, accountId, message)
         })
       } catch (composeError) {
-        const errorMessage = getErrorMessage(composeError, '创建草稿失败。')
+        const errorMessage = getErrorMessage(composeError, t('mail.composer.createDraftError'))
         setError(errorMessage)
         toast.error(errorMessage)
       } finally {
         setComposerPending(false)
       }
     },
-    [accounts, selectedAccount, setError]
+    [accounts, selectedAccount, setError, t]
   )
 
   const closeComposer = React.useCallback((): void => {
@@ -111,12 +113,16 @@ export function useMailComposer({ accounts, selectedAccount, setError }: UseMail
       try {
         const result = await sendComposedMessage(input)
         if (!result.sent) {
-          throw new Error(result.warning ?? '发送失败。')
+          throw new Error(result.warning ?? t('mail.composer.sendFailed'))
         }
-        toast.success(result.warning ? `邮件已发送：${result.warning}` : '邮件已发送')
+        toast.success(
+          result.warning
+            ? t('mail.composer.sentWithWarning', { warning: result.warning })
+            : t('mail.composer.sent')
+        )
         setComposer({ open: false, draft: null })
       } catch (sendError) {
-        const errorMessage = getErrorMessage(sendError, '发送邮件失败。')
+        const errorMessage = getErrorMessage(sendError, t('mail.composer.sendError'))
         setError(errorMessage)
         toast.error(errorMessage)
         throw sendError
@@ -124,7 +130,7 @@ export function useMailComposer({ accounts, selectedAccount, setError }: UseMail
         setComposerPending(false)
       }
     },
-    [setError]
+    [setError, t]
   )
 
   const saveComposerDraft = React.useCallback(
@@ -134,7 +140,7 @@ export function useMailComposer({ accounts, selectedAccount, setError }: UseMail
 
       try {
         const savedDraft = await saveComposedDraft(input)
-        toast.success('草稿已保存')
+        toast.success(t('mail.composer.draftSaved'))
         setComposer({
           open: false,
           draft: {
@@ -157,7 +163,7 @@ export function useMailComposer({ accounts, selectedAccount, setError }: UseMail
           }
         })
       } catch (saveError) {
-        const errorMessage = getErrorMessage(saveError, '保存草稿失败。')
+        const errorMessage = getErrorMessage(saveError, t('mail.composer.saveDraftError'))
         setError(errorMessage)
         toast.error(errorMessage)
         throw saveError
@@ -165,7 +171,7 @@ export function useMailComposer({ accounts, selectedAccount, setError }: UseMail
         setComposerPending(false)
       }
     },
-    [setError]
+    [setError, t]
   )
 
   const discardComposerDraft = React.useCallback((): void => {
