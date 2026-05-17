@@ -1,6 +1,6 @@
 {
   "name": "onemail",
-  "version": "26.517.1754",
+  "version": "26.517.1818",
   "description": "本地优先的多账号桌面邮件客户端，支持 IMAP 同步、安全 HTML 预览、附件下载与 SQLite 备份。",
   "keywords": [
     "OneMail",
