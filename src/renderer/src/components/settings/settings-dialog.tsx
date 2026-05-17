@@ -13,8 +13,7 @@ import {
   Power,
   RefreshCcw,
   ShieldCheck,
-  Upload,
-  UserRound
+  Upload
 } from 'lucide-react'
 import * as React from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
@@ -567,12 +566,6 @@ function AboutSettings({
               GitHub
             </Button>
           }
-        />
-
-        <SettingRow
-          icon={UserRound}
-          title={t('settings.about.authorTitle')}
-          description={t('settings.about.authorDescription')}
         />
 
         <SettingRow
