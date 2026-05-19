@@ -1,356 +1,320 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="OneMail 是一个本地优先的多账号桌面邮件客户端，支持 macOS、Windows 和 Linux。"
-    />
-    <meta name="theme-color" content="#fbfbfd" />
-    <meta property="og:title" content="OneMail - 本地优先的桌面邮件客户端" />
-    <meta property="og:description" content="一个安静、可备份、重视隐私的桌面邮件工作台。" />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://img.huzhihui.com/2026/05/19/onemail%20(2).webp" />
-    <title>OneMail - Download</title>
-    <link rel="icon" href="./assets/onemail-icon.png" />
-    <link rel="apple-touch-icon" href="./assets/onemail-icon.png" />
-    <link rel="stylesheet" href="./styles.css" />
-  </head>
-  <body>
-    <header class="site-header">
-      <a class="brand" href="#top" aria-label="OneMail">
-        <img
-          src="https://img.huzhihui.com/2026/05/19/onemail%20(2).webp"
-          alt="OneMail"
-          width="1080"
-          height="1080"
-          decoding="async"
-        />
-      </a>
-      <nav class="site-nav" aria-label="Language">
-        <button class="lang-toggle" type="button" data-lang-toggle>EN</button>
-      </nav>
-    </header>
 
-    <main id="top">
-      <section class="hero" aria-labelledby="hero-title">
-        <img
-          class="app-logo"
-          src="https://img.huzhihui.com/2026/05/19/onemail%20(2).webp"
-          alt="OneMail"
-          width="1080"
-          height="1080"
-          decoding="async"
-          fetchpriority="high"
-        />
-        <p class="eyebrow" data-i18n="hero.eyebrow">OneMail</p>
-        <h1 id="hero-title" data-i18n="hero.title">邮件，就该留在你的电脑里。</h1>
-        <p class="hero-copy" data-i18n="hero.copy">
-          本地优先的多账号桌面邮件客户端。统一收件箱、安全预览、附件下载和 SQLite 备份。
-        </p>
-        <div class="hero-actions">
-          <a
-            class="button primary"
-            id="primary-download"
-            href="https://github.com/zhihui-hu/one-mail/releases/latest"
-            target="_blank"
-            rel="noreferrer"
-            data-i18n="hero.download"
-          >
-            下载最新版
-          </a>
-          <a class="button link-button" href="#download" data-i18n="hero.allDownloads">
-            查看所有版本
-          </a>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="OneMail 是一个本地优先的多账号桌面邮件客户端，支持 macOS、Windows 和 Linux。" />
+  <meta name="theme-color" content="#fbfbfd" />
+  <meta property="og:title" content="OneMail - 本地优先的桌面邮件客户端" />
+  <meta property="og:description" content="一个安静、可备份、重视隐私的桌面邮件工作台。" />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://img.huzhihui.com/2026/05/19/onemail%20(2).webp" />
+  <title>OneMail - Download</title>
+  <link rel="icon" href="./assets/onemail-icon.png" />
+  <link rel="apple-touch-icon" href="./assets/onemail-icon.png" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+
+<body>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="OneMail">
+      <img src="https://img.huzhihui.com/2026/05/19/onemail%20(2).webp" alt="OneMail" width="1080" height="1080"
+        decoding="async" />
+    </a>
+    <nav class="site-nav" aria-label="Language">
+      <button class="lang-toggle" type="button" data-lang-toggle>EN</button>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero" aria-labelledby="hero-title">
+      <img class="app-logo" src="https://img.huzhihui.com/2026/05/19/onemail%20(2).webp" alt="OneMail" width="1080"
+        decoding="async" fetchpriority="high" />
+      <p class="eyebrow" data-i18n="hero.eyebrow">OneMail</p>
+      <h1 id="hero-title" data-i18n="hero.title">邮件数据就该留在你的电脑里。</h1>
+      <p class="hero-copy" data-i18n="hero.copy">
+        本地优先的多账号桌面邮件客户端。统一收件箱、安全预览、附件下载和 SQLite 备份。
+      </p>
+      <div class="hero-actions">
+        <a class="button primary" id="primary-download" href="https://github.com/zhihui-hu/one-mail/releases/latest"
+          target="_blank" rel="noreferrer" data-i18n="hero.download">
+          下载最新版
+        </a>
+        <a class="button link-button" href="#download" data-i18n="hero.allDownloads">
+          查看所有版本
+        </a>
+      </div>
+      <p class="release-note" id="release-note" aria-live="polite" data-i18n="release.loading">
+        正在查询 GitHub 最新版本...
+      </p>
+    </section>
+
+    <section class="screenshots" aria-label="OneMail screenshots">
+      <div class="shot-frame">
+        <img src="https://img.huzhihui.com/2026/05/15/OnaMail-03.webp" alt="OneMail desktop mail interface" width="1600"
+          height="1000" loading="lazy" decoding="async" />
+      </div>
+      <div class="shot-frame">
+        <img src="https://img.huzhihui.com/2026/05/15/OnaMail-02.webp" alt="OneMail message list" width="1600"
+          height="1000" loading="lazy" decoding="async" />
+      </div>
+      <div class="shot-frame">
+        <img src="https://img.huzhihui.com/2026/05/15/OnaMail-01.webp" alt="OneMail account settings" width="1600"
+          height="1000" loading="lazy" decoding="async" />
+      </div>
+    </section>
+
+    <section class="download-section" id="download" aria-labelledby="download-title">
+      <h2 id="download-title" data-i18n="download.title">选择你的系统。</h2>
+      <div class="download-list" aria-live="polite">
+        <div class="download-row" data-platform="macos">
+          <strong>macOS</strong>
+          <span class="asset-links" data-assets="macos">
+            <a href="https://github.com/zhihui-hu/one-mail/releases/latest" target="_blank" rel="noreferrer">
+              GitHub Release
+            </a>
+          </span>
         </div>
-        <p class="release-note" id="release-note" aria-live="polite" data-i18n="release.loading">
-          正在查询 GitHub 最新版本...
-        </p>
-      </section>
-
-      <section class="screenshots" aria-label="OneMail screenshots">
-        <div class="shot-frame">
-          <img
-            src="https://img.huzhihui.com/2026/05/15/OnaMail-03.webp"
-            alt="OneMail desktop mail interface"
-            width="1600"
-            height="1000"
-            loading="lazy"
-            decoding="async"
-          />
+        <div class="download-row" data-platform="windows">
+          <strong>Windows</strong>
+          <span class="asset-links" data-assets="windows">
+            <a href="https://github.com/zhihui-hu/one-mail/releases/latest" target="_blank" rel="noreferrer">
+              GitHub Release
+            </a>
+          </span>
         </div>
-        <div class="shot-frame">
-          <img
-            src="https://img.huzhihui.com/2026/05/15/OnaMail-02.webp"
-            alt="OneMail message list"
-            width="1600"
-            height="1000"
-            loading="lazy"
-            decoding="async"
-          />
+        <div class="download-row" data-platform="linux">
+          <strong>Linux</strong>
+          <span class="asset-links" data-assets="linux">
+            <a href="https://github.com/zhihui-hu/one-mail/releases/latest" target="_blank" rel="noreferrer">
+              GitHub Release
+            </a>
+          </span>
         </div>
-        <div class="shot-frame">
-          <img
-            src="https://img.huzhihui.com/2026/05/15/OnaMail-01.webp"
-            alt="OneMail account settings"
-            width="1600"
-            height="1000"
-            loading="lazy"
-            decoding="async"
-          />
-        </div>
-      </section>
+      </div>
+    </section>
+  </main>
 
-      <section class="download-section" id="download" aria-labelledby="download-title">
-        <h2 id="download-title" data-i18n="download.title">选择你的系统。</h2>
-        <div class="download-list" aria-live="polite">
-          <div class="download-row" data-platform="macos">
-            <strong>macOS</strong>
-            <span class="asset-links" data-assets="macos">
-              <a href="https://github.com/zhihui-hu/one-mail/releases/latest" target="_blank" rel="noreferrer">
-                GitHub Release
-              </a>
-            </span>
-          </div>
-          <div class="download-row" data-platform="windows">
-            <strong>Windows</strong>
-            <span class="asset-links" data-assets="windows">
-              <a href="https://github.com/zhihui-hu/one-mail/releases/latest" target="_blank" rel="noreferrer">
-                GitHub Release
-              </a>
-            </span>
-          </div>
-          <div class="download-row" data-platform="linux">
-            <strong>Linux</strong>
-            <span class="asset-links" data-assets="linux">
-              <a href="https://github.com/zhihui-hu/one-mail/releases/latest" target="_blank" rel="noreferrer">
-                GitHub Release
-              </a>
-            </span>
-          </div>
-        </div>
-      </section>
-    </main>
+  <footer class="site-footer">
+    <span>OneMail</span>
+    <a href="https://github.com/zhihui-hu/one-mail" target="_blank" rel="noreferrer">GitHub</a>
+    <span>AGPL-3.0-only</span>
+  </footer>
 
-    <footer class="site-footer">
-      <span>OneMail</span>
-      <a href="https://github.com/zhihui-hu/one-mail" target="_blank" rel="noreferrer">GitHub</a>
-      <span>AGPL-3.0-only</span>
-    </footer>
+  <script>
+    const REPO = 'zhihui-hu/one-mail'
+    const GITHUB = `https://github.com/${REPO}`
+    const API = `https://api.github.com/repos/${REPO}`
 
-    <script>
-      const REPO = 'zhihui-hu/one-mail'
-      const GITHUB = `https://github.com/${REPO}`
-      const API = `https://api.github.com/repos/${REPO}`
-
-      const copy = {
-        zh: {
-          hero: {
-            eyebrow: 'OneMail',
-            title: '邮件，就该留在你的电脑里。',
-            copy: '本地优先的多账号桌面邮件客户端。统一收件箱、安全预览、附件下载和 SQLite 备份。',
-            download: '下载最新版',
-            allDownloads: '查看所有版本'
-          },
-          release: {
-            loading: '正在查询 GitHub 最新版本...',
-            ready: '最新版本 {tag}，发布于 {date}',
-            error: '暂时无法读取最新版本，可前往 GitHub Release 下载。'
-          },
-          download: {
-            title: '选择你的系统。',
-            openRelease: '打开 Release'
-          },
-          asset: {
-            dmg: 'DMG',
-            zip: 'ZIP',
-            exe: 'Windows',
-            appimage: 'AppImage',
-            deb: 'DEB',
-            other: '下载'
-          }
+    const copy = {
+      zh: {
+        hero: {
+          eyebrow: 'OneMail',
+          title: '邮件，就该留在你的电脑里。',
+          copy: '本地优先的多账号桌面邮件客户端。统一收件箱、安全预览、附件下载和 SQLite 备份。',
+          download: '下载最新版',
+          allDownloads: '查看所有版本'
         },
-        en: {
-          hero: {
-            eyebrow: 'OneMail',
-            title: 'Mail belongs on your computer.',
-            copy: 'A local-first desktop mail client with unified inboxes, safe previews, attachment downloads, and SQLite backup.',
-            download: 'Download Latest',
-            allDownloads: 'All Downloads'
-          },
-          release: {
-            loading: 'Checking the latest GitHub release...',
-            ready: 'Latest {tag}, published {date}',
-            error: 'Could not load the latest release. GitHub Release is still available.'
-          },
-          download: {
-            title: 'Choose your system.',
-            openRelease: 'Open Release'
-          },
-          asset: {
-            dmg: 'DMG',
-            zip: 'ZIP',
-            exe: 'Windows',
-            appimage: 'AppImage',
-            deb: 'DEB',
-            other: 'Download'
-          }
+        release: {
+          loading: '正在查询 GitHub 最新版本...',
+          ready: '最新版本 {tag}，发布于 {date}',
+          error: '暂时无法读取最新版本，可前往 GitHub Release 下载。'
+        },
+        download: {
+          title: '选择你的系统。',
+          openRelease: '打开 Release'
+        },
+        asset: {
+          dmg: 'DMG',
+          zip: 'ZIP',
+          exe: 'Windows',
+          appimage: 'AppImage',
+          deb: 'DEB',
+          other: '下载'
+        }
+      },
+      en: {
+        hero: {
+          eyebrow: 'OneMail',
+          title: 'Mail belongs on your computer.',
+          copy: 'A local-first desktop mail client with unified inboxes, safe previews, attachment downloads, and SQLite backup.',
+          download: 'Download Latest',
+          allDownloads: 'All Downloads'
+        },
+        release: {
+          loading: 'Checking the latest GitHub release...',
+          ready: 'Latest {tag}, published {date}',
+          error: 'Could not load the latest release. GitHub Release is still available.'
+        },
+        download: {
+          title: 'Choose your system.',
+          openRelease: 'Open Release'
+        },
+        asset: {
+          dmg: 'DMG',
+          zip: 'ZIP',
+          exe: 'Windows',
+          appimage: 'AppImage',
+          deb: 'DEB',
+          other: 'Download'
         }
       }
+    }
 
-      const savedLang = localStorage.getItem('onemail-lang')
-      let lang =
-        savedLang || ((navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en')
-      let release = null
-      const platforms = ['macos', 'windows', 'linux']
+    const savedLang = localStorage.getItem('onemail-lang')
+    let lang =
+      savedLang || ((navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en')
+    let release = null
+    const platforms = ['macos', 'windows', 'linux']
 
-      function t(path) {
-        return path.split('.').reduce((value, key) => value && value[key], copy[lang]) || path
-      }
+    function t(path) {
+      return path.split('.').reduce((value, key) => value && value[key], copy[lang]) || path
+    }
 
-      function format(text, values) {
-        return Object.entries(values).reduce(
-          (result, [key, value]) => result.replace(`{${key}}`, value),
-          text
-        )
-      }
+    function format(text, values) {
+      return Object.entries(values).reduce(
+        (result, [key, value]) => result.replace(`{${key}}`, value),
+        text
+      )
+    }
 
-      function escapeHtml(value) {
-        return String(value || '').replace(
-          /[&<>"']/g,
-          (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]
-        )
-      }
+    function escapeHtml(value) {
+      return String(value || '').replace(
+        /[&<>"']/g,
+        (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]
+      )
+    }
 
-      function detectPlatform() {
-        const value = `${navigator.platform || ''} ${navigator.userAgent || ''}`.toLowerCase()
-        if (value.includes('mac')) return 'macos'
-        if (value.includes('win')) return 'windows'
-        if (value.includes('linux')) return 'linux'
-        return null
-      }
+    function detectPlatform() {
+      const value = `${navigator.platform || ''} ${navigator.userAgent || ''}`.toLowerCase()
+      if (value.includes('mac')) return 'macos'
+      if (value.includes('win')) return 'windows'
+      if (value.includes('linux')) return 'linux'
+      return null
+    }
 
-      function platformOf(asset) {
-        const name = (asset.name || '').toLowerCase()
-        if (/\.(blockmap|yml)$/.test(name)) return null
-        if (name.endsWith('.dmg') || (name.endsWith('.zip') && name.includes('mac'))) return 'macos'
-        if (name.endsWith('.exe') || name.endsWith('.msi')) return 'windows'
-        if (
-          name.endsWith('.appimage') ||
-          name.endsWith('.deb') ||
-          name.endsWith('.rpm') ||
-          name.endsWith('.snap')
-        )
-          return 'linux'
-        return null
-      }
+    function platformOf(asset) {
+      const name = (asset.name || '').toLowerCase()
+      if (/\.(blockmap|yml)$/.test(name)) return null
+      if (name.endsWith('.dmg') || (name.endsWith('.zip') && name.includes('mac'))) return 'macos'
+      if (name.endsWith('.exe') || name.endsWith('.msi')) return 'windows'
+      if (
+        name.endsWith('.appimage') ||
+        name.endsWith('.deb') ||
+        name.endsWith('.rpm') ||
+        name.endsWith('.snap')
+      )
+        return 'linux'
+      return null
+    }
 
-      function labelFor(asset) {
-        const name = (asset.name || '').toLowerCase()
-        if (name.endsWith('.dmg')) return t('asset.dmg')
-        if (name.endsWith('.zip')) return t('asset.zip')
-        if (name.endsWith('.exe') || name.endsWith('.msi')) return t('asset.exe')
-        if (name.endsWith('.appimage')) return t('asset.appimage')
-        if (name.endsWith('.deb')) return t('asset.deb')
-        return t('asset.other')
-      }
+    function labelFor(asset) {
+      const name = (asset.name || '').toLowerCase()
+      if (name.endsWith('.dmg')) return t('asset.dmg')
+      if (name.endsWith('.zip')) return t('asset.zip')
+      if (name.endsWith('.exe') || name.endsWith('.msi')) return t('asset.exe')
+      if (name.endsWith('.appimage')) return t('asset.appimage')
+      if (name.endsWith('.deb')) return t('asset.deb')
+      return t('asset.other')
+    }
 
-      function priority(asset) {
-        const name = (asset.name || '').toLowerCase()
-        if (name.endsWith('.dmg') || name.endsWith('.exe') || name.endsWith('.appimage')) return 1
-        if (name.endsWith('.deb')) return 2
-        if (name.endsWith('.zip')) return 3
-        return 9
-      }
+    function priority(asset) {
+      const name = (asset.name || '').toLowerCase()
+      if (name.endsWith('.dmg') || name.endsWith('.exe') || name.endsWith('.appimage')) return 1
+      if (name.endsWith('.deb')) return 2
+      if (name.endsWith('.zip')) return 3
+      return 9
+    }
 
-      function groupsFor(nextRelease) {
-        const groups = { macos: [], windows: [], linux: [] }
-        ;(nextRelease?.assets || []).forEach((asset) => {
+    function groupsFor(nextRelease) {
+      const groups = { macos: [], windows: [], linux: [] }
+        ; (nextRelease?.assets || []).forEach((asset) => {
           const platform = platformOf(asset)
           if (platform) groups[platform].push(asset)
         })
-        platforms.forEach((platform) => groups[platform].sort((a, b) => priority(a) - priority(b)))
-        return groups
-      }
+      platforms.forEach((platform) => groups[platform].sort((a, b) => priority(a) - priority(b)))
+      return groups
+    }
 
-      function render() {
-        document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en'
-        document.querySelector('[data-lang-toggle]').textContent = lang === 'zh' ? 'EN' : '中文'
-        document.querySelectorAll('[data-i18n]').forEach((node) => {
-          node.textContent = t(node.dataset.i18n)
-        })
-
-        const groups = groupsFor(release)
-        const detected = detectPlatform()
-        const primary = document.getElementById('primary-download')
-        const recommended =
-          (detected && groups[detected][0]) ||
-          groups.macos[0] ||
-          groups.windows[0] ||
-          groups.linux[0]
-        primary.textContent = recommended
-          ? `${t('hero.download')} ${labelFor(recommended)}`
-          : t('hero.download')
-        primary.href = recommended?.browser_download_url || `${GITHUB}/releases/latest`
-
-        platforms.forEach((platform) => {
-          const row = document.querySelector(`[data-platform="${platform}"]`)
-          const container = document.querySelector(`[data-assets="${platform}"]`)
-          row.classList.toggle('is-recommended', platform === detected)
-          if (!groups[platform].length) {
-            container.innerHTML = `<a href="${GITHUB}/releases/latest" target="_blank" rel="noreferrer">${escapeHtml(t('download.openRelease'))}</a>`
-            return
-          }
-          container.innerHTML = groups[platform]
-            .map(
-              (asset) =>
-                `<a href="${escapeHtml(asset.browser_download_url)}" target="_blank" rel="noreferrer">${escapeHtml(labelFor(asset))}</a>`
-            )
-            .join('')
-        })
-
-        if (release) {
-          const date = release.published_at || release.created_at
-          const niceDate = date
-            ? new Intl.DateTimeFormat(lang === 'zh' ? 'zh-CN' : 'en', {
-                dateStyle: 'medium'
-              }).format(new Date(date))
-            : ''
-          document.getElementById('release-note').textContent = format(t('release.ready'), {
-            tag: release.tag_name || '',
-            date: niceDate
-          })
-        }
-      }
-
-      async function fetchJson(url) {
-        const response = await fetch(url, { headers: { Accept: 'application/vnd.github+json' } })
-        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
-        return response.json()
-      }
-
-      async function loadLatestRelease() {
-        try {
-          const tags = await fetchJson(`${API}/tags?per_page=1`)
-          const tag = tags?.[0]?.name
-          release = tag
-            ? await fetchJson(`${API}/releases/tags/${encodeURIComponent(tag)}`)
-            : await fetchJson(`${API}/releases/latest`)
-          render()
-        } catch (error) {
-          document.getElementById('release-note').textContent = t('release.error')
-        }
-      }
-
-      document.querySelector('[data-lang-toggle]').addEventListener('click', () => {
-        lang = lang === 'zh' ? 'en' : 'zh'
-        localStorage.setItem('onemail-lang', lang)
-        render()
+    function render() {
+      document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en'
+      document.querySelector('[data-lang-toggle]').textContent = lang === 'zh' ? 'EN' : '中文'
+      document.querySelectorAll('[data-i18n]').forEach((node) => {
+        node.textContent = t(node.dataset.i18n)
       })
 
+      const groups = groupsFor(release)
+      const detected = detectPlatform()
+      const primary = document.getElementById('primary-download')
+      const recommended =
+        (detected && groups[detected][0]) ||
+        groups.macos[0] ||
+        groups.windows[0] ||
+        groups.linux[0]
+      primary.textContent = recommended
+        ? `${t('hero.download')} ${labelFor(recommended)}`
+        : t('hero.download')
+      primary.href = recommended?.browser_download_url || `${GITHUB}/releases/latest`
+
+      platforms.forEach((platform) => {
+        const row = document.querySelector(`[data-platform="${platform}"]`)
+        const container = document.querySelector(`[data-assets="${platform}"]`)
+        row.classList.toggle('is-recommended', platform === detected)
+        if (!groups[platform].length) {
+          container.innerHTML = `<a href="${GITHUB}/releases/latest" target="_blank" rel="noreferrer">${escapeHtml(t('download.openRelease'))}</a>`
+          return
+        }
+        container.innerHTML = groups[platform]
+          .map(
+            (asset) =>
+              `<a href="${escapeHtml(asset.browser_download_url)}" target="_blank" rel="noreferrer">${escapeHtml(labelFor(asset))}</a>`
+          )
+          .join('')
+      })
+
+      if (release) {
+        const date = release.published_at || release.created_at
+        const niceDate = date
+          ? new Intl.DateTimeFormat(lang === 'zh' ? 'zh-CN' : 'en', {
+            dateStyle: 'medium'
+          }).format(new Date(date))
+          : ''
+        document.getElementById('release-note').textContent = format(t('release.ready'), {
+          tag: release.tag_name || '',
+          date: niceDate
+        })
+      }
+    }
+
+    async function fetchJson(url) {
+      const response = await fetch(url, { headers: { Accept: 'application/vnd.github+json' } })
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
+      return response.json()
+    }
+
+    async function loadLatestRelease() {
+      try {
+        const tags = await fetchJson(`${API}/tags?per_page=1`)
+        const tag = tags?.[0]?.name
+        release = tag
+          ? await fetchJson(`${API}/releases/tags/${encodeURIComponent(tag)}`)
+          : await fetchJson(`${API}/releases/latest`)
+        render()
+      } catch (error) {
+        document.getElementById('release-note').textContent = t('release.error')
+      }
+    }
+
+    document.querySelector('[data-lang-toggle]').addEventListener('click', () => {
+      lang = lang === 'zh' ? 'en' : 'zh'
+      localStorage.setItem('onemail-lang', lang)
       render()
-      loadLatestRelease()
-    </script>
-  </body>
+    })
+
+    render()
+    loadLatestRelease()
+  </script>
+</body>
+
 </html>

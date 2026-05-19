@@ -65,7 +65,7 @@ img {
   height: 32px;
   border-radius: 8px;
   background: #f5f5f7;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .site-nav {
@@ -103,7 +103,7 @@ img {
   margin: 0 auto clamp(34px, 5vw, 48px);
   background: #f5f5f7;
   border-radius: 32px;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .eyebrow {
@@ -224,9 +224,9 @@ h1 {
 
 .shot-frame img {
   width: 100%;
-  aspect-ratio: 16 / 10;
-  object-fit: cover;
-  object-position: top left;
+  height: auto;
+  object-fit: contain;
+  object-position: top center;
   background: #f5f5f7;
 }
 
