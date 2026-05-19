@@ -419,7 +419,76 @@ function getProviderSmtpPreset(
     }
   }
 
-  if (normalizedProviderKey.includes('163') || domain === '163.com') {
+  if (normalizedProviderKey.includes('yahoo') || domain === 'yahoo.com') {
+    return {
+      smtpHost: 'smtp.mail.yahoo.com',
+      smtpPort: 465,
+      smtpSecurity: 'ssl_tls',
+      smtpAuthType: authType,
+      smtpEnabled: true
+    }
+  }
+
+  if (normalizedProviderKey === 'aliyun' || domain === 'aliyun.com') {
+    return {
+      smtpHost: 'smtp.aliyun.com',
+      smtpPort: 465,
+      smtpSecurity: 'ssl_tls',
+      smtpAuthType: authType,
+      smtpEnabled: true
+    }
+  }
+
+  if (
+    normalizedProviderKey.includes('aliyun_enterprise') ||
+    normalizedProviderKey.includes('alibaba')
+  ) {
+    return {
+      smtpHost: 'smtp.qiye.aliyun.com',
+      smtpPort: 465,
+      smtpSecurity: 'ssl_tls',
+      smtpAuthType: authType,
+      smtpEnabled: true
+    }
+  }
+
+  if (normalizedProviderKey.includes('189') || domain === '189.cn') {
+    return {
+      smtpHost: 'smtp.189.cn',
+      smtpPort: 465,
+      smtpSecurity: 'ssl_tls',
+      smtpAuthType: authType,
+      smtpEnabled: true
+    }
+  }
+
+  if (normalizedProviderKey.includes('sohu') || domain === 'sohu.com') {
+    return {
+      smtpHost: 'smtp.sohu.com',
+      smtpPort: 465,
+      smtpSecurity: 'ssl_tls',
+      smtpAuthType: authType,
+      smtpEnabled: true
+    }
+  }
+
+  if (normalizedProviderKey.includes('qq') || domain === 'qq.com' || domain === 'foxmail.com') {
+    return {
+      smtpHost: 'smtp.qq.com',
+      smtpPort: 465,
+      smtpSecurity: 'ssl_tls',
+      smtpAuthType: authType,
+      smtpEnabled: true
+    }
+  }
+
+  if (
+    normalizedProviderKey.includes('163') ||
+    normalizedProviderKey.includes('netease') ||
+    domain === '163.com' ||
+    domain === '126.com' ||
+    domain === 'yeah.net'
+  ) {
     return {
       smtpHost: 'smtp.163.com',
       smtpPort: 465,
@@ -429,9 +498,89 @@ function getProviderSmtpPreset(
     }
   }
 
-  if (normalizedProviderKey.includes('qq') || domain === 'qq.com') {
+  if (normalizedProviderKey.includes('sina') || domain === 'sina.com' || domain === 'sina.cn') {
     return {
-      smtpHost: 'smtp.qq.com',
+      smtpHost: 'smtp.sina.com',
+      smtpPort: 465,
+      smtpSecurity: 'ssl_tls',
+      smtpAuthType: authType,
+      smtpEnabled: true
+    }
+  }
+
+  if (normalizedProviderKey.includes('139') || domain === '139.com') {
+    return {
+      smtpHost: 'smtp.139.com',
+      smtpPort: 465,
+      smtpSecurity: 'ssl_tls',
+      smtpAuthType: authType,
+      smtpEnabled: true
+    }
+  }
+
+  if (normalizedProviderKey.includes('21cn') || domain === '21cn.com') {
+    return {
+      smtpHost: 'smtp.21cn.com',
+      smtpPort: 465,
+      smtpSecurity: 'ssl_tls',
+      smtpAuthType: authType,
+      smtpEnabled: true
+    }
+  }
+
+  if (
+    normalizedProviderKey.includes('perfect') ||
+    domain === '88.com' ||
+    domain === '111.com' ||
+    domain === 'email.cn'
+  ) {
+    return {
+      smtpHost: `smtp.${domain === '111.com' || domain === 'email.cn' ? domain : '88.com'}`,
+      smtpPort: 465,
+      smtpSecurity: 'ssl_tls',
+      smtpAuthType: authType,
+      smtpEnabled: true
+    }
+  }
+
+  if (
+    normalizedProviderKey.includes('icloud') ||
+    domain === 'icloud.com' ||
+    domain === 'me.com' ||
+    domain === 'mac.com'
+  ) {
+    return {
+      smtpHost: 'smtp.mail.me.com',
+      smtpPort: 587,
+      smtpSecurity: 'starttls',
+      smtpAuthType: authType,
+      smtpEnabled: true
+    }
+  }
+
+  if (normalizedProviderKey.includes('aol') || domain === 'aol.com') {
+    return {
+      smtpHost: 'smtp.aol.com',
+      smtpPort: 465,
+      smtpSecurity: 'ssl_tls',
+      smtpAuthType: authType,
+      smtpEnabled: true
+    }
+  }
+
+  if (normalizedProviderKey.includes('yandex') || domain === 'yandex.com') {
+    return {
+      smtpHost: 'smtp.yandex.com',
+      smtpPort: 465,
+      smtpSecurity: 'ssl_tls',
+      smtpAuthType: authType,
+      smtpEnabled: true
+    }
+  }
+
+  if (normalizedProviderKey.includes('mailru') || domain === 'mail.ru') {
+    return {
+      smtpHost: 'smtp.mail.ru',
       smtpPort: 465,
       smtpSecurity: 'ssl_tls',
       smtpAuthType: authType,

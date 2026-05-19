@@ -80,7 +80,12 @@ export function registerAccountIpc(): void {
       authType: input.authType ?? current.authType,
       imapHost: input.imapHost ?? current.imapHost,
       imapPort: input.imapPort ?? current.imapPort,
-      imapSecurity: input.imapSecurity ?? current.imapSecurity
+      imapSecurity: input.imapSecurity ?? current.imapSecurity,
+      smtpHost: input.smtpHost ?? current.smtpHost,
+      smtpPort: input.smtpPort ?? current.smtpPort,
+      smtpSecurity: input.smtpSecurity ?? current.smtpSecurity,
+      smtpAuthType: input.smtpAuthType ?? current.smtpAuthType,
+      smtpEnabled: input.smtpEnabled ?? current.smtpEnabled
     }
     await testImapConnection(connectionInput)
 

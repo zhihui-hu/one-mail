@@ -72,7 +72,10 @@ export function AccountList({
   const { t } = useI18n()
   const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(() => new Set())
   const allAccount = accounts.find((account) => account.id === 'all')
-  const groups = groupAccountsByProvider(accounts.filter((account) => account.id !== 'all'), t)
+  const groups = groupAccountsByProvider(
+    accounts.filter((account) => account.id !== 'all'),
+    t
+  )
 
   function toggleGroup(groupKey: string): void {
     setCollapsedGroups((current) => {
@@ -393,9 +396,37 @@ function normalizeProviderKey(providerKey?: string): string {
   if (!providerKey) return 'custom'
   const normalized = providerKey.toLowerCase()
   if (normalized.includes('gmail')) return 'gmail'
+  if (normalized.includes('yahoo')) return 'yahoo'
   if (normalized.includes('outlook') || normalized.includes('microsoft')) return 'outlook'
-  if (normalized.includes('163')) return '163'
+  if (
+    normalized.includes('163') ||
+    normalized.includes('126') ||
+    normalized.includes('yeah') ||
+    normalized.includes('netease')
+  ) {
+    return '163'
+  }
   if (normalized.includes('qq') || normalized.includes('foxmail')) return 'qq'
+  if (normalized.includes('aliyun_enterprise') || normalized.includes('alibaba')) {
+    return 'aliyunEnterprise'
+  }
+  if (normalized.includes('aliyun')) return 'aliyun'
+  if (normalized.includes('189')) return '189'
+  if (normalized.includes('sohu')) return 'sohu'
+  if (normalized.includes('sina')) return 'sina'
+  if (normalized.includes('139')) return '139'
+  if (normalized.includes('21cn')) return '21cn'
+  if (normalized.includes('perfect') || normalized.includes('88')) return 'perfect'
+  if (
+    normalized.includes('icloud') ||
+    normalized.includes('me.com') ||
+    normalized.includes('mac.com')
+  ) {
+    return 'icloud'
+  }
+  if (normalized.includes('aol')) return 'aol'
+  if (normalized.includes('yandex')) return 'yandex'
+  if (normalized.includes('mailru') || normalized.includes('mail.ru')) return 'mailru'
   if (normalized.includes('custom')) return 'custom'
   return normalized
 }
@@ -403,9 +434,22 @@ function normalizeProviderKey(providerKey?: string): string {
 function getProviderLabel(providerKey: string, t: (key: TranslationKey) => string): string {
   const labels: Record<string, TranslationKey> = {
     gmail: 'account.provider.gmail',
+    yahoo: 'account.provider.yahoo',
     outlook: 'account.provider.outlook',
     '163': 'account.provider.netease163',
     qq: 'account.provider.qq',
+    aliyun: 'account.provider.aliyun',
+    aliyunEnterprise: 'account.provider.aliyunEnterprise',
+    '189': 'account.provider.mail189',
+    sohu: 'account.provider.sohu',
+    sina: 'account.provider.sina',
+    '139': 'account.provider.mail139',
+    '21cn': 'account.provider.mail21cn',
+    perfect: 'account.provider.perfect',
+    icloud: 'account.provider.icloud',
+    aol: 'account.provider.aol',
+    yandex: 'account.provider.yandex',
+    mailru: 'account.provider.mailru',
     custom: 'account.provider.custom',
     manual: 'account.provider.custom'
   }
@@ -418,9 +462,22 @@ function getProviderLogoDomain(account: Account): string {
   const providerKey = normalizeProviderKey(account.providerKey)
   const domains: Record<string, string> = {
     gmail: 'gmail.com',
+    yahoo: 'yahoo.com',
     outlook: 'outlook.com',
     '163': '163.com',
     qq: 'qq.com',
+    aliyun: 'aliyun.com',
+    aliyunEnterprise: 'qiye.aliyun.com',
+    '189': '189.cn',
+    sohu: 'sohu.com',
+    sina: 'sina.com',
+    '139': '139.com',
+    '21cn': '21cn.com',
+    perfect: '88.com',
+    icloud: 'icloud.com',
+    aol: 'aol.com',
+    yandex: 'yandex.com',
+    mailru: 'mail.ru',
     custom: getEmailDomain(account.address),
     manual: getEmailDomain(account.address)
   }

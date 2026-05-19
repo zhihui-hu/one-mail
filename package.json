@@ -15,7 +15,7 @@
   "main": "./out/main/index.js",
   "author": "Huzhihui",
   "license": "AGPL-3.0-only",
-  "homepage": "https://onemail.huzhihui.com",
+  "homepage": "https://zhihui-hu.github.io/one-mail/",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",

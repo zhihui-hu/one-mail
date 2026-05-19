@@ -6,7 +6,7 @@ import { ResponsiveDialog } from '@renderer/components/responsive-dialog'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import { FieldError, FieldGroup } from '@renderer/components/ui/field'
-import { useI18n, type TranslationKey } from '@renderer/lib/i18n'
+import { useI18n } from '@renderer/lib/i18n'
 import {
   Select,
   SelectContent,
@@ -21,15 +21,14 @@ import {
   defaultAccountFormValues,
   getProviderPreset,
   providerPresets,
+  resolveProviderPreset,
   type AccountFormValues,
   type AccountKind
 } from './account-form-types'
 import { AccountFormField } from './account-form-field'
+import { CommonAccountFields } from './common-account-fields'
 import { CustomImapAccountForm } from './custom-imap-account-form'
-import { GmailAccountForm } from './gmail-account-form'
-import { NeteaseAccountForm } from './netease-account-form'
 import { OutlookAccountForm } from './outlook-account-form'
-import { QqAccountForm } from './qq-account-form'
 
 const ACCOUNT_ADD_GUIDE_URL =
   'https://huzhihui.com/blog/personal-email-account-add-guide-imap-smtp-app-password'
@@ -82,7 +81,7 @@ export function AddAccountForm({
     setPending(true)
     setError(null)
 
-    const preset = getProviderPreset(values.kind)
+    const preset = resolveProviderPreset(values.kind, values.email)
 
     try {
       await onSubmit({
@@ -95,7 +94,12 @@ export function AddAccountForm({
         imapHost:
           values.kind === 'custom' ? values.imapHost?.trim() || preset.imapHost : preset.imapHost,
         imapPort: values.kind === 'custom' ? values.imapPort : preset.imapPort,
-        imapSecurity: values.kind === 'custom' ? values.imapSecurity : preset.imapSecurity
+        imapSecurity: values.kind === 'custom' ? values.imapSecurity : preset.imapSecurity,
+        smtpHost: preset.smtpHost,
+        smtpPort: preset.smtpPort,
+        smtpSecurity: preset.smtpSecurity,
+        smtpAuthType: preset.smtpAuthType,
+        smtpEnabled: preset.smtpEnabled
       })
       form.reset(defaultAccountFormValues)
       setKind(defaultAccountFormValues.kind)
@@ -124,7 +128,7 @@ export function AddAccountForm({
               <SelectGroup>
                 {providerPresets.map((preset) => (
                   <SelectItem key={preset.kind} value={preset.kind}>
-                    {getProviderPresetLabel(preset.kind, t)}
+                    {t(preset.labelKey)}
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -132,7 +136,7 @@ export function AddAccountForm({
           </Select>
         </AccountFormField>
 
-        <FieldGroup className="gap-2.5">{renderProviderForm(kind, form)}</FieldGroup>
+        <FieldGroup className="gap-2.5">{renderProviderForm(kind, form, t)}</FieldGroup>
 
         {error ? <FieldError>{error}</FieldError> : null}
       </div>
@@ -183,19 +187,27 @@ export function AddAccountDialog({
 
 function renderProviderForm(
   kind: AccountKind,
-  form: ReturnType<typeof useForm<AccountFormValues>>
+  form: ReturnType<typeof useForm<AccountFormValues>>,
+  t: ReturnType<typeof useI18n>['t']
 ): React.JSX.Element {
   if (kind === 'outlook') return <OutlookAccountForm form={form} />
-  if (kind === 'netease163') return <NeteaseAccountForm form={form} />
-  if (kind === 'qq') return <QqAccountForm form={form} />
   if (kind === 'custom') return <CustomImapAccountForm form={form} />
 
-  return <GmailAccountForm form={form} />
+  const preset = getProviderPreset(kind)
+
+  return (
+    <CommonAccountFields
+      form={form}
+      passwordLabel={t(preset.passwordLabelKey ?? 'account.form.passwordOrAuthCode')}
+      passwordPlaceholder={t(preset.passwordPlaceholderKey ?? 'account.form.passwordPlaceholder')}
+    />
+  )
 }
 
 function AccountAddGuideHint({ kind }: { kind: AccountKind }): React.JSX.Element {
   const { t } = useI18n()
-  const label = getProviderPresetLabel(kind, t)
+  const preset = getProviderPreset(kind)
+  const label = t(preset.labelKey)
 
   return (
     <Alert variant="warning">
@@ -214,27 +226,12 @@ function getAccountGuideText(
   label: string,
   t: ReturnType<typeof useI18n>['t']
 ): string {
-  if (kind === 'gmail') return t('account.add.guide.gmail', { label })
-  if (kind === 'netease163') return t('account.add.guide.netease163', { label })
-  if (kind === 'qq') return t('account.add.guide.qq', { label })
+  const preset = getProviderPreset(kind)
+  if (preset.guideKey) return t(preset.guideKey, { label })
+
   if (kind === 'custom') return t('account.add.guide.custom')
 
   return t('account.add.guide.default', { label })
-}
-
-function getProviderPresetLabel(
-  kind: AccountKind,
-  t: (key: TranslationKey, values?: Record<string, string | number>) => string
-): string {
-  const labels: Record<AccountKind, TranslationKey> = {
-    gmail: 'account.provider.gmail',
-    outlook: 'account.provider.outlook',
-    netease163: 'account.provider.netease163',
-    qq: 'account.provider.qq',
-    custom: 'account.provider.custom'
-  }
-
-  return t(labels[kind])
 }
 
 function optionalText(value?: string): string | undefined {

@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, clipboard, Menu } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import appIcon from '../../resources/icon.png?asset'
@@ -71,6 +71,18 @@ function createWindow(initialRoute = '/'): BrowserWindow {
     return { action: 'deny' }
   })
 
+  nextWindow.webContents.on('context-menu', (_event, params) => {
+    const linkUrl = params.linkURL.trim()
+    if (!linkUrl) return
+
+    Menu.buildFromTemplate([
+      {
+        label: getCopyLinkMenuLabel(),
+        click: () => clipboard.writeText(linkUrl)
+      }
+    ]).popup({ window: nextWindow })
+  })
+
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
@@ -84,6 +96,10 @@ function createWindow(initialRoute = '/'): BrowserWindow {
   }
 
   return nextWindow
+}
+
+function getCopyLinkMenuLabel(): string {
+  return app.getLocale().toLowerCase().startsWith('zh') ? '复制链接' : 'Copy link'
 }
 
 // This method will be called when Electron has finished
