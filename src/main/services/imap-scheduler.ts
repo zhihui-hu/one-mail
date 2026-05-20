@@ -61,8 +61,8 @@ function startTask(task: ScheduledTask<unknown>): void {
   runningCount += 1
   runningByHost.set(task.host, (runningByHost.get(task.host) ?? 0) + 1)
 
-  void task
-    .run()
+  void Promise.resolve()
+    .then(() => task.run())
     .then(task.resolve, task.reject)
     .finally(() => {
       runningCount -= 1
