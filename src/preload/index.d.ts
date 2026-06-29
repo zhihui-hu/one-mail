@@ -9,6 +9,7 @@ export type {
   AccountSyncRunResult,
   AccountUpdateInput,
   AppSettings,
+  AppTheme,
   AppUpdateCheckResult,
   AttachmentDownloadResult,
   BackupSyncDownloadResult,

@@ -54,7 +54,7 @@ import {
   updateAccount
 } from '@renderer/lib/api'
 import { normalizeLocale, useI18n } from '@renderer/lib/i18n'
-import { ONEMAIL_RELEASES_URL, hasAvailableUpdate } from '@renderer/lib/update-status'
+import { ONEMAIL_HOMEPAGE_URL, hasAvailableUpdate } from '@renderer/lib/update-status'
 import type { OutboxMessage } from '@renderer/lib/api'
 import { toast } from 'sonner'
 import { NoAccountsBody, StatusBar, TitleBar } from './mailbox-chrome'
@@ -931,7 +931,7 @@ export function MailboxWorkspace(): React.JSX.Element {
         }}
         onOpenVersion={() => {
           if (hasAvailableUpdate(updateStatus)) {
-            void openExternalUrl(updateStatus?.releaseUrl ?? ONEMAIL_RELEASES_URL)
+            void openExternalUrl(ONEMAIL_HOMEPAGE_URL)
             return
           }
           setSettingsInitialSection('about')

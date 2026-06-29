@@ -12,10 +12,10 @@ DEFAULT_MSG := "bump version to v$(VERSION)"
 
 
 
-# 检查 npm 是否安装
-NPM := npm
-ifeq ($(strip $(shell command -v $(NPM) 2> /dev/null)),)
-$(error npm is not installed. Please install Node.js and npm)
+# 检查 pnpm 是否安装
+PNPM := pnpm
+ifeq ($(strip $(shell command -v $(PNPM) 2> /dev/null)),)
+$(error pnpm is not installed. Please install pnpm)
 endif
 
 
@@ -51,4 +51,4 @@ push-tag: push-version
 
 # 开发环境
 dev:
-	@$(NPM) run dev
+	@$(PNPM) run dev

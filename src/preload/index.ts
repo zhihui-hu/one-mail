@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import type { AppTheme } from '../shared/types'
 
 // Custom APIs for renderer
 const api = {
@@ -93,6 +94,7 @@ const api = {
   },
   system: {
     info: () => ipcRenderer.invoke('system/info'),
+    setTitleBarTheme: (theme: AppTheme) => ipcRenderer.invoke('system/setTitleBarTheme', theme),
     revealDatabase: () => ipcRenderer.invoke('system/revealDatabase'),
     revealPath: (path) => ipcRenderer.invoke('system/revealPath', path),
     openExternal: (url) => ipcRenderer.invoke('system/openExternal', url)

@@ -6,6 +6,7 @@ export type {
   AccountMailboxStats,
   AccountUpdateInput,
   AppSettings,
+  AppTheme,
   AppUpdateCheckResult,
   AppUpdateStatus,
   AttachmentDownloadResult,

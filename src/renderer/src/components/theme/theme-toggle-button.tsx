@@ -57,6 +57,7 @@ export function ThemeToggleButton(): React.JSX.Element {
     root.style.colorScheme = nextTheme
     window.localStorage.setItem('theme', nextTheme)
     setTheme(nextTheme)
+    void window.api?.system?.setTitleBarTheme?.(nextTheme)
   }
 
   function handleToggle(event: MouseEvent<HTMLButtonElement>): void {

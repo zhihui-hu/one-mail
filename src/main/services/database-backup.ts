@@ -317,7 +317,7 @@ function validateSqlBackup(sql: string, fileInfo: BackupFileInfo): void {
     throw new Error('备份 SQL 缺少 OneMail 设置表。')
   }
 
-  if (/\b(ATTACH|DETACH)\b/i.test(sql)) {
+  if (containsDatabaseAttachmentStatement(sql)) {
     throw new Error('备份 SQL 包含不允许的数据库附加语句。')
   }
 
@@ -333,6 +333,82 @@ function validateSqlBackup(sql: string, fileInfo: BackupFileInfo): void {
   if (header.key !== fileInfo.key || header.exportedAt !== fileInfo.exportedAt) {
     throw new Error('备份 SQL 头部信息与文件名不一致。')
   }
+}
+
+function containsDatabaseAttachmentStatement(sql: string): boolean {
+  const executableSql = maskSqlCommentsAndQuotedContent(sql)
+
+  return /(?:^|;)\s*(?:EXPLAIN(?:\s+QUERY\s+PLAN)?\s+)?(?:ATTACH|DETACH)\b/i.test(executableSql)
+}
+
+function maskSqlCommentsAndQuotedContent(sql: string): string {
+  let result = ''
+  let index = 0
+
+  while (index < sql.length) {
+    const character = sql[index]
+    const nextCharacter = sql[index + 1]
+
+    if (character === '-' && nextCharacter === '-') {
+      const lineEnd = sql.indexOf('\n', index + 2)
+      if (lineEnd === -1) return `${result}${' '.repeat(sql.length - index)}`
+      result += `${' '.repeat(lineEnd - index)}\n`
+      index = lineEnd + 1
+      continue
+    }
+
+    if (character === '/' && nextCharacter === '*') {
+      const commentEnd = sql.indexOf('*/', index + 2)
+      const endIndex = commentEnd === -1 ? sql.length : commentEnd + 2
+      result += maskSqlFragment(sql.slice(index, endIndex))
+      index = endIndex
+      continue
+    }
+
+    if (character === "'" || character === '"' || character === '`') {
+      const endIndex = findQuotedSqlContentEnd(sql, index, character)
+      result += maskSqlFragment(sql.slice(index, endIndex))
+      index = endIndex
+      continue
+    }
+
+    if (character === '[') {
+      const closingBracket = sql.indexOf(']', index + 1)
+      const endIndex = closingBracket === -1 ? sql.length : closingBracket + 1
+      result += maskSqlFragment(sql.slice(index, endIndex))
+      index = endIndex
+      continue
+    }
+
+    result += character
+    index += 1
+  }
+
+  return result
+}
+
+function findQuotedSqlContentEnd(sql: string, startIndex: number, quote: string): number {
+  let index = startIndex + 1
+
+  while (index < sql.length) {
+    if (sql[index] !== quote) {
+      index += 1
+      continue
+    }
+
+    if (sql[index + 1] === quote) {
+      index += 2
+      continue
+    }
+
+    return index + 1
+  }
+
+  return sql.length
+}
+
+function maskSqlFragment(fragment: string): string {
+  return fragment.replace(/[^\r\n]/g, ' ')
 }
 
 function hasCreateTableStatement(sql: string, tableName: string): boolean {

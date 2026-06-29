@@ -425,6 +425,8 @@ export type SystemInfo = {
   userDataPath: string
 }
 
+export type AppTheme = 'light' | 'dark'
+
 export type AppUpdateCheckResult = {
   status: 'unsupported' | 'available' | 'not_available' | 'error'
   currentVersion: string
@@ -529,6 +531,7 @@ export type OneMailApi = {
   }
   system: {
     info: () => Promise<SystemInfo>
+    setTitleBarTheme: (theme: AppTheme) => Promise<boolean>
     revealDatabase: () => Promise<boolean>
     revealPath: (path: string) => Promise<boolean>
     openExternal: (url: string) => Promise<boolean>

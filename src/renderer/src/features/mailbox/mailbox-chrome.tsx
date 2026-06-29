@@ -68,30 +68,30 @@ export function TitleBar({
   onOpenSettings: () => void
 }): React.JSX.Element {
   const { t } = useI18n()
-  const showLeftWindowActions = Boolean(platform && platform !== 'darwin')
+  const placeActionsOnLeft = Boolean(platform && platform !== 'darwin')
 
   return (
     <header
       className={cn(
-        'app-titlebar app-drag-region flex h-10 shrink-0 items-center border-b bg-card/60',
-        showLeftWindowActions ? 'justify-between' : 'justify-end'
+        'app-titlebar app-drag-region flex h-10 shrink-0 items-center border-b bg-background',
+        placeActionsOnLeft ? 'justify-start' : 'justify-end'
       )}
     >
       <TooltipProvider>
-        {showLeftWindowActions ? (
-          <div className="app-no-drag flex items-center gap-1">
-            <SettingsButton label={t('common.settings')} onClick={onOpenSettings} />
-            <ThemeToggleButton />
-          </div>
-        ) : null}
         <div className="app-no-drag flex items-center gap-1">
-          <AddAccountButton label={t('common.addAccount')} onClick={onAddAccount} />
-          {!showLeftWindowActions ? (
+          {placeActionsOnLeft ? (
             <>
+              <SettingsButton label={t('common.settings')} onClick={onOpenSettings} />
+              <AddAccountButton label={t('common.addAccount')} onClick={onAddAccount} />
+              <ThemeToggleButton />
+            </>
+          ) : (
+            <>
+              <AddAccountButton label={t('common.addAccount')} onClick={onAddAccount} />
               <SettingsButton label={t('common.settings')} onClick={onOpenSettings} />
               <ThemeToggleButton />
             </>
-          ) : null}
+          )}
         </div>
       </TooltipProvider>
     </header>

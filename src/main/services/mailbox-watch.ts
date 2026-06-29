@@ -118,6 +118,11 @@ export function requestForegroundMailboxSync(reason: ForegroundSyncReason): void
   })
 }
 
+export async function requestManualMailboxSync(): Promise<void> {
+  await syncMailboxes(getSyncableAccounts(), 'manual', PRIORITY_MANUAL_SYNC)
+  refreshMailboxWatchers()
+}
+
 export function refreshMailboxWatchers(): void {
   refreshForegroundSyncTimer()
   const accounts = getWatcherAccounts()
@@ -363,10 +368,19 @@ async function syncForegroundMailboxes(reason: ForegroundSyncReason): Promise<vo
 
   if (accounts.length === 0) return
 
+  await syncMailboxes(accounts, reason, PRIORITY_FOREGROUND_SYNC)
+  refreshMailboxWatchers()
+}
+
+async function syncMailboxes(
+  accounts: SyncableAccount[],
+  reason: ForegroundSyncReason | 'manual',
+  priority: number
+): Promise<void> {
   await Promise.all(
     accounts.map(async (account) => {
       try {
-        const result = await runLimitedSync(account.accountId, PRIORITY_FOREGROUND_SYNC)
+        const result = await runLimitedSync(account.accountId, priority)
 
         notifyNewMail({
           accountId: account.accountId,
@@ -387,8 +401,6 @@ async function syncForegroundMailboxes(reason: ForegroundSyncReason): Promise<vo
       }
     })
   )
-
-  refreshMailboxWatchers()
 }
 
 async function runLimitedSync(

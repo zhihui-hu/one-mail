@@ -61,7 +61,7 @@ import type {
 } from '../../../../shared/types'
 import { cn } from '@renderer/lib/utils'
 import { useI18n, type TranslationKey } from '@renderer/lib/i18n'
-import { ONEMAIL_RELEASES_URL, hasAvailableUpdate } from '@renderer/lib/update-status'
+import { ONEMAIL_HOMEPAGE_URL, hasAvailableUpdate } from '@renderer/lib/update-status'
 
 type SettingsDialogProps = {
   open: boolean
@@ -887,9 +887,7 @@ function AboutSettings({
                   type="button"
                   className="rounded-sm font-medium text-warning outline-none transition-colors hover:text-warning focus-visible:ring-2 focus-visible:ring-ring"
                   title={versionTitle}
-                  onClick={() =>
-                    void openExternalUrl(updateStatus?.releaseUrl ?? ONEMAIL_RELEASES_URL)
-                  }
+                  onClick={() => void openExternalUrl(ONEMAIL_HOMEPAGE_URL)}
                 >
                   {version}
                 </button>

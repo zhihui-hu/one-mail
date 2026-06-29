@@ -38,7 +38,7 @@ describe('database SQL backup', () => {
 
     configureDatabase('source', sourceKey)
     const sourceAccount = seedAccount('source@example.com', 'source-password')
-    seedInboxMessage(sourceAccount.accountId, 'Message from macOS')
+    seedInboxMessage(sourceAccount.accountId, 'Please ATTACH the invoice')
     const backup = createDatabaseSqlBackup()
 
     expect(backup.key).toBe(sourceKey)
@@ -59,6 +59,21 @@ describe('database SQL backup', () => {
     const restoredAccounts = listAccounts()
     expect(restoredAccounts.map((account) => account.email)).toEqual(['source@example.com'])
     expect(readAccountPassword(restoredAccounts[0].accountId)).toBe('source-password')
+  })
+
+  it('rejects an executable database attachment statement', () => {
+    const sourceKey = createTestDatabaseKey(-30, '3333333333333333')
+    configureDatabase('unsafe-source', sourceKey)
+    seedAccount('source@example.com', 'source-password')
+    const backup = createDatabaseSqlBackup()
+    const unsafeSql = backup.sql.replace(
+      'BEGIN TRANSACTION;',
+      "BEGIN TRANSACTION;\nATTACH DATABASE 'external.sqlite' AS external;"
+    )
+
+    expect(() => importDatabaseSqlBackupContent(unsafeSql, backup.fileName)).toThrow(
+      '备份 SQL 包含不允许的数据库附加语句。'
+    )
   })
 })
 

@@ -19,7 +19,7 @@ export function AddAccountWindow(): React.JSX.Element {
 
   return (
     <main className="flex h-screen min-h-screen flex-col overflow-hidden bg-background text-foreground">
-      <header className="app-titlebar app-drag-region flex h-10 shrink-0 items-center border-b bg-card/60">
+      <header className="app-titlebar app-drag-region flex h-10 shrink-0 items-center border-b bg-background">
         <h1 className="truncate text-sm font-semibold tracking-normal">{t('account.add.title')}</h1>
       </header>
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden p-4">

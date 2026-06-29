@@ -18,7 +18,10 @@ export function openAddAccountWindow(): void {
     process.platform === 'darwin'
       ? ({ titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 14 } } as const)
       : process.platform === 'win32'
-        ? ({ titleBarStyle: 'hidden', titleBarOverlay: { height: 40 } } as const)
+        ? ({
+            titleBarStyle: 'hidden',
+            titleBarOverlay: { color: '#00000000', symbolColor: '#171717', height: 40 }
+          } as const)
         : ({ titleBarStyle: 'hidden' } as const)
 
   const nextWindow = new BrowserWindow({

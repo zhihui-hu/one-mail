@@ -1,6 +1,11 @@
-import { app, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { getDatabasePath } from '../db/connection'
-import type { SystemInfo } from './types'
+import type { AppTheme, SystemInfo } from './types'
+
+const TITLE_BAR_SYMBOL_COLORS: Record<AppTheme, string> = {
+  light: '#171717',
+  dark: '#fafafa'
+}
 
 export function registerSystemIpc(): void {
   ipcMain.handle('system/info', (): SystemInfo => {
@@ -10,6 +15,20 @@ export function registerSystemIpc(): void {
       databasePath: getDatabasePath(),
       userDataPath: app.getPath('userData')
     }
+  })
+
+  ipcMain.handle('system/setTitleBarTheme', (event, theme: unknown): boolean => {
+    if (process.platform !== 'win32' || (theme !== 'light' && theme !== 'dark')) return false
+
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (!window) return false
+
+    window.setTitleBarOverlay({
+      color: '#00000000',
+      symbolColor: TITLE_BAR_SYMBOL_COLORS[theme],
+      height: 40
+    })
+    return true
   })
 
   ipcMain.handle('system/revealDatabase', async (): Promise<boolean> => {

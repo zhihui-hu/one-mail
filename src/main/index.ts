@@ -1,4 +1,5 @@
 import { app, shell, BrowserWindow, clipboard, Menu } from 'electron'
+import { mkdirSync } from 'node:fs'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import appIcon from '../../resources/icon.png?asset'
@@ -13,6 +14,7 @@ import {
 } from './services/auto-update'
 import {
   requestForegroundMailboxSync,
+  requestManualMailboxSync,
   startMailboxWatchers,
   stopMailboxWatchers
 } from './services/mailbox-watch'
@@ -24,9 +26,19 @@ import {
   shouldHideWindowToTray
 } from './services/tray'
 
+configureDevelopmentUserData()
 installRuntimeErrorGuards()
 
 let mainWindow: BrowserWindow | null = null
+
+function configureDevelopmentUserData(): void {
+  if (!is.dev) return
+
+  const developmentUserDataPath = join(app.getPath('appData'), 'onemail-development')
+  mkdirSync(developmentUserDataPath, { recursive: true })
+  app.setPath('userData', developmentUserDataPath)
+  app.setPath('sessionData', developmentUserDataPath)
+}
 
 function createWindow(initialRoute = '/'): BrowserWindow {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -38,7 +50,10 @@ function createWindow(initialRoute = '/'): BrowserWindow {
     process.platform === 'darwin'
       ? ({ titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 16, y: 14 } } as const)
       : process.platform === 'win32'
-        ? ({ titleBarStyle: 'hidden', titleBarOverlay: { height: 40 } } as const)
+        ? ({
+            titleBarStyle: 'hidden',
+            titleBarOverlay: { color: '#00000000', symbolColor: '#171717', height: 40 }
+          } as const)
         : ({ titleBarStyle: 'hidden' } as const)
 
   // Create the browser window.
@@ -148,7 +163,7 @@ app.whenReady().then(() => {
   startAutoUpdateChecks()
   initializeTray(process.platform === 'win32' ? windowsIcon : appIcon, {
     showWindow: () => showMainWindow(),
-    syncNow: () => requestForegroundMailboxSync('show')
+    syncNow: () => requestManualMailboxSync()
   })
   setNotificationOpenWindowHandler((route) => showMainWindow(route))
 
