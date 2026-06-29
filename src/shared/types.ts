@@ -404,6 +404,33 @@ export type BackupSyncTransferResult = {
   transferredAt: string
 }
 
+export type BackupSyncTestResult = {
+  provider: Exclude<BackupSyncProvider, 'none'>
+  remotePath: string
+  testedAt: string
+}
+
+export type BackupImportSource = 'local' | Exclude<BackupSyncProvider, 'none'>
+
+export type BackupImportStage =
+  | 'selecting_file'
+  | 'reading_file'
+  | 'downloading_remote'
+  | 'validating_backup'
+  | 'restoring_database'
+  | 'loading_stats'
+  | 'completed'
+
+export type BackupImportProgress = {
+  operationId: string
+  source: BackupImportSource
+  stage: BackupImportStage
+  percent: number
+  filePath?: string
+  remotePath?: string
+  sourceName?: string
+}
+
 export type BackupSyncDownloadResult = BackupImportResult & {
   provider?: Exclude<BackupSyncProvider, 'none'>
   remotePath?: string
@@ -518,10 +545,16 @@ export type OneMailApi = {
     update: (input: SettingsUpdateInput) => Promise<AppSettings>
     getBackupSync: () => Promise<BackupSyncSettings>
     updateBackupSync: (input: BackupSyncSettings) => Promise<BackupSyncSettings>
+    testBackupSync: (input: BackupSyncSettings) => Promise<BackupSyncTestResult>
     uploadBackupSync: () => Promise<BackupSyncTransferResult>
-    downloadBackupSync: () => Promise<BackupSyncDownloadResult>
+    downloadBackupSync: (operationId?: string) => Promise<BackupSyncDownloadResult>
+    importBackupFromRemote: (
+      input: BackupSyncSettings,
+      operationId?: string
+    ) => Promise<BackupSyncDownloadResult>
     exportSql: () => Promise<string | null>
-    importSql: () => Promise<BackupImportResult>
+    importSql: (operationId?: string) => Promise<BackupImportResult>
+    onBackupImportProgress: (callback: (progress: BackupImportProgress) => void) => () => void
   }
   updates: {
     check: () => Promise<AppUpdateCheckResult>

@@ -7,8 +7,10 @@ import type {
   AppSettings,
   AppUpdateCheckResult,
   AppUpdateStatus,
+  BackupImportProgress,
   BackupSyncDownloadResult,
   BackupSyncSettings,
+  BackupSyncTestResult,
   BackupSyncTransferResult,
   BackupImportResult,
   AttachmentDownloadResult,
@@ -241,8 +243,8 @@ export async function exportSqlBackup(): Promise<string | null> {
   return window.api.settings.exportSql()
 }
 
-export async function importSqlBackup(): Promise<BackupImportResult> {
-  return window.api.settings.importSql()
+export async function importSqlBackup(operationId?: string): Promise<BackupImportResult> {
+  return window.api.settings.importSql(operationId)
 }
 
 export async function loadBackupSyncSettings(): Promise<BackupSyncSettings> {
@@ -255,12 +257,31 @@ export async function saveBackupSyncSettings(
   return window.api.settings.updateBackupSync(input)
 }
 
+export async function testBackupSyncSettings(
+  input: BackupSyncSettings
+): Promise<BackupSyncTestResult> {
+  return window.api.settings.testBackupSync(input)
+}
+
 export async function uploadBackupSync(): Promise<BackupSyncTransferResult> {
   return window.api.settings.uploadBackupSync()
 }
 
-export async function downloadBackupSync(): Promise<BackupSyncDownloadResult> {
-  return window.api.settings.downloadBackupSync()
+export async function downloadBackupSync(operationId?: string): Promise<BackupSyncDownloadResult> {
+  return window.api.settings.downloadBackupSync(operationId)
+}
+
+export async function importBackupFromRemote(
+  input: BackupSyncSettings,
+  operationId?: string
+): Promise<BackupSyncDownloadResult> {
+  return window.api.settings.importBackupFromRemote(input, operationId)
+}
+
+export function onBackupImportProgress(
+  callback: (progress: BackupImportProgress) => void
+): () => void {
+  return window.api.settings.onBackupImportProgress(callback)
 }
 
 export async function revealDatabaseInFileManager(): Promise<boolean> {

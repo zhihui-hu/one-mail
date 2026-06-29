@@ -68,10 +68,8 @@
 
 @supports (padding-right: env(titlebar-area-width)) {
   :root[data-platform='win32'] {
-    --app-window-controls-width: max(
-      138px,
-      calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw))
-    );
+    --app-window-controls-width: max(138px,
+        calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw)));
   }
 }
 
@@ -131,7 +129,7 @@
 
   .app-titlebar {
     padding-left: var(--app-titlebar-left-offset);
-    padding-right: calc(1.25rem + var(--app-window-controls-width));
+    padding-right: calc(10px + var(--app-window-controls-width));
   }
 
   .app-drag-region:active {

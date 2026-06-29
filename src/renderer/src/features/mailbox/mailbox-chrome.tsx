@@ -1,8 +1,26 @@
 import type { AppSettings, AppUpdateStatus, SystemInfo } from '../../../../shared/types'
-import { Inbox, Plus, RotateCcw, Settings, Upload } from 'lucide-react'
+import {
+  ChevronDown,
+  CloudDownload,
+  FileUp,
+  Inbox,
+  Link,
+  Plus,
+  RotateCcw,
+  Settings,
+  Upload
+} from 'lucide-react'
 
+import type { BackupImportDialogSource } from '@renderer/components/backup/backup-import-dialog'
 import { ThemeToggleButton } from '@renderer/components/theme/theme-toggle-button'
 import { Button } from '@renderer/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@renderer/components/ui/dropdown-menu'
 import {
   Empty,
   EmptyContent,
@@ -26,12 +44,14 @@ import { hasAvailableUpdate } from '@renderer/lib/update-status'
 
 export function NoAccountsBody({
   importingSql,
+  actionsDisabled = false,
   onAddAccount,
-  onImportSql
+  onImportBackup
 }: {
   importingSql: boolean
+  actionsDisabled?: boolean
   onAddAccount: () => void
-  onImportSql: () => void
+  onImportBackup: (source: BackupImportDialogSource) => void
 }): React.JSX.Element {
   const { t } = useI18n()
 
@@ -45,14 +65,44 @@ export function NoAccountsBody({
         <EmptyDescription>{t('mailbox.noAccounts.description')}</EmptyDescription>
       </EmptyHeader>
       <EmptyContent className="flex flex-col gap-2 sm:flex-row">
-        <Button onClick={onAddAccount}>
+        <Button onClick={onAddAccount} disabled={actionsDisabled}>
           <Plus data-icon="inline-start" />
           {t('common.addAccount')}
         </Button>
-        <Button variant="outline" onClick={onImportSql} disabled={importingSql}>
-          <Upload data-icon="inline-start" />
-          {importingSql ? t('mailbox.importing') : t('settings.backup.import')}
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" disabled={actionsDisabled}>
+              <Upload data-icon="inline-start" />
+              {importingSql ? t('mailbox.importing') : t('settings.backup.importMenu')}
+              <ChevronDown data-icon="inline-end" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="center" className="w-48 min-w-48 rounded-md p-1">
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                className="h-8 cursor-pointer gap-2 whitespace-nowrap px-2 text-sm"
+                onSelect={() => onImportBackup('sql')}
+              >
+                <FileUp />
+                <span className="truncate">{t('settings.backup.importSqlMenu')}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="h-8 cursor-pointer gap-2 whitespace-nowrap px-2 text-sm"
+                onSelect={() => onImportBackup('webdav')}
+              >
+                <Link />
+                <span className="truncate">{t('settings.backup.importWebDavMenu')}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="h-8 cursor-pointer gap-2 whitespace-nowrap px-2 text-sm"
+                onSelect={() => onImportBackup('s3')}
+              >
+                <CloudDownload />
+                <span className="truncate">{t('settings.backup.importS3Menu')}</span>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </EmptyContent>
     </Empty>
   )

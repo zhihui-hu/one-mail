@@ -10,6 +10,10 @@ import { MailComposer } from '@renderer/components/mail/mail-composer'
 import { MailList } from '@renderer/components/mail/mail-list'
 import { MailReader } from '@renderer/components/mail/mail-reader'
 import { OutboxPanel } from '@renderer/components/mail/outbox-panel'
+import {
+  BackupImportDialog,
+  type BackupImportDialogSource
+} from '@renderer/components/backup/backup-import-dialog'
 import type { Account, MailFilterTag, Message } from '@renderer/components/mail/types'
 import { SettingsDialog } from '@renderer/components/settings/settings-dialog'
 import {
@@ -22,7 +26,9 @@ import type {
   AccountUpdateInput,
   AppSettings,
   AppUpdateStatus,
+  BackupImportSource,
   BackupImportResult,
+  BackupSyncDownloadResult,
   SettingsUpdateInput,
   SystemInfo
 } from '../../../../shared/types'
@@ -30,7 +36,6 @@ import {
   deleteDraftMessage,
   deleteOutboxMessage,
   getAppUpdateStatus,
-  importSqlBackup,
   installAppUpdate,
   loadAccounts,
   loadInitialData,
@@ -81,13 +86,19 @@ function normalizeRouteId(value: string | undefined): string | undefined {
 }
 
 function formatImportResultMessage(
-  result: BackupImportResult,
+  result: BackupImportResult | BackupSyncDownloadResult,
+  source: BackupImportSource,
   t: ReturnType<typeof useI18n>['t']
 ): string {
-  return t('settings.backup.importedSummary', {
-    accounts: result.accountCount ?? 0,
-    messages: result.messageCount ?? 0
-  })
+  return t(
+    source === 'local'
+      ? 'settings.backup.importedSummary'
+      : 'settings.backup.remoteDownloadedSummary',
+    {
+      accounts: result.accountCount ?? 0,
+      messages: result.messageCount ?? 0
+    }
+  )
 }
 
 export function MailboxWorkspace(): React.JSX.Element {
@@ -103,6 +114,10 @@ export function MailboxWorkspace(): React.JSX.Element {
   const [filters, setFilters] = React.useState<MailFilterTag[]>([])
   const [searchKeyword, setSearchKeyword] = React.useState('')
   const [dialogKind, setDialogKind] = React.useState<DialogKind>(null)
+  const [backupImportDialogOpen, setBackupImportDialogOpen] = React.useState(false)
+  const [backupImportSource, setBackupImportSource] =
+    React.useState<BackupImportDialogSource>('sql')
+  const [backupImportBusy, setBackupImportBusy] = React.useState(false)
   const [settingsInitialSection, setSettingsInitialSection] = React.useState<'general' | 'about'>(
     'general'
   )
@@ -114,7 +129,6 @@ export function MailboxWorkspace(): React.JSX.Element {
   const [outlookImapHelpAccount, setOutlookImapHelpAccount] = React.useState<Account | null>(null)
   const { syncingAccountIds, syncNotice, startSyncing, finishSyncing, setNotice, clearSyncing } =
     useSyncFeedback()
-  const [importingSql, setImportingSql] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const {
@@ -608,25 +622,19 @@ export function MailboxWorkspace(): React.JSX.Element {
     setLocale(normalizeLocale(nextSettings.locale))
   }
 
-  async function handleImportSqlBackup(): Promise<void> {
-    if (importingSql) return
-
-    setImportingSql(true)
+  function handleImportBackup(source: BackupImportDialogSource): void {
+    if (backupImportBusy) return
     setError(null)
+    setBackupImportSource(source)
+    setBackupImportDialogOpen(true)
+  }
 
-    try {
-      const result = await importSqlBackup()
-      if (result.imported) {
-        await reloadInitialData()
-        toast.success(formatImportResultMessage(result, t))
-      } else {
-        toast(t('settings.backup.importCanceled'))
-      }
-    } catch (importError) {
-      setError(getErrorMessage(importError, t('mailbox.importSqlError')))
-    } finally {
-      setImportingSql(false)
-    }
+  async function handleBackupImported(
+    result: BackupImportResult | BackupSyncDownloadResult,
+    source: BackupImportSource
+  ): Promise<void> {
+    await reloadInitialData()
+    toast.success(formatImportResultMessage(result, source, t))
   }
 
   async function handleSaveComposerDraft(
@@ -793,11 +801,10 @@ export function MailboxWorkspace(): React.JSX.Element {
 
       {showNoAccounts ? (
         <NoAccountsBody
-          importingSql={importingSql}
+          importingSql={backupImportBusy}
+          actionsDisabled={backupImportBusy}
           onAddAccount={handleOpenAddAccountWindow}
-          onImportSql={() => {
-            void handleImportSqlBackup()
-          }}
+          onImportBackup={handleImportBackup}
         />
       ) : (
         <ResizablePanelGroup
@@ -991,6 +998,13 @@ export function MailboxWorkspace(): React.JSX.Element {
         onOpenChange={(open) => setDialogKind(open ? 'settings' : null)}
         onSubmit={handleUpdateSettings}
         onImported={reloadInitialData}
+      />
+      <BackupImportDialog
+        open={backupImportDialogOpen}
+        defaultSource={backupImportSource}
+        onOpenChange={setBackupImportDialogOpen}
+        onBusyChange={setBackupImportBusy}
+        onImported={handleBackupImported}
       />
       <OutlookImapHelpDialog
         accountLabel={outlookImapHelpAccount?.name}

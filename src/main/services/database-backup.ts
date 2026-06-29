@@ -10,7 +10,7 @@ import {
   setDatabaseKey,
   setDatabasePath
 } from '../db/connection'
-import type { BackupImportResult } from '../ipc/types'
+import type { BackupImportProgress, BackupImportResult, BackupImportSource } from '../ipc/types'
 
 type BackupFileInfo = {
   key: string
@@ -21,6 +21,10 @@ export type DatabaseSqlBackup = BackupFileInfo & {
   fileName: string
   sql: string
 }
+
+export type BackupImportProgressReporter = (
+  progress: Omit<BackupImportProgress, 'operationId'>
+) => void
 
 const DATABASE_KEY_PATTERN = /^k(\d{10})([0-9a-f]{16})$/
 const BACKUP_FILE_PATTERN = /^(k\d{10}[0-9a-f]{16})_(\d{10})\.sql$/
@@ -52,7 +56,11 @@ export function createDatabaseSqlBackup(): DatabaseSqlBackup {
   }
 }
 
-export async function importDatabaseSqlBackup(): Promise<BackupImportResult> {
+export async function importDatabaseSqlBackup(
+  reportProgress?: BackupImportProgressReporter
+): Promise<BackupImportResult> {
+  reportBackupImportProgress(reportProgress, 'local', 'selecting_file', 5)
+
   const openResult = await dialog.showOpenDialog({
     title: '导入 SQL 备份',
     properties: ['openFile'],
@@ -64,12 +72,17 @@ export async function importDatabaseSqlBackup(): Promise<BackupImportResult> {
   }
 
   const filePath = openResult.filePaths[0]
+  reportBackupImportProgress(reportProgress, 'local', 'reading_file', 20, { filePath })
   const sql = readBackupSql(filePath)
+  reportBackupImportProgress(reportProgress, 'local', 'validating_backup', 35, { filePath })
   const fileInfo = resolveBackupFileInfo(sql, filePath)
 
   validateSqlBackup(sql, fileInfo)
+  reportBackupImportProgress(reportProgress, 'local', 'restoring_database', 55, { filePath })
   restoreDatabaseSql(sql, fileInfo.key)
+  reportBackupImportProgress(reportProgress, 'local', 'loading_stats', 90, { filePath })
   const stats = getRestoredDatabaseStats()
+  reportBackupImportProgress(reportProgress, 'local', 'completed', 100, { filePath })
 
   return {
     imported: true,
@@ -82,13 +95,35 @@ export async function importDatabaseSqlBackup(): Promise<BackupImportResult> {
 
 export function importDatabaseSqlBackupContent(
   sql: string,
-  sourceName?: string
+  sourceName?: string,
+  options: {
+    source?: BackupImportSource
+    remotePath?: string
+    reportProgress?: BackupImportProgressReporter
+  } = {}
 ): BackupImportResult {
+  const source = options.source ?? 'local'
+  reportBackupImportProgress(options.reportProgress, source, 'validating_backup', 35, {
+    remotePath: options.remotePath,
+    sourceName
+  })
   const fileInfo = resolveBackupFileInfo(sql, sourceName)
 
   validateSqlBackup(sql, fileInfo)
+  reportBackupImportProgress(options.reportProgress, source, 'restoring_database', 55, {
+    remotePath: options.remotePath,
+    sourceName
+  })
   restoreDatabaseSql(sql, fileInfo.key)
+  reportBackupImportProgress(options.reportProgress, source, 'loading_stats', 90, {
+    remotePath: options.remotePath,
+    sourceName
+  })
   const stats = getRestoredDatabaseStats()
+  reportBackupImportProgress(options.reportProgress, source, 'completed', 100, {
+    remotePath: options.remotePath,
+    sourceName
+  })
 
   return {
     imported: true,
@@ -97,6 +132,21 @@ export function importDatabaseSqlBackupContent(
     exportedAt: fileInfo.exportedAt,
     ...stats
   }
+}
+
+function reportBackupImportProgress(
+  reportProgress: BackupImportProgressReporter | undefined,
+  source: BackupImportSource,
+  stage: BackupImportProgress['stage'],
+  percent: number,
+  extras: Pick<BackupImportProgress, 'filePath' | 'remotePath' | 'sourceName'> = {}
+): void {
+  reportProgress?.({
+    source,
+    stage,
+    percent,
+    ...extras
+  })
 }
 
 function getRestoredDatabaseStats(): Pick<BackupImportResult, 'accountCount' | 'messageCount'> {

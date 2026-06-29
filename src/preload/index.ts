@@ -77,10 +77,19 @@ const api = {
     update: (input) => ipcRenderer.invoke('settings/update', input),
     getBackupSync: () => ipcRenderer.invoke('settings/getBackupSync'),
     updateBackupSync: (input) => ipcRenderer.invoke('settings/updateBackupSync', input),
+    testBackupSync: (input) => ipcRenderer.invoke('settings/testBackupSync', input),
     uploadBackupSync: () => ipcRenderer.invoke('settings/uploadBackupSync'),
-    downloadBackupSync: () => ipcRenderer.invoke('settings/downloadBackupSync'),
+    downloadBackupSync: (operationId) =>
+      ipcRenderer.invoke('settings/downloadBackupSync', operationId),
+    importBackupFromRemote: (input, operationId) =>
+      ipcRenderer.invoke('settings/importBackupFromRemote', input, operationId),
     exportSql: () => ipcRenderer.invoke('settings/exportSql'),
-    importSql: () => ipcRenderer.invoke('settings/importSql')
+    importSql: (operationId) => ipcRenderer.invoke('settings/importSql', operationId),
+    onBackupImportProgress: (callback): (() => void) => {
+      const listener = (_event, progress): void => callback(progress)
+      ipcRenderer.on('settings/backupImportProgress', listener)
+      return () => ipcRenderer.off('settings/backupImportProgress', listener)
+    }
   },
   updates: {
     check: () => ipcRenderer.invoke('updates/check'),

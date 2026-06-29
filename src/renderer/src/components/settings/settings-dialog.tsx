@@ -6,6 +6,7 @@ import {
   DatabaseBackup,
   Download,
   ExternalLink,
+  FileUp,
   FolderOpen,
   KeyRound,
   Languages,
@@ -22,14 +23,19 @@ import { z } from 'zod'
 
 import {
   exportSqlBackup,
-  downloadBackupSync,
-  importSqlBackup,
   loadBackupSyncSettings,
   openExternalUrl,
   revealPathInFileManager,
   saveBackupSyncSettings,
+  testBackupSyncSettings,
   uploadBackupSync
 } from '@renderer/lib/api'
+import {
+  BackupImportDialog,
+  type BackupImportDialogSource
+} from '@renderer/components/backup/backup-import-dialog'
+import { getBackupSyncSettingsKey } from '@renderer/components/backup/backup-sync-draft'
+import { BackupSyncFields } from '@renderer/components/backup/backup-sync-fields'
 import { ResponsiveDialog } from '@renderer/components/responsive-dialog'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -55,6 +61,8 @@ import type {
   AppSettings,
   AppUpdateStatus,
   BackupImportResult,
+  BackupImportSource,
+  BackupSyncDownloadResult,
   BackupSyncSettings,
   SettingsUpdateInput,
   SystemInfo
@@ -75,7 +83,14 @@ type SettingsDialogProps = {
 }
 
 type SettingsSection = 'general' | 'backup' | 'about'
-type BackupPending = 'export' | 'import' | 'saveRemote' | 'uploadRemote' | 'downloadRemote' | null
+type BackupPending =
+  | 'export'
+  | 'import'
+  | 'saveRemote'
+  | 'testRemote'
+  | 'uploadRemote'
+  | 'downloadRemote'
+  | null
 type BackupMessage = {
   label: string
   path?: string
@@ -128,6 +143,11 @@ export function SettingsDialog({
   const [section, setSection] = React.useState<SettingsSection>('general')
   const [pending, setPending] = React.useState(false)
   const [backupPending, setBackupPending] = React.useState<BackupPending>(null)
+  const [backupImportDialogOpen, setBackupImportDialogOpen] = React.useState(false)
+  const [backupImportDefaultSource, setBackupImportDefaultSource] =
+    React.useState<BackupImportDialogSource>('sql')
+  const [backupImportSyncSettings, setBackupImportSyncSettings] =
+    React.useState<BackupSyncSettings | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const [backupMessage, setBackupMessage] = React.useState<BackupMessage | null>(null)
   const [backupError, setBackupError] = React.useState<string | null>(null)
@@ -139,6 +159,7 @@ export function SettingsDialog({
   const queuedValuesRef = React.useRef<SettingsFormValues | null>(null)
   const savingRef = React.useRef(false)
   const wasOpenRef = React.useRef(false)
+  const backupImportSourceRef = React.useRef<BackupImportDialogSource>('sql')
   const form = useForm<SettingsFormValues>({
     resolver: zodResolver(settingsSchema),
     defaultValues: toFormValues(settings),
@@ -295,18 +316,8 @@ export function SettingsDialog({
     })
   }
 
-  async function handleImport(): Promise<void> {
-    await runBackupAction('import', async () => {
-      const result = await importSqlBackup()
-      setBackupMessage(
-        result.imported
-          ? { label: formatImportResultMessage(result, false, t), path: result.filePath }
-          : { label: t('settings.backup.importCanceled') }
-      )
-      if (result.imported) {
-        await onImported?.()
-      }
-    })
+  function handleImport(): void {
+    openBackupImportDialog('sql')
   }
 
   async function handleSaveBackupSync(input: BackupSyncSettings): Promise<void> {
@@ -314,6 +325,16 @@ export function SettingsDialog({
       const nextSettings = await saveBackupSyncSettings(input)
       setBackupSyncSettings(nextSettings)
       setBackupMessage({ label: t('settings.backup.remoteSaved') })
+    })
+  }
+
+  async function handleTestBackupSync(input: BackupSyncSettings): Promise<void> {
+    await runBackupAction('testRemote', async () => {
+      const result = await testBackupSyncSettings(input)
+      setBackupMessage({
+        label: t('settings.backup.remoteTested'),
+        path: result.remotePath
+      })
     })
   }
 
@@ -327,18 +348,40 @@ export function SettingsDialog({
     })
   }
 
-  async function handleDownloadBackupSync(): Promise<void> {
-    await runBackupAction('downloadRemote', async () => {
-      const result = await downloadBackupSync()
-      setBackupMessage(
-        result.imported
-          ? { label: formatImportResultMessage(result, true, t), path: result.remotePath }
-          : { label: t('settings.backup.importCanceled') }
-      )
-      if (result.imported) {
-        await onImported?.()
-      }
+  function handleDownloadBackupSync(input: BackupSyncSettings): void {
+    if (input.provider === 'none') return
+    openBackupImportDialog(input.provider, input)
+  }
+
+  function openBackupImportDialog(
+    source: BackupImportDialogSource,
+    syncInput?: BackupSyncSettings
+  ): void {
+    if (backupPending) return
+    backupImportSourceRef.current = source
+    setBackupImportDefaultSource(source)
+    setBackupImportSyncSettings(syncInput ?? null)
+    setBackupError(null)
+    setBackupMessage(null)
+    setBackupImportDialogOpen(true)
+  }
+
+  function handleBackupImportBusyChange(busy: boolean): void {
+    setBackupPending(
+      busy ? (backupImportSourceRef.current === 'sql' ? 'import' : 'downloadRemote') : null
+    )
+  }
+
+  async function handleBackupImported(
+    result: BackupImportResult | BackupSyncDownloadResult,
+    source: BackupImportSource
+  ): Promise<void> {
+    const remote = source !== 'local'
+    setBackupMessage({
+      label: formatImportResultMessage(result, remote, t),
+      path: remote && 'remotePath' in result ? result.remotePath : result.filePath
     })
+    await onImported?.()
   }
 
   async function runBackupAction(
@@ -352,72 +395,85 @@ export function SettingsDialog({
     try {
       await task()
     } catch (backupActionError) {
-      setBackupError(
-        backupActionError instanceof Error ? backupActionError.message : t('settings.backup.error')
-      )
+      setBackupError(getBackupActionErrorMessage(backupActionError, t))
     } finally {
       setBackupPending(null)
     }
   }
 
   return (
-    <ResponsiveDialog
-      open={open}
-      onOpenChange={handleOpenChange}
-      title={t('settings.title')}
-      contentClassName="h-[min(560px,82vh)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-2xl"
-      headerClassName="shrink-0 border-b px-4 py-3 pr-12 [&_[data-slot=dialog-title]]:text-sm! [&_[data-slot=drawer-title]]:text-sm!"
-      bodyClassName="h-full min-h-0 overflow-hidden"
-    >
-      <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden md:grid-cols-[136px_minmax(0,1fr)] md:grid-rows-1">
-        <nav className="min-h-0 shrink-0 border-b bg-muted/30 p-1.5 md:border-r md:border-b-0 md:p-2">
-          <div className="flex gap-1 md:flex-col">
-            {sections.map((item) => {
-              const Icon = item.icon
-              const active = section === item.value
+    <>
+      <ResponsiveDialog
+        open={open}
+        onOpenChange={handleOpenChange}
+        title={t('settings.title')}
+        contentClassName="h-[min(560px,82vh)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-2xl"
+        headerClassName="shrink-0 border-b px-4 py-3 pr-12 [&_[data-slot=dialog-title]]:text-sm! [&_[data-slot=drawer-title]]:text-sm!"
+        bodyClassName="h-full min-h-0 overflow-hidden"
+      >
+        <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden md:grid-cols-[136px_minmax(0,1fr)] md:grid-rows-1">
+          <nav className="min-h-0 shrink-0 border-b bg-muted/30 p-1.5 md:border-r md:border-b-0 md:p-2">
+            <div className="flex gap-1 md:flex-col">
+              {sections.map((item) => {
+                const Icon = item.icon
+                const active = section === item.value
 
-              return (
-                <button
-                  key={item.value}
-                  type="button"
-                  className={cn(
-                    'flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-left text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring md:w-full md:flex-none [&_svg]:size-3.5',
-                    active
-                      ? 'bg-background text-foreground shadow-xs'
-                      : 'text-muted-foreground hover:bg-background/70 hover:text-foreground'
-                  )}
-                  onClick={() => setSection(item.value)}
-                >
-                  <Icon className="shrink-0" aria-hidden="true" />
-                  <span className="min-w-0 truncate font-medium">{t(item.labelKey)}</span>
-                </button>
-              )
-            })}
+                return (
+                  <button
+                    key={item.value}
+                    type="button"
+                    className={cn(
+                      'flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-left text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring md:w-full md:flex-none [&_svg]:size-3.5',
+                      active
+                        ? 'bg-background text-foreground shadow-xs'
+                        : 'text-muted-foreground hover:bg-background/70 hover:text-foreground'
+                    )}
+                    onClick={() => setSection(item.value)}
+                  >
+                    <Icon className="shrink-0" aria-hidden="true" />
+                    <span className="min-w-0 truncate font-medium">{t(item.labelKey)}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </nav>
+
+          <div className="h-full min-h-0 overflow-auto">
+            {section === 'general' ? (
+              <GeneralSettingsForm form={form} error={error} />
+            ) : section === 'backup' ? (
+              <BackupSettings
+                key={getBackupSyncSettingsKey(backupSyncSettings)}
+                pending={backupPending}
+                message={backupMessage}
+                error={backupError}
+                syncSettings={backupSyncSettings}
+                onExport={handleExport}
+                onImport={handleImport}
+                onSaveSync={handleSaveBackupSync}
+                onTestSync={handleTestBackupSync}
+                onUploadSync={handleUploadBackupSync}
+                onDownloadSync={handleDownloadBackupSync}
+              />
+            ) : (
+              <AboutSettings systemInfo={systemInfo} updateStatus={updateStatus} />
+            )}
           </div>
-        </nav>
-
-        <div className="h-full min-h-0 overflow-auto">
-          {section === 'general' ? (
-            <GeneralSettingsForm form={form} error={error} />
-          ) : section === 'backup' ? (
-            <BackupSettings
-              key={getBackupSyncSettingsKey(backupSyncSettings)}
-              pending={backupPending}
-              message={backupMessage}
-              error={backupError}
-              syncSettings={backupSyncSettings}
-              onExport={handleExport}
-              onImport={handleImport}
-              onSaveSync={handleSaveBackupSync}
-              onUploadSync={handleUploadBackupSync}
-              onDownloadSync={handleDownloadBackupSync}
-            />
-          ) : (
-            <AboutSettings systemInfo={systemInfo} updateStatus={updateStatus} />
-          )}
         </div>
-      </div>
-    </ResponsiveDialog>
+      </ResponsiveDialog>
+
+      <BackupImportDialog
+        open={backupImportDialogOpen}
+        defaultSource={backupImportDefaultSource}
+        syncSettings={backupImportSyncSettings ?? backupSyncSettings ?? undefined}
+        onOpenChange={(nextOpen) => {
+          setBackupImportDialogOpen(nextOpen)
+          if (!nextOpen) setBackupImportSyncSettings(null)
+        }}
+        onBusyChange={handleBackupImportBusyChange}
+        onImported={handleBackupImported}
+      />
+    </>
   )
 }
 
@@ -557,6 +613,7 @@ function BackupSettings({
   onExport,
   onImport,
   onSaveSync,
+  onTestSync,
   onUploadSync,
   onDownloadSync
 }: {
@@ -565,10 +622,11 @@ function BackupSettings({
   error: string | null
   syncSettings: BackupSyncSettings | null
   onExport: () => Promise<void>
-  onImport: () => Promise<void>
+  onImport: () => void
   onSaveSync: (input: BackupSyncSettings) => Promise<void>
+  onTestSync: (input: BackupSyncSettings) => Promise<void>
   onUploadSync: () => Promise<void>
-  onDownloadSync: () => Promise<void>
+  onDownloadSync: (input: BackupSyncSettings) => void
 }): React.JSX.Element {
   const { t } = useI18n()
   const [draft, setDraft] = React.useState<BackupSyncSettings>(
@@ -599,7 +657,7 @@ function BackupSettings({
             onClick={onExport}
           />
           <BackupActionButton
-            icon={Upload}
+            icon={FileUp}
             title={t('settings.backup.import')}
             loadingTitle={t('settings.backup.importing')}
             description={t('settings.backup.importDescription')}
@@ -617,121 +675,14 @@ function BackupSettings({
             </FieldDescription>
           </div>
 
-          <Field>
-            <FieldLabel className="text-xs" htmlFor="backup-sync-provider">
-              {t('settings.backup.remoteProvider')}
-            </FieldLabel>
-            <Select
-              value={draft.provider}
-              onValueChange={(value) => setDraft(createBackupSyncDraft(value, syncSettings))}
-            >
-              <SelectTrigger id="backup-sync-provider" size="sm">
-                <SelectValue placeholder={t('settings.backup.remoteProvider')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="none">{t('settings.backup.remoteProviderNone')}</SelectItem>
-                  <SelectItem value="webdav">WebDAV</SelectItem>
-                  <SelectItem value="s3">S3</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
+          <BackupSyncFields
+            draft={draft}
+            currentSettings={syncSettings}
+            disabled={disabled}
+            onChange={setDraft}
+          />
 
-          {draft.provider === 'webdav' ? (
-            <div className="grid gap-2">
-              <BackupTextField
-                id="backup-webdav-url"
-                label={t('settings.backup.webdavUrl')}
-                value={draft.remoteUrl}
-                placeholder="https://dav.example.com/onemail-backup.sql"
-                disabled={disabled}
-                onChange={(value) => setDraft({ ...draft, remoteUrl: value })}
-              />
-              <div className="grid gap-2 sm:grid-cols-2">
-                <BackupTextField
-                  id="backup-webdav-username"
-                  label={t('settings.backup.username')}
-                  value={draft.username ?? ''}
-                  disabled={disabled}
-                  onChange={(value) => setDraft({ ...draft, username: value })}
-                />
-                <BackupTextField
-                  id="backup-webdav-password"
-                  label={t('settings.backup.password')}
-                  value={draft.password ?? ''}
-                  type="password"
-                  placeholder={
-                    draft.passwordConfigured ? t('settings.backup.secretKeepPlaceholder') : ''
-                  }
-                  disabled={disabled}
-                  onChange={(value) => setDraft({ ...draft, password: value })}
-                />
-              </div>
-            </div>
-          ) : null}
-
-          {draft.provider === 's3' ? (
-            <div className="grid gap-2">
-              <BackupTextField
-                id="backup-s3-endpoint"
-                label={t('settings.backup.s3Endpoint')}
-                value={draft.endpoint ?? ''}
-                placeholder="https://account-id.r2.cloudflarestorage.com"
-                disabled={disabled}
-                onChange={(value) => setDraft({ ...draft, endpoint: value })}
-              />
-              <div className="grid gap-2 sm:grid-cols-2">
-                <BackupTextField
-                  id="backup-s3-region"
-                  label={t('settings.backup.s3Region')}
-                  value={draft.region}
-                  placeholder="us-east-1"
-                  disabled={disabled}
-                  onChange={(value) => setDraft({ ...draft, region: value })}
-                />
-                <BackupTextField
-                  id="backup-s3-bucket"
-                  label={t('settings.backup.s3Bucket')}
-                  value={draft.bucket}
-                  disabled={disabled}
-                  onChange={(value) => setDraft({ ...draft, bucket: value })}
-                />
-              </div>
-              <BackupTextField
-                id="backup-s3-key"
-                label={t('settings.backup.s3Key')}
-                value={draft.key}
-                placeholder="onemail/onemail-backup.sql"
-                disabled={disabled}
-                onChange={(value) => setDraft({ ...draft, key: value })}
-              />
-              <div className="grid gap-2 sm:grid-cols-2">
-                <BackupTextField
-                  id="backup-s3-access-key"
-                  label={t('settings.backup.s3AccessKey')}
-                  value={draft.accessKeyId}
-                  disabled={disabled}
-                  onChange={(value) => setDraft({ ...draft, accessKeyId: value })}
-                />
-                <BackupTextField
-                  id="backup-s3-secret-key"
-                  label={t('settings.backup.s3SecretKey')}
-                  value={draft.secretAccessKey ?? ''}
-                  type="password"
-                  placeholder={
-                    draft.secretAccessKeyConfigured
-                      ? t('settings.backup.secretKeepPlaceholder')
-                      : ''
-                  }
-                  disabled={disabled}
-                  onChange={(value) => setDraft({ ...draft, secretAccessKey: value })}
-                />
-              </div>
-            </div>
-          ) : null}
-
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2">
             <BackupActionButton
               icon={Save}
               title={t('settings.backup.remoteSave')}
@@ -740,6 +691,15 @@ function BackupSettings({
               loading={pending === 'saveRemote'}
               disabled={disabled}
               onClick={() => onSaveSync(draft)}
+            />
+            <BackupActionButton
+              icon={RefreshCcw}
+              title={t('settings.backup.remoteTest')}
+              loadingTitle={t('settings.backup.remoteTesting')}
+              description={t('settings.backup.remoteTestDescription')}
+              loading={pending === 'testRemote'}
+              disabled={disabled || draft.provider === 'none'}
+              onClick={() => onTestSync(draft)}
             />
             <BackupActionButton
               icon={Upload}
@@ -756,8 +716,8 @@ function BackupSettings({
               loadingTitle={t('settings.backup.remoteDownloading')}
               description={t('settings.backup.remoteDownloadDescription')}
               loading={pending === 'downloadRemote'}
-              disabled={disabled || !remoteConfigured}
-              onClick={onDownloadSync}
+              disabled={disabled || draft.provider === 'none'}
+              onClick={() => onDownloadSync(draft)}
             />
           </div>
         </div>
@@ -767,17 +727,6 @@ function BackupSettings({
       </FieldGroup>
     </div>
   )
-}
-
-function getBackupSyncSettingsKey(settings: BackupSyncSettings | null): string {
-  if (!settings) return 'backup-sync-loading'
-  if (settings.provider === 'webdav') {
-    return `webdav:${settings.remoteUrl}:${settings.username ?? ''}:${settings.passwordConfigured ? '1' : '0'}`
-  }
-  if (settings.provider === 's3') {
-    return `s3:${settings.endpoint ?? ''}:${settings.region}:${settings.bucket}:${settings.key}:${settings.accessKeyId}:${settings.secretAccessKeyConfigured ? '1' : '0'}`
-  }
-  return 'none'
 }
 
 function formatImportResultMessage(
@@ -796,64 +745,9 @@ function formatImportResultMessage(
   )
 }
 
-function BackupTextField({
-  id,
-  label,
-  value,
-  placeholder,
-  type = 'text',
-  disabled,
-  onChange
-}: {
-  id: string
-  label: string
-  value: string
-  placeholder?: string
-  type?: React.HTMLInputTypeAttribute
-  disabled?: boolean
-  onChange: (value: string) => void
-}): React.JSX.Element {
-  return (
-    <Field>
-      <FieldLabel className="text-xs" htmlFor={id}>
-        {label}
-      </FieldLabel>
-      <Input
-        id={id}
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </Field>
-  )
-}
-
-function createBackupSyncDraft(
-  provider: string,
-  current: BackupSyncSettings | null
-): BackupSyncSettings {
-  if (provider === 'webdav') {
-    return current?.provider === 'webdav'
-      ? current
-      : { provider: 'webdav', remoteUrl: '', username: '' }
-  }
-
-  if (provider === 's3') {
-    return current?.provider === 's3'
-      ? current
-      : {
-          provider: 's3',
-          endpoint: '',
-          region: 'us-east-1',
-          bucket: '',
-          key: 'onemail-backup.sql',
-          accessKeyId: ''
-        }
-  }
-
-  return { provider: 'none' }
+function getBackupActionErrorMessage(error: unknown, t: (key: TranslationKey) => string): string {
+  const message = error instanceof Error ? error.message : t('settings.backup.error')
+  return message.replace(/^Error invoking remote method '[^']+':\s*/i, '')
 }
 
 function AboutSettings({
@@ -998,7 +892,7 @@ function BackupActionButton({
   description: string
   loading: boolean
   disabled: boolean
-  onClick: () => Promise<void>
+  onClick: () => void | Promise<void>
 }): React.JSX.Element {
   return (
     <Button

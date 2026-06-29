@@ -18,7 +18,7 @@ const settingsDefinition = {
   externalImagesBlocked: { key: 'external_images_blocked', type: 'boolean' },
   locale: { key: 'locale', type: 'string' },
   lastAttachmentDownloadDir: { key: 'last_attachment_download_dir', type: 'string' },
-  backupSyncSettings: { key: 'backup_sync_settings', type: 'secret_json' }
+  backupSyncSettings: { key: 'backup_sync_settings', type: 'json' }
 } as const
 
 type EncryptedSettingsPayload = {
@@ -112,6 +112,10 @@ export function updateBackupSyncSettings(input: BackupSyncSettings): BackupSyncS
   )
 
   return redactBackupSyncSettings(nextSettings)
+}
+
+export function resolveBackupSyncSettingsForMain(input: BackupSyncSettings): BackupSyncSettings {
+  return normalizeBackupSyncSettings(input, readBackupSyncSettings())
 }
 
 export function getLastAttachmentDownloadDir(): string | undefined {
