@@ -472,6 +472,20 @@ function getProviderSmtpPreset(
     }
   }
 
+  if (
+    normalizedProviderKey.includes('tencent_enterprise') ||
+    normalizedProviderKey.includes('exmail') ||
+    domain === 'exmail.qq.com'
+  ) {
+    return {
+      smtpHost: 'smtp.exmail.qq.com',
+      smtpPort: 465,
+      smtpSecurity: 'ssl_tls',
+      smtpAuthType: authType,
+      smtpEnabled: true
+    }
+  }
+
   if (normalizedProviderKey.includes('qq') || domain === 'qq.com' || domain === 'foxmail.com') {
     return {
       smtpHost: 'smtp.qq.com',

@@ -409,6 +409,7 @@ function getProviderLabel(providerKey: string, t: (key: TranslationKey) => strin
     aliyunEnterprise: 'account.provider.aliyunEnterprise',
     '189': 'account.provider.mail189',
     sohu: 'account.provider.sohu',
+    tencentEnterprise: 'account.provider.tencentEnterprise',
     sina: 'account.provider.sina',
     '139': 'account.provider.mail139',
     '21cn': 'account.provider.mail21cn',

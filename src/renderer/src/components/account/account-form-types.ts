@@ -10,6 +10,7 @@ export const accountKinds = [
   'aliyunEnterprise',
   'mail189',
   'sohu',
+  'tencentEnterprise',
   'qq',
   'outlook',
   'netease163',
@@ -146,6 +147,23 @@ export const providerPresets: ProviderPreset[] = [
     passwordLabelKey: 'account.form.independentPassword',
     passwordPlaceholderKey: 'account.form.sohuPasswordPlaceholder',
     guideKey: 'account.add.guide.independentPassword'
+  },
+  {
+    kind: 'tencentEnterprise',
+    labelKey: 'account.provider.tencentEnterprise',
+    providerKey: 'tencent_enterprise',
+    authType: 'app_password',
+    imapHost: 'imap.exmail.qq.com',
+    imapPort: 993,
+    imapSecurity: 'ssl_tls',
+    smtpHost: 'smtp.exmail.qq.com',
+    smtpPort: 465,
+    smtpSecurity: 'ssl_tls',
+    smtpAuthType: 'app_password',
+    smtpEnabled: true,
+    passwordLabelKey: 'account.form.authCode',
+    passwordPlaceholderKey: 'account.form.tencentEnterprisePasswordPlaceholder',
+    guideKey: 'account.add.guide.tencentEnterprise'
   },
   {
     kind: 'qq',

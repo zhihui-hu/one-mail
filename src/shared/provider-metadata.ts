@@ -8,6 +8,7 @@ export type NormalizedProviderKey =
   | 'aliyunEnterprise'
   | '189'
   | 'sohu'
+  | 'tencentEnterprise'
   | 'sina'
   | '139'
   | '21cn'
@@ -35,6 +36,7 @@ const PROVIDER_LOGO_METADATA: Record<string, ProviderLogoMetadata> = {
   aliyunEnterprise: { domain: 'qiye.aliyun.com', fallback: '企' },
   '189': { domain: '189.cn', fallback: '天' },
   sohu: { domain: 'sohu.com', fallback: '狐' },
+  tencentEnterprise: { domain: 'exmail.qq.com', fallback: '企' },
   sina: { domain: 'sina.com', fallback: '新' },
   '139': { domain: '139.com', fallback: '移' },
   '21cn': { domain: '21cn.com', fallback: '21' },
@@ -69,7 +71,6 @@ export function normalizeProviderKey(providerKey?: string): NormalizedProviderKe
   ) {
     return '163'
   }
-  if (normalized.includes('qq') || normalized.includes('foxmail')) return 'qq'
   if (
     normalized.includes('aliyun_enterprise') ||
     normalized.includes('alibaba') ||
@@ -80,6 +81,14 @@ export function normalizeProviderKey(providerKey?: string): NormalizedProviderKe
   if (normalized.includes('aliyun')) return 'aliyun'
   if (normalized.includes('189')) return '189'
   if (normalized.includes('sohu')) return 'sohu'
+  if (
+    normalized.includes('tencent_enterprise') ||
+    normalized.includes('exmail.qq') ||
+    normalized.includes('exmail')
+  ) {
+    return 'tencentEnterprise'
+  }
+  if (normalized.includes('qq') || normalized.includes('foxmail')) return 'qq'
   if (normalized.includes('sina')) return 'sina'
   if (normalized.includes('139')) return '139'
   if (normalized.includes('21cn')) return '21cn'
