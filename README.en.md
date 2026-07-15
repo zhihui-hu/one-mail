@@ -20,7 +20,7 @@ OneMail is a local-first desktop mail client built with Electron, React, and Typ
 
 ## Features
 
-- **Multiple mail accounts**: supports Gmail, Yahoo, Alibaba Mail, Alibaba Mail Enterprise, 189 Mail, Sohu, QQ/Foxmail, NetEase Mail, Outlook/Hotmail, Sina, 139 Mail, 21CN, Perfect Mail, iCloud, AOL, Yandex, Mail.ru, and custom IMAP.
+- **Multiple mail accounts**: supports Gmail, Yahoo, Alibaba Mail, Alibaba Mail Enterprise, 189 Mail, Sohu, Tencent Enterprise Mail, QQ/Foxmail, NetEase Mail, Outlook/Hotmail, Sina, 139 Mail, 21CN, Perfect Mail, iCloud, AOL, Yandex, Mail.ru, and custom IMAP.
 - **Unified inbox**: view mail across accounts with unread counts, sync status, and account actions.
 - **Fast filters**: filter by unread, attachments, starred, today, and more.
 - **Read-state sync**: opening an unread message marks it as read locally and syncs the change back over IMAP.
