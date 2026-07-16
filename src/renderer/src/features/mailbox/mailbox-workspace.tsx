@@ -719,7 +719,7 @@ export function MailboxWorkspace(): React.JSX.Element {
   }
 
   async function handleMarkAllRead(): Promise<void> {
-    if (markingRead || selectedAccount.unread === 0) return
+    if (markingRead) return
 
     try {
       const result = await markCurrentQueryRead(

@@ -179,6 +179,7 @@ const zhCN = {
   'account.provider.aliyunEnterprise': '阿里企业邮箱',
   'account.provider.mail189': '电信 189 邮箱',
   'account.provider.sohu': '搜狐邮箱',
+  'account.provider.tencentEnterprise': '腾讯企业邮箱',
   'account.provider.qq': 'QQ / Foxmail 邮箱',
   'account.provider.netease163': '网易邮箱',
   'account.provider.outlook': 'Outlook',
@@ -206,6 +207,7 @@ const zhCN = {
   'account.form.aliyunPasswordPlaceholder': '阿里邮箱三方客户端安全密码',
   'account.form.neteasePasswordPlaceholder': '163 客户端授权码',
   'account.form.qqPasswordPlaceholder': 'QQ 邮箱授权码',
+  'account.form.tencentEnterprisePasswordPlaceholder': '腾讯企业邮箱授权码或客户端专用密码',
   'account.form.aliyunEnterprisePasswordPlaceholder': '阿里企业邮箱密码或专用密码',
   'account.form.mail189PasswordPlaceholder': '189 邮箱登录密码',
   'account.form.sohuPasswordPlaceholder': '搜狐邮箱独立密码',
@@ -254,6 +256,8 @@ const zhCN = {
   'account.add.guide.dedicatedPassword': '添加 {label} 前，建议先开启 IMAP/SMTP 并准备专用密码。',
   'account.add.guide.aliyunEnterprise':
     '添加 {label} 前，建议先让管理员确认已允许三方客户端，并为当前账号开启 IMAP/SMTP；如启用了三方客户端安全密码或安全登录 IP，请准备安全密码并确认当前 IP 被允许。',
+  'account.add.guide.tencentEnterprise':
+    '添加 {label} 前，请先在腾讯企业邮箱后台开启 IMAP/SMTP，并准备授权码或客户端专用密码。',
   'account.add.guide.custom': '添加自定义 IMAP 前，建议先确认服务器、端口、连接安全和密码/授权码。',
   'account.add.guide.default': '添加 {label} 前，如需检查邮箱访问设置，',
   'account.outlook.title': '使用 Microsoft 登录',
@@ -690,6 +694,7 @@ const enUS: TranslationMap = {
   'account.provider.aliyunEnterprise': 'Alibaba Mail Enterprise',
   'account.provider.mail189': '189 Mail',
   'account.provider.sohu': 'Sohu Mail',
+  'account.provider.tencentEnterprise': 'Tencent Enterprise Mail',
   'account.provider.qq': 'QQ / Foxmail',
   'account.provider.netease163': 'NetEase Mail',
   'account.provider.outlook': 'Outlook',
@@ -717,6 +722,8 @@ const enUS: TranslationMap = {
   'account.form.aliyunPasswordPlaceholder': 'Alibaba Mail third-party client security password',
   'account.form.neteasePasswordPlaceholder': '163 client authorization code',
   'account.form.qqPasswordPlaceholder': 'QQ Mail authorization code',
+  'account.form.tencentEnterprisePasswordPlaceholder':
+    'Tencent Enterprise Mail authorization code or app password',
   'account.form.aliyunEnterprisePasswordPlaceholder':
     'Alibaba Mail Enterprise password or dedicated password',
   'account.form.mail189PasswordPlaceholder': '189 Mail login password',
@@ -773,6 +780,8 @@ const enUS: TranslationMap = {
     'Before adding {label}, enable IMAP/SMTP and prepare a dedicated password.',
   'account.add.guide.aliyunEnterprise':
     'Before adding {label}, ask the administrator to allow third-party clients and enable IMAP/SMTP for this account. If third-party client security password or secure login IP restrictions are enabled, prepare the security password and confirm the current IP is allowed.',
+  'account.add.guide.tencentEnterprise':
+    'Before adding {label}, enable IMAP/SMTP in Tencent Enterprise Mail and prepare an authorization code or app password.',
   'account.add.guide.custom':
     'Before adding custom IMAP, confirm the server, port, connection security, and password or authorization code.',
   'account.add.guide.default': 'Before adding {label}, check mailbox access settings if needed, ',

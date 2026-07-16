@@ -20,7 +20,7 @@ OneMail 是一个本地优先的桌面邮件客户端，使用 Electron + React 
 
 ## ✨ 功能特性
 
-- 📬 **多邮箱账号**：支持 Gmail、Yahoo、阿里邮箱、阿里企业邮箱、189、搜狐、QQ/Foxmail、网易、Outlook/Hotmail、新浪、139、21CN、完美邮箱、iCloud、AOL、Yandex、Mail.ru 和自定义 IMAP。
+- 📬 **多邮箱账号**：支持 Gmail、Yahoo、阿里邮箱、阿里企业邮箱、189、搜狐、腾讯企业邮箱、QQ/Foxmail、网易、Outlook/Hotmail、新浪、139、21CN、完美邮箱、iCloud、AOL、Yandex、Mail.ru 和自定义 IMAP。
 - 🧩 **统一收件箱体验**：多账号聚合查看，账号列表展示未读数、同步状态和账号操作。
 - 🔎 **邮件快速筛选**：支持未读、有附件、星标、今日等组合筛选。
 - ✅ **已读状态同步**：打开未读邮件后自动标记已读，并通过 IMAP 同步到远端邮箱。

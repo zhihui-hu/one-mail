@@ -82,6 +82,7 @@ export function MailList({
   const readCount = Math.max(0, accountMessageCount - account.unread)
   const selectedCount = selectedMessageIds.size
   const hasSelection = selectedCount > 0
+  const canMarkAllRead = account.unread > 0 || messages.some((message) => message.unread)
   const unreadSelectedCount = React.useMemo(
     () => messages.filter((message) => selectedMessageIds.has(message.id) && message.unread).length,
     [messages, selectedMessageIds]
@@ -121,7 +122,7 @@ export function MailList({
           <Button
             size="sm"
             variant="ghost"
-            disabled={selectionDisabled || account.unread === 0 || !onMarkAllRead}
+            disabled={selectionDisabled || !canMarkAllRead || !onMarkAllRead}
             onClick={onMarkAllRead}
           >
             <CheckCheck data-icon="inline-start" />
