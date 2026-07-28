@@ -180,6 +180,7 @@ const zhCN = {
   'account.provider.mail189': '电信 189 邮箱',
   'account.provider.sohu': '搜狐邮箱',
   'account.provider.qq': 'QQ / Foxmail 邮箱',
+  'account.provider.qqEnterprise': '腾讯企业邮',
   'account.provider.netease163': '网易邮箱',
   'account.provider.outlook': 'Outlook',
   'account.provider.sina': '新浪邮箱',
@@ -206,6 +207,7 @@ const zhCN = {
   'account.form.aliyunPasswordPlaceholder': '阿里邮箱三方客户端安全密码',
   'account.form.neteasePasswordPlaceholder': '163 客户端授权码',
   'account.form.qqPasswordPlaceholder': 'QQ 邮箱授权码',
+  'account.form.qqEnterprisePasswordPlaceholder': '腾讯企业邮密码或客户端专用密码',
   'account.form.aliyunEnterprisePasswordPlaceholder': '阿里企业邮箱密码或专用密码',
   'account.form.mail189PasswordPlaceholder': '189 邮箱登录密码',
   'account.form.sohuPasswordPlaceholder': '搜狐邮箱独立密码',
@@ -222,12 +224,15 @@ const zhCN = {
   'account.form.labelPlaceholder': '默认显示邮箱地址',
   'account.form.type': '邮箱类型',
   'account.form.imapHost': 'IMAP 服务器',
+  'account.form.smtpEnabled': '启用 SMTP 发信',
+  'account.form.smtpHost': 'SMTP 服务器',
   'account.form.port': '端口',
   'account.form.security': '连接安全',
   'account.form.securityNone': '无加密',
   'account.form.requiredEmail': '请输入有效的邮箱地址',
   'account.form.requiredPassword': '请输入密码或授权码',
   'account.form.requiredImapHost': '请输入 IMAP 服务器',
+  'account.form.requiredSmtpHost': '请输入 SMTP 服务器',
   'account.form.labelMax': '别名不能超过 80 个字符',
   'account.form.portRequired': '请输入端口',
   'account.form.portInteger': '端口必须是整数',
@@ -243,6 +248,8 @@ const zhCN = {
   'account.add.guide.gmail': '添加 {label} 前，建议先开启 IMAP 并准备应用密码。',
   'account.add.guide.netease163': '添加 {label} 前，建议先开启 IMAP/SMTP 并准备客户端授权码。',
   'account.add.guide.qq': '添加 {label} 前，建议先开启 IMAP/SMTP 并准备授权码。',
+  'account.add.guide.qqEnterprise':
+    '添加 {label} 前，请确认企业管理员已开启 IMAP/SMTP，并准备邮箱密码或客户端专用密码。',
   'account.add.guide.aliyun':
     '添加 {label} 前，建议先开启 IMAP/SMTP；如果已开启三方客户端安全密码，请使用安全密码，不要使用网页登录密码。',
   'account.add.guide.appPassword': '添加 {label} 前，建议先开启 IMAP/SMTP 并准备应用密码。',
@@ -254,7 +261,8 @@ const zhCN = {
   'account.add.guide.dedicatedPassword': '添加 {label} 前，建议先开启 IMAP/SMTP 并准备专用密码。',
   'account.add.guide.aliyunEnterprise':
     '添加 {label} 前，建议先让管理员确认已允许三方客户端，并为当前账号开启 IMAP/SMTP；如启用了三方客户端安全密码或安全登录 IP，请准备安全密码并确认当前 IP 被允许。',
-  'account.add.guide.custom': '添加自定义 IMAP 前，建议先确认服务器、端口、连接安全和密码/授权码。',
+  'account.add.guide.custom':
+    '添加自定义 IMAP/SMTP 前，请确认服务器、端口、连接安全和密码/授权码。',
   'account.add.guide.default': '添加 {label} 前，如需检查邮箱访问设置，',
   'account.outlook.title': '使用 Microsoft 登录',
   'account.outlook.description':
@@ -272,7 +280,7 @@ const zhCN = {
     '如果仍然失败，打开 account.live.com/activity，把最近的登录活动标记为“这是我本人”。',
   'account.edit.title': '编辑账号',
   'account.edit.oauthDescription':
-    'Microsoft OAuth 账号在这里仅修改别名；重新授权请删除后重新添加。',
+    'Microsoft OAuth 账号可修改别名和同步文件夹；重新授权请使用账号菜单。',
   'account.edit.storedDescription':
     '保存前会测试邮箱连接是否正常；留空则使用已保存的密码或授权码。',
   'account.edit.missingCredentialDescription':
@@ -281,6 +289,11 @@ const zhCN = {
   'account.edit.saveChanges': '保存更改',
   'account.edit.keepSavedCredential': '留空则使用已保存凭据',
   'account.edit.passwordPlaceholder': '请输入密码或授权码',
+  'account.folders.title': '同步文件夹',
+  'account.folders.description': '刷新远端列表后，选择除 INBOX 外需要同步的文件夹。',
+  'account.folders.refresh': '刷新文件夹',
+  'account.folders.loading': '正在列举',
+  'account.folders.discoverError': '列举 IMAP 文件夹失败。',
   'account.remove.title': '删除账号',
   'account.remove.description': '从 OneMail 删除这个本地账号配置。',
   'account.remove.error': '删除账号失败。',
@@ -691,6 +704,7 @@ const enUS: TranslationMap = {
   'account.provider.mail189': '189 Mail',
   'account.provider.sohu': 'Sohu Mail',
   'account.provider.qq': 'QQ / Foxmail',
+  'account.provider.qqEnterprise': 'Tencent Exmail',
   'account.provider.netease163': 'NetEase Mail',
   'account.provider.outlook': 'Outlook',
   'account.provider.sina': 'Sina Mail',
@@ -717,6 +731,8 @@ const enUS: TranslationMap = {
   'account.form.aliyunPasswordPlaceholder': 'Alibaba Mail third-party client security password',
   'account.form.neteasePasswordPlaceholder': '163 client authorization code',
   'account.form.qqPasswordPlaceholder': 'QQ Mail authorization code',
+  'account.form.qqEnterprisePasswordPlaceholder':
+    'Tencent Exmail password or client-specific password',
   'account.form.aliyunEnterprisePasswordPlaceholder':
     'Alibaba Mail Enterprise password or dedicated password',
   'account.form.mail189PasswordPlaceholder': '189 Mail login password',
@@ -734,12 +750,15 @@ const enUS: TranslationMap = {
   'account.form.labelPlaceholder': 'Defaults to email address',
   'account.form.type': 'Email type',
   'account.form.imapHost': 'IMAP server',
+  'account.form.smtpEnabled': 'Enable SMTP sending',
+  'account.form.smtpHost': 'SMTP server',
   'account.form.port': 'Port',
   'account.form.security': 'Connection security',
   'account.form.securityNone': 'No encryption',
   'account.form.requiredEmail': 'Enter a valid email address',
   'account.form.requiredPassword': 'Enter a password or authorization code',
   'account.form.requiredImapHost': 'Enter an IMAP server',
+  'account.form.requiredSmtpHost': 'Enter an SMTP server',
   'account.form.labelMax': 'Alias cannot exceed 80 characters',
   'account.form.portRequired': 'Enter a port',
   'account.form.portInteger': 'Port must be an integer',
@@ -757,6 +776,8 @@ const enUS: TranslationMap = {
     'Before adding {label}, enable IMAP/SMTP and prepare a client authorization code.',
   'account.add.guide.qq':
     'Before adding {label}, enable IMAP/SMTP and prepare an authorization code.',
+  'account.add.guide.qqEnterprise':
+    'Before adding {label}, confirm the administrator has enabled IMAP/SMTP and prepare the mailbox password or client-specific password.',
   'account.add.guide.aliyun':
     'Before adding {label}, enable IMAP/SMTP. If third-party client security password is enabled, use that security password instead of the web login password.',
   'account.add.guide.appPassword':
@@ -774,7 +795,7 @@ const enUS: TranslationMap = {
   'account.add.guide.aliyunEnterprise':
     'Before adding {label}, ask the administrator to allow third-party clients and enable IMAP/SMTP for this account. If third-party client security password or secure login IP restrictions are enabled, prepare the security password and confirm the current IP is allowed.',
   'account.add.guide.custom':
-    'Before adding custom IMAP, confirm the server, port, connection security, and password or authorization code.',
+    'Before adding custom IMAP/SMTP, confirm the servers, ports, connection security, and password or authorization code.',
   'account.add.guide.default': 'Before adding {label}, check mailbox access settings if needed, ',
   'account.outlook.title': 'Sign in with Microsoft',
   'account.outlook.description':
@@ -793,7 +814,7 @@ const enUS: TranslationMap = {
     'If it still fails, open account.live.com/activity and mark the recent sign-in activity as “This was me”.',
   'account.edit.title': 'Edit account',
   'account.edit.oauthDescription':
-    'Only the alias can be changed here for Microsoft OAuth accounts. Remove and add the account again to reauthorize.',
+    'Microsoft OAuth accounts can change their alias and synced folders here. Use the account menu to reauthorize.',
   'account.edit.storedDescription':
     'OneMail tests the mailbox connection before saving. Leave blank to use the saved password or authorization code.',
   'account.edit.missingCredentialDescription':
@@ -803,6 +824,12 @@ const enUS: TranslationMap = {
   'account.edit.saveChanges': 'Save changes',
   'account.edit.keepSavedCredential': 'Leave blank to use saved credentials',
   'account.edit.passwordPlaceholder': 'Enter password or authorization code',
+  'account.folders.title': 'Synced folders',
+  'account.folders.description':
+    'Refresh the remote list, then select folders to sync in addition to INBOX.',
+  'account.folders.refresh': 'Refresh folders',
+  'account.folders.loading': 'Listing',
+  'account.folders.discoverError': 'Failed to list IMAP folders.',
   'account.remove.title': 'Delete account',
   'account.remove.description': 'Remove this local account configuration from OneMail.',
   'account.remove.error': 'Failed to delete account.',

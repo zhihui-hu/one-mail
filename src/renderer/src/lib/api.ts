@@ -3,6 +3,7 @@ import type {
   AccountSyncRunResult,
   AccountCreatedEvent,
   AccountCreateInput,
+  AccountMailFolder,
   AccountUpdateInput,
   AppSettings,
   AppUpdateCheckResult,
@@ -197,6 +198,10 @@ export function onAccountCreated(callback: (event: AccountCreatedEvent) => void)
 
 export async function updateAccount(input: AccountUpdateInput): Promise<MailAccount> {
   return window.api.accounts.update(input)
+}
+
+export async function discoverAccountFolders(accountId: number): Promise<AccountMailFolder[]> {
+  return window.api.accounts.discoverFolders(accountId)
 }
 
 export async function reauthorizeAccount(accountId: number): Promise<MailAccount> {
@@ -528,6 +533,13 @@ function toAccountList(accounts: MailAccount[], accountStats: AccountMailboxStat
       accountId: account.accountId,
       providerKey: account.providerKey,
       authType: account.authType,
+      imapHost: account.imapHost,
+      imapPort: account.imapPort,
+      imapSecurity: account.imapSecurity,
+      smtpHost: account.smtpHost,
+      smtpPort: account.smtpPort,
+      smtpSecurity: account.smtpSecurity,
+      smtpEnabled: account.smtpEnabled,
       name: formatAccountName(account),
       address: account.email,
       unread: stats?.unreadCount ?? 0,

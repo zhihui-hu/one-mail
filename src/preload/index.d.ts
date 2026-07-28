@@ -4,6 +4,7 @@ import type { OneMailApi } from '../shared/types'
 export type {
   AccountCreatedEvent,
   AccountCreateInput,
+  AccountMailFolder,
   AccountStatus,
   AccountMailboxStats,
   AccountSyncRunResult,

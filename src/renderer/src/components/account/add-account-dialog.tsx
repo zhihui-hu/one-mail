@@ -73,6 +73,10 @@ export function AddAccountForm({
     form.setValue('imapHost', preset.imapHost)
     form.setValue('imapPort', preset.imapPort)
     form.setValue('imapSecurity', preset.imapSecurity)
+    form.setValue('smtpHost', preset.smtpHost ?? '')
+    form.setValue('smtpPort', preset.smtpPort ?? 465)
+    form.setValue('smtpSecurity', preset.smtpSecurity ?? 'ssl_tls')
+    form.setValue('smtpEnabled', preset.smtpEnabled ?? false)
     form.clearErrors()
     setError(null)
   }
@@ -95,11 +99,11 @@ export function AddAccountForm({
           values.kind === 'custom' ? values.imapHost?.trim() || preset.imapHost : preset.imapHost,
         imapPort: values.kind === 'custom' ? values.imapPort : preset.imapPort,
         imapSecurity: values.kind === 'custom' ? values.imapSecurity : preset.imapSecurity,
-        smtpHost: preset.smtpHost,
-        smtpPort: preset.smtpPort,
-        smtpSecurity: preset.smtpSecurity,
-        smtpAuthType: preset.smtpAuthType,
-        smtpEnabled: preset.smtpEnabled
+        smtpHost: values.kind === 'custom' ? values.smtpHost?.trim() || undefined : preset.smtpHost,
+        smtpPort: values.kind === 'custom' ? values.smtpPort : preset.smtpPort,
+        smtpSecurity: values.kind === 'custom' ? values.smtpSecurity : preset.smtpSecurity,
+        smtpAuthType: values.kind === 'custom' ? values.authType : preset.smtpAuthType,
+        smtpEnabled: values.kind === 'custom' ? values.smtpEnabled : preset.smtpEnabled
       })
       form.reset(defaultAccountFormValues)
       setKind(defaultAccountFormValues.kind)

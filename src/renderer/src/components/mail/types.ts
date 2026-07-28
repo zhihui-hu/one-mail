@@ -1,10 +1,19 @@
+import type { AuthType, ImapSecurity, SmtpSecurity } from '../../../../shared/types'
+
 export type MailFilterTag = 'unread' | 'starred' | 'today' | 'yesterday' | 'last7'
 
 export type Account = {
   id: string
   accountId?: number
   providerKey?: string
-  authType?: string
+  authType?: AuthType
+  imapHost?: string
+  imapPort?: number
+  imapSecurity?: ImapSecurity
+  smtpHost?: string
+  smtpPort?: number
+  smtpSecurity?: SmtpSecurity
+  smtpEnabled?: boolean
   name: string
   address: string
   unread: number

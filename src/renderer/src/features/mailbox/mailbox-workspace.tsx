@@ -468,7 +468,7 @@ export function MailboxWorkspace(): React.JSX.Element {
   async function handleUpdateAccount(input: AccountUpdateInput): Promise<void> {
     setError(null)
     const account = await updateAccount(input)
-    if (input.password) {
+    if (input.password || input.selectedFolderPaths) {
       const startedAt = new Date()
       startSyncing(String(account.accountId), {
         label: account.email,
@@ -476,7 +476,7 @@ export function MailboxWorkspace(): React.JSX.Element {
         message: t('mailbox.syncingAccount', { account: account.email })
       })
       try {
-        await syncAccount(account.accountId)
+        await syncAccount(account.accountId, input.selectedFolderPaths ? 'initial' : 'refresh')
         finishSyncing(String(account.accountId), 'success', {
           label: account.email,
           startedAt,

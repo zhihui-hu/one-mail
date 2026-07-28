@@ -20,7 +20,7 @@ OneMail is a local-first desktop mail client built with Electron, React, and Typ
 
 ## Features
 
-- **Multiple mail accounts**: supports Gmail, Yahoo, Alibaba Mail, Alibaba Mail Enterprise, 189 Mail, Sohu, QQ/Foxmail, NetEase Mail, Outlook/Hotmail, Sina, 139 Mail, 21CN, Perfect Mail, iCloud, AOL, Yandex, Mail.ru, and custom IMAP.
+- **Multiple mail accounts**: supports Gmail, Yahoo, Alibaba Mail, Alibaba Mail Enterprise, 189 Mail, Sohu, QQ/Foxmail, Tencent Exmail, NetEase Mail, Outlook/Hotmail, Sina, 139 Mail, 21CN, Perfect Mail, iCloud, AOL, Yandex, Mail.ru, and custom IMAP/SMTP.
 - **Unified inbox**: view mail across accounts with unread counts, sync status, and account actions.
 - **Fast filters**: filter by unread, attachments, starred, today, and more.
 - **Read-state sync**: opening an unread message marks it as read locally and syncs the change back over IMAP.
@@ -32,6 +32,7 @@ OneMail is a local-first desktop mail client built with Electron, React, and Typ
 - **Local SQLite cache**: accounts, headers, bodies, attachment metadata, search indexes, and settings stay on your machine.
 - **SQL backup and restore**: export the current database to SQL, or import a backup during first launch.
 - **Configurable sync policy**: control sync interval, cache window, and external image behavior.
+- **Folder-level sync**: refresh remote folders with IMAP `LIST` while editing an account, then select folders to sync in addition to INBOX.
 
 ---
 
@@ -138,15 +139,16 @@ pnpm build:linux
 ## Usage
 
 1. **Add an account**: click the add button and choose a common provider or custom IMAP.
-2. **Enter credentials**: built-in providers need email, password/app password/auth code, and optional alias. Custom IMAP also needs server, port, and security mode.
+2. **Enter credentials**: built-in providers need email, password/app password/auth code, and optional alias. Custom accounts can configure separate IMAP and SMTP servers, ports, and security modes.
 3. **Sync mail**: OneMail starts syncing the inbox after the account is saved. You can also sync manually from the account sidebar.
-4. **Filter mail**: use unread, attachment, starred, today, and other filters to narrow the list.
-5. **Read mail**: click a message to load its body. HTML mail opens in safe-preview mode first.
-6. **Load full content**: click the reader action when you need remote images.
-7. **Download attachments**: click an attachment row or download button and choose a save path.
-8. **Compose and reply**: use compose, reply, reply all, or forward. CC/BCC expand on demand, and `Aa` toggles formatting tools.
-9. **Save or discard drafts**: closing a non-empty composer saves a draft. The trash button discards a saved draft.
-10. **Back up data**: export a SQL backup in Settings. Empty first-launch state can import a SQL backup directly.
+4. **Choose synced folders**: edit the account, refresh its remote folders, and select the folders to sync. INBOX is always synced.
+5. **Filter mail**: use unread, attachment, starred, today, and other filters to narrow the list.
+6. **Read mail**: click a message to load its body. HTML mail opens in safe-preview mode first.
+7. **Load full content**: click the reader action when you need remote images.
+8. **Download attachments**: click an attachment row or download button and choose a save path.
+9. **Compose and reply**: use compose, reply, reply all, or forward. CC/BCC expand on demand, and `Aa` toggles formatting tools.
+10. **Save or discard drafts**: closing a non-empty composer saves a draft. The trash button discards a saved draft.
+11. **Back up data**: export a SQL backup in Settings. Empty first-launch state can import a SQL backup directly.
 
 ---
 

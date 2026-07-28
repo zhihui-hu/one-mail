@@ -11,6 +11,7 @@ export const accountKinds = [
   'mail189',
   'sohu',
   'qq',
+  'qqEnterprise',
   'outlook',
   'netease163',
   'sina',
@@ -42,6 +43,22 @@ export type ProviderPreset = {
   passwordLabelKey?: TranslationKey
   passwordPlaceholderKey?: TranslationKey
   guideKey?: TranslationKey
+}
+
+export type AccountFormValues = {
+  kind: AccountKind
+  email?: string
+  password?: string
+  accountLabel?: string
+  providerKey: string
+  authType: AuthType
+  imapHost?: string
+  imapPort: number
+  imapSecurity: ImapSecurity
+  smtpHost?: string
+  smtpPort: number
+  smtpSecurity: SmtpSecurity
+  smtpEnabled: boolean
 }
 
 export const providerPresets: ProviderPreset[] = [
@@ -163,6 +180,23 @@ export const providerPresets: ProviderPreset[] = [
     passwordLabelKey: 'account.form.authCode',
     passwordPlaceholderKey: 'account.form.qqPasswordPlaceholder',
     guideKey: 'account.add.guide.qq'
+  },
+  {
+    kind: 'qqEnterprise',
+    labelKey: 'account.provider.qqEnterprise',
+    providerKey: 'qq_enterprise',
+    authType: 'password',
+    imapHost: 'imap.exmail.qq.com',
+    imapPort: 993,
+    imapSecurity: 'ssl_tls',
+    smtpHost: 'smtp.exmail.qq.com',
+    smtpPort: 465,
+    smtpSecurity: 'ssl_tls',
+    smtpAuthType: 'password',
+    smtpEnabled: true,
+    passwordLabelKey: 'account.form.passwordOrAuthCode',
+    passwordPlaceholderKey: 'account.form.qqEnterprisePasswordPlaceholder',
+    guideKey: 'account.add.guide.qqEnterprise'
   },
   {
     kind: 'netease163',
@@ -338,11 +372,18 @@ export const providerPresets: ProviderPreset[] = [
     authType: 'manual',
     imapHost: '',
     imapPort: 993,
-    imapSecurity: 'ssl_tls'
+    imapSecurity: 'ssl_tls',
+    smtpHost: '',
+    smtpPort: 465,
+    smtpSecurity: 'ssl_tls',
+    smtpAuthType: 'manual',
+    smtpEnabled: true
   }
 ]
 
-export function createAccountSchema(t: (key: TranslationKey) => string) {
+export function createAccountSchema(
+  t: (key: TranslationKey) => string
+): z.ZodType<AccountFormValues, AccountFormValues> {
   return z
     .object({
       kind: z.enum(accountKinds),
@@ -352,12 +393,20 @@ export function createAccountSchema(t: (key: TranslationKey) => string) {
       providerKey: z.string().trim(),
       authType: z.enum(['oauth2', 'app_password', 'password', 'bridge', 'manual']),
       imapHost: z.string().trim().optional(),
-      imapPort: z.coerce
-        .number<number>(t('account.form.portRequired'))
+      imapPort: z
+        .number(t('account.form.portRequired'))
         .int(t('account.form.portInteger'))
         .min(1, t('account.form.portMin'))
         .max(65535, t('account.form.portMax')),
-      imapSecurity: z.enum(['ssl_tls', 'starttls', 'none'])
+      imapSecurity: z.enum(['ssl_tls', 'starttls', 'none']),
+      smtpHost: z.string().trim().optional(),
+      smtpPort: z
+        .number(t('account.form.portRequired'))
+        .int(t('account.form.portInteger'))
+        .min(1, t('account.form.portMin'))
+        .max(65535, t('account.form.portMax')),
+      smtpSecurity: z.enum(['ssl_tls', 'starttls', 'none']),
+      smtpEnabled: z.boolean()
     })
     .superRefine((value, context) => {
       if (value.kind !== 'outlook' && !z.email().safeParse(value.email).success) {
@@ -385,10 +434,16 @@ export function createAccountSchema(t: (key: TranslationKey) => string) {
           message: t('account.form.requiredImapHost')
         })
       }
+
+      if (value.smtpEnabled && !value.smtpHost?.trim()) {
+        context.addIssue({
+          code: 'custom',
+          path: ['smtpHost'],
+          message: t('account.form.requiredSmtpHost')
+        })
+      }
     })
 }
-
-export type AccountFormValues = z.infer<ReturnType<typeof createAccountSchema>>
 
 export const defaultAccountFormValues: AccountFormValues = {
   kind: 'gmail',
@@ -399,7 +454,11 @@ export const defaultAccountFormValues: AccountFormValues = {
   authType: 'app_password',
   imapHost: 'imap.gmail.com',
   imapPort: 993,
-  imapSecurity: 'ssl_tls'
+  imapSecurity: 'ssl_tls',
+  smtpHost: 'smtp.gmail.com',
+  smtpPort: 465,
+  smtpSecurity: 'ssl_tls',
+  smtpEnabled: true
 }
 
 export function getProviderPreset(kind: AccountKind): ProviderPreset {

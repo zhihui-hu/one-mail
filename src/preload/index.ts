@@ -15,6 +15,7 @@ const api = {
     openAddWindow: () => ipcRenderer.invoke('accounts/openAddWindow'),
     closeAddWindow: () => ipcRenderer.invoke('accounts/closeAddWindow'),
     update: (input) => ipcRenderer.invoke('accounts/update', input),
+    discoverFolders: (accountId) => ipcRenderer.invoke('accounts/discoverFolders', accountId),
     reauthorize: (accountId) => ipcRenderer.invoke('accounts/reauthorize', accountId),
     disable: (accountId) => ipcRenderer.invoke('accounts/disable', accountId),
     remove: (accountId) => ipcRenderer.invoke('accounts/remove', accountId)

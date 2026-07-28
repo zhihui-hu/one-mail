@@ -15,11 +15,14 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+afterPack: scripts/edit-win-executable.cjs
 win:
   executableName: OneMail
   icon: build/icon.ico
+  signAndEditExecutable: false
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: ${name}-${version}-win-${arch}-setup.${ext}
+  buildUniversalInstaller: false
   oneClick: false
   allowToChangeInstallationDirectory: true
   shortcutName: ${productName}
@@ -27,6 +30,7 @@ nsis:
   createDesktopShortcut: always
 mac:
   icon: build/icon.icns
+  artifactName: ${name}-${version}-mac-${arch}.${ext}
   category: public.app-category.productivity
   target:
     - dmg
@@ -41,9 +45,10 @@ mac:
   notarize: false
 dmg:
   icon: build/icon.png
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-mac-${arch}.${ext}
 linux:
   icon: build/icons
+  artifactName: ${name}-${version}-linux-${arch}.${ext}
   target:
     - AppImage
     - snap
@@ -51,10 +56,10 @@ linux:
   maintainer: huzhihui.com
   category: Utility
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-linux-${arch}.${ext}
+deb:
+  artifactName: ${name}-${version}-linux-${arch}.${ext}
 npmRebuild: false
 publish:
   provider: github
-  owner: zhihui-hu
-  repo: one-mail
   releaseType: release

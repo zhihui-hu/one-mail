@@ -13,6 +13,10 @@ import type { AccountCreateInput, AccountCreatedEvent, AccountUpdateInput } from
 import { saveAccountPassword, readAccountPassword } from '../services/credential-store'
 import { authorizeMicrosoftAccount, saveMicrosoftAuthorization } from '../services/microsoft-oauth'
 import { closeAddAccountWindow, openAddAccountWindow } from '../services/add-account-window'
+import {
+  discoverAccountMailFolders,
+  updateAccountFolderSelection
+} from '../services/account-mailboxes'
 
 export function registerAccountIpc(): void {
   ipcMain.handle('accounts/list', () => listAccounts())
@@ -59,6 +63,9 @@ export function registerAccountIpc(): void {
       throw error
     }
   })
+  ipcMain.handle('accounts/discoverFolders', (_event, accountId: number) => {
+    return discoverAccountMailFolders(accountId)
+  })
   ipcMain.handle('accounts/update', async (_event, input: AccountUpdateInput) => {
     const current = getAccount(input.accountId)
     if (!current) {
@@ -67,6 +74,9 @@ export function registerAccountIpc(): void {
 
     if (current.authType === 'oauth2' || input.authType === 'oauth2') {
       const account = updateAccount(normalizeOAuthAccountUpdate(input, current))
+      if (input.selectedFolderPaths) {
+        await updateAccountFolderSelection(account.accountId, input.selectedFolderPaths)
+      }
       refreshMailboxWatchers()
       return account
     }
@@ -92,6 +102,9 @@ export function registerAccountIpc(): void {
     const account = updateAccount(input)
     if (input.password) {
       saveAccountPassword(account.accountId, connectionInput)
+    }
+    if (input.selectedFolderPaths) {
+      await updateAccountFolderSelection(account.accountId, input.selectedFolderPaths)
     }
     refreshMailboxWatchers()
     return account
@@ -146,7 +159,8 @@ function normalizeOAuthAccountUpdate(
     accountId: input.accountId,
     accountLabel: input.accountLabel,
     displayName: input.displayName,
-    syncEnabled: input.syncEnabled
+    syncEnabled: input.syncEnabled,
+    selectedFolderPaths: input.selectedFolderPaths
   }
 }
 

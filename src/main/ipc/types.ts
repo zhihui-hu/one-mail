@@ -1,6 +1,7 @@
 export type {
   AccountCreateInput,
   AccountCreatedEvent,
+  AccountMailFolder,
   AccountSyncRunResult,
   AccountStatus,
   AccountMailboxStats,

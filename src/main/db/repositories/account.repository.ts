@@ -472,6 +472,16 @@ function getProviderSmtpPreset(
     }
   }
 
+  if (normalizedProviderKey.includes('qq_enterprise') || normalizedProviderKey.includes('exmail')) {
+    return {
+      smtpHost: 'smtp.exmail.qq.com',
+      smtpPort: 465,
+      smtpSecurity: 'ssl_tls',
+      smtpAuthType: authType,
+      smtpEnabled: true
+    }
+  }
+
   if (normalizedProviderKey.includes('qq') || domain === 'qq.com' || domain === 'foxmail.com') {
     return {
       smtpHost: 'smtp.qq.com',

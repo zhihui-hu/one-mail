@@ -5,6 +5,8 @@ import { getDatabase, type SqliteParams } from '../db/connection'
 import { normalizeMailDisplayText } from '../../shared/mail-text'
 import { authenticateImapSession } from './imap-auth'
 import { toImapConnectionError } from './imap-errors'
+import { parseImapMailboxList, type ImapMailbox } from './imap-mailboxes'
+import { getSelectedFolderPathKeys } from '../services/account-mailboxes'
 
 type TestSocket = Socket | TLSSocket
 
@@ -50,20 +52,7 @@ type MailboxStatus = {
   uidValidity?: string
 }
 
-type SyncedFolderRole = 'inbox' | 'junk'
-
-type ListedMailbox = {
-  path: string
-  name: string
-  delimiter?: string
-  attributes: string[]
-  role: SyncedFolderRole | 'custom'
-  selectable: boolean
-}
-
-type SyncMailbox = ListedMailbox & {
-  role: SyncedFolderRole
-}
+type SyncMailbox = ImapMailbox
 
 type SyncCursor = {
   folderId: number
@@ -91,7 +80,7 @@ export async function syncAccountMailbox(
 
   try {
     await authenticateImapSession(account, client)
-    const mailboxes = await listSyncMailboxes(client)
+    const mailboxes = await listSyncMailboxes(account.accountId, client)
     const totals = { scannedCount: 0, insertedCount: 0, updatedCount: 0 }
 
     for (const mailbox of mailboxes) {
@@ -201,9 +190,9 @@ class ImapSession {
     return parseStatusResponse(response)
   }
 
-  async listMailboxes(): Promise<ListedMailbox[]> {
+  async listMailboxes(): Promise<ImapMailbox[]> {
     const response = await this.command('LIST "" "*"')
-    return parseListResponse(response)
+    return parseImapMailboxList(response)
   }
 
   async searchAll(): Promise<number[]> {
@@ -469,13 +458,21 @@ function parseSearchUids(response: string): number[] {
     .filter((value) => Number.isInteger(value) && value > 0)
 }
 
-async function listSyncMailboxes(client: ImapSession): Promise<SyncMailbox[]> {
+async function listSyncMailboxes(accountId: number, client: ImapSession): Promise<SyncMailbox[]> {
   const listed = await client.listMailboxes().catch(() => [])
   const selectable = listed.filter((mailbox) => mailbox.selectable)
   const inbox = selectable.find((mailbox) => mailbox.role === 'inbox') ?? createInboxMailbox()
-  const junk = selectable.find((mailbox) => mailbox.role === 'junk')
+  const available = uniqueMailboxes([inbox, ...selectable])
+  const selectedPathKeys = getSelectedFolderPathKeys(accountId)
 
-  return uniqueMailboxes([inbox, junk].filter(isSyncMailbox))
+  if (selectedPathKeys.size === 0) return [inbox]
+
+  return uniqueMailboxes(
+    available.filter(
+      (mailbox) =>
+        mailbox.role === 'inbox' || selectedPathKeys.has(normalizeSelectedPath(mailbox.path))
+    )
+  )
 }
 
 function createInboxMailbox(): SyncMailbox {
@@ -486,10 +483,6 @@ function createInboxMailbox(): SyncMailbox {
     role: 'inbox',
     selectable: true
   }
-}
-
-function isSyncMailbox(mailbox: ListedMailbox | undefined): mailbox is SyncMailbox {
-  return mailbox?.role === 'inbox' || mailbox?.role === 'junk'
 }
 
 function uniqueMailboxes(mailboxes: SyncMailbox[]): SyncMailbox[] {
@@ -503,139 +496,8 @@ function uniqueMailboxes(mailboxes: SyncMailbox[]): SyncMailbox[] {
   })
 }
 
-function parseListResponse(response: string): ListedMailbox[] {
-  const mailboxes: ListedMailbox[] = []
-
-  for (const line of response.split(/\r?\n/)) {
-    const mailbox = parseListLine(line.trim())
-    if (mailbox) mailboxes.push(mailbox)
-  }
-
-  return mailboxes
-}
-
-function parseListLine(line: string): ListedMailbox | null {
-  const match = /^\* LIST \(([^)]*)\) (?:(NIL)|"([^"]*)") (.+)$/i.exec(line)
-  if (!match) return null
-
-  const path = parseImapString(match[4])
-  if (!path) return null
-
-  const displayPath = decodeModifiedUtf7(path)
-  const attributes = match[1]
-    .split(/\s+/)
-    .map((value) => value.replace(/^\\/, ''))
-    .filter(Boolean)
-  const role = detectMailboxRole(displayPath, attributes)
-  const selectable = !hasAttribute(attributes, 'Noselect')
-
-  return {
-    path,
-    name: getMailboxDisplayName(displayPath, role),
-    delimiter: match[2] ? undefined : (match[3] ?? undefined),
-    attributes,
-    role,
-    selectable
-  }
-}
-
-function parseImapString(value: string): string | undefined {
-  const trimmed = value.trim()
-  if (!trimmed || /^NIL$/i.test(trimmed)) return undefined
-
-  if (!trimmed.startsWith('"')) return trimmed
-
-  let result = ''
-  for (let index = 1; index < trimmed.length; index += 1) {
-    const char = trimmed[index]
-    if (char === '"') return result
-    if (char === '\\' && index + 1 < trimmed.length) {
-      index += 1
-      result += trimmed[index]
-      continue
-    }
-    result += char
-  }
-
-  return result
-}
-
-function detectMailboxRole(
-  path: string,
-  attributes: string[]
-): SyncedFolderRole | ListedMailbox['role'] {
-  if (hasAttribute(attributes, 'Inbox') || path.toUpperCase() === 'INBOX') return 'inbox'
-  if (hasAttribute(attributes, 'Junk')) return 'junk'
-
-  const normalizedPath = normalizeMailboxPath(path)
-  if (
-    [
-      'junk',
-      'spam',
-      'bulk mail',
-      'bulk',
-      'junk email',
-      'junk e-mail',
-      '垃圾邮件',
-      '垃圾邮件箱',
-      '垃圾邮箱'
-    ].includes(normalizedPath) ||
-    normalizedPath.endsWith('/junk') ||
-    normalizedPath.endsWith('/spam') ||
-    normalizedPath.endsWith('/junk email') ||
-    normalizedPath.endsWith('/junk e-mail') ||
-    normalizedPath.endsWith('/垃圾邮件') ||
-    normalizedPath.endsWith('/垃圾邮件箱') ||
-    normalizedPath.endsWith('/垃圾邮箱')
-  ) {
-    return 'junk'
-  }
-
-  return 'custom'
-}
-
-function getMailboxDisplayName(path: string, role: ListedMailbox['role']): string {
-  if (role === 'inbox') return '收件箱'
-  if (role === 'junk') return '垃圾邮件'
-
-  return path.split(/[/.]/).filter(Boolean).at(-1) ?? path
-}
-
-function hasAttribute(attributes: string[], attributeName: string): boolean {
-  return attributes.some((attribute) => attribute.toLowerCase() === attributeName.toLowerCase())
-}
-
-function normalizeMailboxPath(path: string): string {
-  return path
-    .replace(/\\/g, '/')
-    .split('/')
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .join('/')
-    .toLowerCase()
-}
-
-function decodeModifiedUtf7(value: string): string {
-  return value.replace(/&([^-]*)-/g, (match, encoded: string) => {
-    if (encoded === '') return '&'
-
-    try {
-      return decodeUtf16BigEndian(Buffer.from(encoded.replace(/,/g, '/'), 'base64'))
-    } catch {
-      return match
-    }
-  })
-}
-
-function decodeUtf16BigEndian(buffer: Buffer): string {
-  if (buffer.length % 2 !== 0) return ''
-
-  let result = ''
-  for (let index = 0; index < buffer.length; index += 2) {
-    result += String.fromCharCode(buffer.readUInt16BE(index))
-  }
-
-  return result
+function normalizeSelectedPath(path: string): string {
+  return path.trim().toLocaleLowerCase('en-US')
 }
 
 function parseFlagsResponse(response: string): FetchedFlags[] {
@@ -1232,8 +1094,19 @@ function ensureSyncFolder(accountId: number, mailbox: SyncMailbox): number {
   return Number(result.lastInsertRowid)
 }
 
-function getFolderSortOrder(role: SyncedFolderRole): number {
-  return role === 'inbox' ? 10 : 20
+function getFolderSortOrder(role: SyncMailbox['role']): number {
+  const order: Partial<Record<SyncMailbox['role'], number>> = {
+    inbox: 10,
+    starred: 20,
+    important: 30,
+    sent: 40,
+    drafts: 50,
+    archive: 60,
+    all_mail: 70,
+    junk: 80,
+    trash: 90
+  }
+  return order[role] ?? 100
 }
 
 function markAccountSynced(accountId: number): void {

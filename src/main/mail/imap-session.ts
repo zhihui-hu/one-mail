@@ -2,6 +2,7 @@ import { Socket, connect as connectTcp } from 'node:net'
 import { TLSSocket, connect as connectTls } from 'node:tls'
 import type { getAccount } from '../db/repositories/account.repository'
 import { sanitizeImapResponse, toImapConnectionError } from './imap-errors'
+import { parseImapMailboxList, type ImapMailbox } from './imap-mailboxes'
 
 type TestSocket = Socket | TLSSocket
 type ImapAccount = NonNullable<ReturnType<typeof getAccount>>
@@ -86,6 +87,10 @@ export class SimpleImapSession {
 
   async selectMailbox(path: string): Promise<void> {
     await this.command(`SELECT ${quoteAtom(path)}`)
+  }
+
+  async listMailboxes(): Promise<ImapMailbox[]> {
+    return parseImapMailboxList(await this.command('LIST "" "*"'))
   }
 
   async fetchRawMessage(uid: number): Promise<string> {

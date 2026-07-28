@@ -61,6 +61,29 @@ export type AccountUpdateInput = Partial<Omit<AccountCreateInput, 'email' | 'pas
   displayName?: string
   password?: string
   syncEnabled?: boolean
+  selectedFolderPaths?: string[]
+}
+
+export type MailFolderRole =
+  | 'inbox'
+  | 'sent'
+  | 'drafts'
+  | 'trash'
+  | 'junk'
+  | 'archive'
+  | 'all_mail'
+  | 'important'
+  | 'starred'
+  | 'custom'
+
+export type AccountMailFolder = {
+  path: string
+  name: string
+  delimiter?: string
+  role: MailFolderRole
+  attributes: string[]
+  selectable: boolean
+  selected: boolean
 }
 
 export type MessageFilterTag = 'unread' | 'starred' | 'today' | 'yesterday' | 'last7'
@@ -497,6 +520,7 @@ export type OneMailApi = {
     openAddWindow: () => Promise<boolean>
     closeAddWindow: () => Promise<boolean>
     update: (input: AccountUpdateInput) => Promise<MailAccount>
+    discoverFolders: (accountId: number) => Promise<AccountMailFolder[]>
     reauthorize: (accountId: number) => Promise<MailAccount>
     disable: (accountId: number) => Promise<MailAccount>
     remove: (accountId: number) => Promise<boolean>
