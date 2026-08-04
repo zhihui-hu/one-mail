@@ -8,7 +8,40 @@ pub fn initialize(state: &AppState) -> Result<(), String> {
     let connection = open(state)?;
     connection
         .execute_batch(SCHEMA_SQL)
-        .map_err(|error| format!("初始化数据库失败：{error}"))
+        .map_err(|error| format!("初始化数据库失败：{error}"))?;
+    ensure_compatibility(&connection)
+}
+
+fn ensure_compatibility(connection: &Connection) -> Result<(), String> {
+    let has_connection_state = connection
+        .prepare("PRAGMA table_info(onemail_mail_accounts)")
+        .map_err(|error| format!("读取数据库结构失败：{error}"))?
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|error| format!("读取数据库结构失败：{error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("读取数据库结构失败：{error}"))?
+        .iter()
+        .any(|name| name == "connection_state");
+
+    if !has_connection_state {
+        connection
+            .execute(
+                "ALTER TABLE onemail_mail_accounts ADD COLUMN connection_state TEXT NOT NULL DEFAULT 'connected'",
+                [],
+            )
+            .map_err(|error| format!("升级账号连接状态字段失败：{error}"))?;
+    }
+
+    connection
+        .execute(
+            "UPDATE onemail_mail_accounts
+             SET connection_state='reauthorize'
+             WHERE status='auth_error' AND connection_state='connected'",
+            [],
+        )
+        .map_err(|error| format!("迁移账号认证状态失败：{error}"))?;
+
+    Ok(())
 }
 
 pub fn open(state: &AppState) -> Result<Connection, String> {

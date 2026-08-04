@@ -48,7 +48,9 @@ export function SweepShine({
 
   return (
     <>
-      <style>{SWEEP_SHINE_CSS}</style>
+      <style href="sweep-shine" precedence="default">
+        {SWEEP_SHINE_CSS}
+      </style>
       <Comp className={cn(active && 'sweep-shine', className)} {...props} />
     </>
   )

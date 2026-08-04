@@ -35,26 +35,29 @@
   --radius: 0.625rem;
   --app-titlebar-left-offset: 8px;
   --app-window-controls-width: 0px;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
+  --native-sidebar: oklch(0.91 0.034 308);
+  --native-toolbar: oklch(0.985 0.004 286 / 94%);
+  --native-statusbar: oklch(0.965 0.008 290 / 92%);
+  --background: oklch(0.995 0.002 286);
+  --foreground: oklch(0.19 0.008 286);
+  --card: oklch(0.995 0.002 286);
+  --card-foreground: oklch(0.19 0.008 286);
+  --popover: oklch(0.995 0.002 286);
+  --popover-foreground: oklch(0.19 0.008 286);
   --primary: oklch(0.5907 0.2061 256.79);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
+  --secondary: oklch(0.955 0.008 286);
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  --muted: oklch(0.955 0.008 286);
+  --muted-foreground: oklch(0.52 0.012 286);
+  --accent: oklch(0.955 0.008 286);
   --accent-foreground: oklch(0.205 0 0);
   --warning: oklch(0.769 0.188 70.08);
   --warning-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
+  --border: oklch(0.89 0.008 286);
+  --input: oklch(0.89 0.008 286);
   --ring: oklch(0.5907 0.2061 256.79);
 }
 
@@ -74,6 +77,9 @@
 }
 
 .dark {
+  --native-sidebar: oklch(0.24 0.025 303);
+  --native-toolbar: oklch(0.19 0.012 286 / 94%);
+  --native-statusbar: oklch(0.18 0.012 286 / 94%);
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -110,12 +116,13 @@
   body {
     @apply min-h-screen overflow-hidden bg-background text-xs text-foreground antialiased;
     font-family:
-      Inter,
-      ui-sans-serif,
-      system-ui,
       -apple-system,
       BlinkMacSystemFont,
+      'SF Pro Text',
+      'SF Pro Display',
       'Segoe UI',
+      system-ui,
+      ui-sans-serif,
       sans-serif;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
@@ -130,6 +137,62 @@
   .app-titlebar {
     padding-left: var(--app-titlebar-left-offset);
     padding-right: calc(10px + var(--app-window-controls-width));
+  }
+
+  .app-window-controls-inset {
+    padding-right: calc(12px + var(--app-window-controls-width));
+  }
+
+  .native-window {
+    background: var(--background);
+  }
+
+  .native-sidebar {
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 14%), transparent 30%),
+      var(--native-sidebar);
+    box-shadow: inset -1px 0 rgb(0 0 0 / 4%);
+  }
+
+  .native-sidebar-titlebar {
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 20%), transparent),
+      var(--native-sidebar);
+    box-shadow: inset -1px 0 rgb(0 0 0 / 4%);
+    backdrop-filter: saturate(1.25) blur(18px);
+    -webkit-backdrop-filter: saturate(1.25) blur(18px);
+  }
+
+  .native-toolbar {
+    background: var(--native-toolbar);
+    backdrop-filter: saturate(1.25) blur(18px);
+    -webkit-backdrop-filter: saturate(1.25) blur(18px);
+  }
+
+  .native-statusbar {
+    background: var(--native-statusbar);
+    backdrop-filter: saturate(1.15) blur(14px);
+    -webkit-backdrop-filter: saturate(1.15) blur(14px);
+  }
+
+  .mail-reader-scroll {
+    scrollbar-gutter: stable;
+  }
+
+  .mail-html {
+    overflow-wrap: anywhere;
+  }
+
+  .mail-html img,
+  .mail-html video,
+  .mail-html canvas,
+  .mail-html svg {
+    max-width: 100% !important;
+    height: auto;
+  }
+
+  .mail-html table {
+    max-width: 100% !important;
   }
 
   .app-drag-region:active {
@@ -277,5 +340,6 @@
 
   #root {
     min-height: 100vh;
+    background: var(--background);
   }
 }

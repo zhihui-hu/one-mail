@@ -29,6 +29,7 @@ import {
 import { AccountFormField } from './account-form-field'
 import { CommonAccountFields } from './common-account-fields'
 import { CustomImapAccountForm } from './custom-imap-account-form'
+import { GmailAccountForm } from './gmail-account-form'
 import { OutlookAccountForm } from './outlook-account-form'
 
 const ACCOUNT_ADD_GUIDE_URL =
@@ -83,15 +84,18 @@ export function AddAccountForm({
     setError(null)
 
     const preset = resolveProviderPreset(values.kind, values.email)
+    const authType = values.kind === 'gmail' ? values.authType : preset.authType
+    const smtpAuthType =
+      values.kind === 'gmail' ? (authType === 'oauth2' ? 'oauth2' : 'app_password') : preset.smtpAuthType
 
     try {
       await onSubmit({
         providerKey: preset.providerKey,
         email: values.email?.trim(),
-        password: values.password ? normalizePassword(values.password, preset.authType) : undefined,
+        password: values.password ? normalizePassword(values.password, authType) : undefined,
         accountLabel: optionalText(values.accountLabel),
-        authType: preset.authType,
-        oauthAuthorizationMode: preset.authType === 'oauth2' ? 'internal_browser' : undefined,
+        authType,
+        oauthAuthorizationMode: authType === 'oauth2' ? 'system_browser' : undefined,
         imapHost:
           values.kind === 'custom' ? values.imapHost?.trim() || preset.imapHost : preset.imapHost,
         imapPort: values.kind === 'custom' ? values.imapPort : preset.imapPort,
@@ -99,7 +103,7 @@ export function AddAccountForm({
         smtpHost: preset.smtpHost,
         smtpPort: preset.smtpPort,
         smtpSecurity: preset.smtpSecurity,
-        smtpAuthType: preset.smtpAuthType,
+        smtpAuthType,
         smtpEnabled: preset.smtpEnabled
       })
       form.reset(defaultAccountFormValues)
@@ -150,12 +154,14 @@ export function AddAccountForm({
       <div className={footerClassName}>
         <Button type="submit" disabled={pending}>
           {pending
-            ? kind === 'outlook'
+            ? kind === 'outlook' || (kind === 'gmail' && form.watch('authType') === 'oauth2')
               ? t('account.add.waitingAuth')
               : t('common.testing')
             : kind === 'outlook'
               ? t('account.add.microsoftLogin')
-              : t('account.add.saveAccount')}
+              : kind === 'gmail' && form.watch('authType') === 'oauth2'
+                ? t('account.add.googleLogin')
+                : t('account.add.saveAccount')}
         </Button>
       </div>
     </form>
@@ -197,6 +203,7 @@ function renderProviderForm(
   t: ReturnType<typeof useI18n>['t']
 ): React.JSX.Element {
   if (kind === 'outlook') return <OutlookAccountForm form={form} />
+  if (kind === 'gmail') return <GmailAccountForm form={form} />
   if (kind === 'custom') return <CustomImapAccountForm form={form} />
 
   const preset = getProviderPreset(kind)

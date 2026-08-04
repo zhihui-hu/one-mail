@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS onemail_mail_accounts (
   status TEXT NOT NULL DEFAULT 'active' CHECK (
     status IN ('active', 'disabled', 'syncing', 'auth_error', 'sync_error', 'network_error')
   ),
+  connection_state TEXT NOT NULL DEFAULT 'connected' CHECK (
+    connection_state IN ('connected', 'renewing', 'reauthorize')
+  ),
   sort_order INTEGER NOT NULL DEFAULT 0,
   last_sync_at TEXT,
   last_error TEXT,

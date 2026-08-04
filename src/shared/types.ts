@@ -5,11 +5,12 @@ export type AccountStatus =
   | 'auth_error'
   | 'sync_error'
   | 'network_error'
+export type AccountConnectionStatus = 'connected' | 'renewing' | 'reauthorize'
 export type AuthType = 'oauth2' | 'app_password' | 'password' | 'bridge' | 'manual'
 export type ImapSecurity = 'ssl_tls' | 'starttls' | 'none'
 export type SmtpSecurity = 'ssl_tls' | 'starttls' | 'none'
 export type CredentialState = 'pending' | 'stored' | 'invalid' | 'expired' | 'revoked'
-export type OAuthAuthorizationMode = 'internal_browser' | 'copy_link'
+export type OAuthAuthorizationMode = 'system_browser' | 'copy_link'
 export type SyncMode = 'initial' | 'refresh'
 
 export type MailAccount = {
@@ -30,6 +31,7 @@ export type MailAccount = {
   syncEnabled: boolean
   credentialState: CredentialState
   status: AccountStatus
+  connectionStatus: AccountConnectionStatus
   lastSyncAt?: string
   lastError?: string
 }

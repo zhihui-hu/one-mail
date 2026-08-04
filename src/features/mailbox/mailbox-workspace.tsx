@@ -50,7 +50,6 @@ import {
   openExternalUrl,
   reauthorizeAccount,
   removeAccount,
-  revealDatabaseInFileManager,
   retryOutboxMessage,
   saveSettings,
   syncAllAccounts,
@@ -184,7 +183,7 @@ export function MailboxWorkspace(): React.JSX.Element {
     setError
   })
   const mainLayout = ResizablePrimitive.useDefaultLayout({
-    id: 'onemail-main-layout',
+    id: 'onemail-main-layout-v3',
     panelIds: ['accounts', 'messages', 'reader']
   })
 
@@ -787,28 +786,29 @@ export function MailboxWorkspace(): React.JSX.Element {
   }
 
   return (
-    <main className="flex h-screen min-h-screen flex-col overflow-hidden bg-background text-foreground">
-      <div className="relative shrink-0">
-        <TitleBar
-          platform={systemInfo?.platform}
-          onAddAccount={handleOpenAddAccountWindow}
-          onOpenSettings={() => {
-            setSettingsInitialSection('general')
-            setDialogKind('settings')
-          }}
-        />
-      </div>
-
+    <main className="native-window flex h-screen min-h-screen flex-col overflow-hidden text-foreground">
       {showNoAccounts ? (
-        <NoAccountsBody
-          importingSql={backupImportBusy}
-          actionsDisabled={backupImportBusy}
-          onAddAccount={handleOpenAddAccountWindow}
-          onImportBackup={handleImportBackup}
-        />
+        <>
+          <div className="relative shrink-0">
+            <TitleBar
+              platform={systemInfo?.platform}
+              onAddAccount={handleOpenAddAccountWindow}
+              onOpenSettings={() => {
+                setSettingsInitialSection('general')
+                setDialogKind('settings')
+              }}
+            />
+          </div>
+          <NoAccountsBody
+            importingSql={backupImportBusy}
+            actionsDisabled={backupImportBusy}
+            onAddAccount={handleOpenAddAccountWindow}
+            onImportBackup={handleImportBackup}
+          />
+        </>
       ) : (
         <ResizablePanelGroup
-          id="onemail-main-layout"
+          id="onemail-main-layout-v3"
           orientation="horizontal"
           defaultLayout={mainLayout.defaultLayout}
           onLayoutChanged={mainLayout.onLayoutChanged}
@@ -816,37 +816,40 @@ export function MailboxWorkspace(): React.JSX.Element {
         >
           <ResizablePanel
             id="accounts"
-            defaultSize="292px"
-            minSize="220px"
+            defaultSize="340px"
+            minSize="260px"
             groupResizeBehavior="preserve-pixel-size"
           >
-            <AccountList
-              accounts={accounts}
-              selectedAccountId={selectedAccountId}
-              syncingAccountIds={syncingAccountIds}
-              actionsDisabled={!hasAccounts}
-              composePending={composerPending}
-              outboxPending={outboxPending}
-              onSelectAccount={handleSelectAccount}
-              onCompose={() => {
-                void openComposer('new')
-              }}
-              onOpenOutbox={() => setOutboxOpen(true)}
-              onRefreshAccount={(account) => {
-                void handleRefreshAccount(account)
-              }}
-              onEditAccount={(account) => {
-                setDialogAccountId(account.id)
-                setDialogKind('edit')
-              }}
-              onDeleteAccount={(account) => {
-                setDialogAccountId(account.id)
-                setDialogKind('delete')
-              }}
-              onResolveAccountWarning={(account) => {
-                setWarningAccountId(account.id)
-              }}
-            />
+            <div className="flex h-full min-h-0 flex-col">
+              <TitleBar
+                platform={systemInfo?.platform}
+                onAddAccount={handleOpenAddAccountWindow}
+                onOpenSettings={() => {
+                  setSettingsInitialSection('general')
+                  setDialogKind('settings')
+                }}
+              />
+              <AccountList
+                accounts={accounts}
+                selectedAccountId={selectedAccountId}
+                syncingAccountIds={syncingAccountIds}
+                onSelectAccount={handleSelectAccount}
+                onRefreshAccount={(account) => {
+                  void handleRefreshAccount(account)
+                }}
+                onEditAccount={(account) => {
+                  setDialogAccountId(account.id)
+                  setDialogKind('edit')
+                }}
+                onDeleteAccount={(account) => {
+                  setDialogAccountId(account.id)
+                  setDialogKind('delete')
+                }}
+                onResolveAccountWarning={(account) => {
+                  setWarningAccountId(account.id)
+                }}
+              />
+            </div>
           </ResizablePanel>
 
           <ResizableHandle />
@@ -878,6 +881,12 @@ export function MailboxWorkspace(): React.JSX.Element {
               allVisibleSelected={allVisibleSelected}
               someVisibleSelected={someVisibleSelected}
               selectionDisabled={deleting || markingRead}
+              composePending={composerPending}
+              outboxPending={outboxPending}
+              onCompose={() => {
+                void openComposer('new')
+              }}
+              onOpenOutbox={() => setOutboxOpen(true)}
               onToggleMessageSelection={toggleMessageSelection}
               onSelectAllVisible={selectAllVisible}
               onClearSelection={clearSelection}
@@ -917,37 +926,33 @@ export function MailboxWorkspace(): React.JSX.Element {
                   onDelete={() => requestDeleteMessages([selectedMessage])}
                 />
               ) : (
-                <div className="flex h-full items-center justify-center p-8 text-xs text-muted-foreground">
+                <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-xs text-muted-foreground">
                   {t('mailbox.selectPreview')}
                 </div>
               )}
+              <StatusBar
+                systemInfo={systemInfo}
+                settings={settings}
+                accountCount={realAccounts.length}
+                messageCount={selectedAccount.messageCount ?? messages.length}
+                syncNotice={syncNotice}
+                updateStatus={updateStatus}
+                onOpenVersion={() => {
+                  if (hasAvailableUpdate(updateStatus)) {
+                    void openExternalUrl(ONEMAIL_HOMEPAGE_URL)
+                    return
+                  }
+                  setSettingsInitialSection('about')
+                  setDialogKind('settings')
+                }}
+                onInstallUpdate={() => {
+                  void installAppUpdate()
+                }}
+              />
             </article>
           </ResizablePanel>
         </ResizablePanelGroup>
       )}
-
-      <StatusBar
-        systemInfo={systemInfo}
-        settings={settings}
-        accountCount={realAccounts.length}
-        messageCount={selectedAccount.messageCount ?? messages.length}
-        syncNotice={syncNotice}
-        updateStatus={updateStatus}
-        onRevealDatabase={() => {
-          void revealDatabaseInFileManager()
-        }}
-        onOpenVersion={() => {
-          if (hasAvailableUpdate(updateStatus)) {
-            void openExternalUrl(ONEMAIL_HOMEPAGE_URL)
-            return
-          }
-          setSettingsInitialSection('about')
-          setDialogKind('settings')
-        }}
-        onInstallUpdate={() => {
-          void installAppUpdate()
-        }}
-      />
 
       <EditAccountDialog
         account={dialogAccount ?? selectedAccount}

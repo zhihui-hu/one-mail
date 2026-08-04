@@ -1,24 +1,24 @@
-import { resolve } from 'node:path'
+import { resolve } from "node:path";
 
-import tailwindcss from '@tailwindcss/vite'
-import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
 
-const host = process.env.TAURI_DEV_HOST
+const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig(async () => ({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
-      '@renderer': resolve('src')
-    }
+      "@renderer": resolve("src"),
+    },
   },
   define: {
-    __APP_BUILD_TIME__: JSON.stringify(new Date().toISOString())
+    __APP_BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
   clearScreen: false,
   server: {
-    port: 1420,
+    port: 27502,
     strictPort: true,
     host: host || false,
     hmr: host
@@ -29,7 +29,7 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      ignored: ['**/src-tauri/**']
-    }
-  }
-}))
+      ignored: ["**/src-tauri/**"],
+    },
+  },
+}));

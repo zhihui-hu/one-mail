@@ -9,7 +9,6 @@ import {
   FileText,
   Forward,
   Image,
-  Loader2,
   Paperclip,
   Reply,
   ShieldCheck,
@@ -30,9 +29,9 @@ import {
 } from '@renderer/components/mail/mail-display'
 import { prepareMailHtml, type PreparedMailHtml } from '@renderer/components/mail/mail-html'
 import type { Attachment, Message } from '@renderer/components/mail/types'
+import { SweepShine } from '@renderer/components/sweep-shine'
 import { UnderlineHover } from '@renderer/components/underline-hover'
 import { Button } from '@renderer/components/ui/button'
-import { Skeleton } from '@renderer/components/ui/skeleton'
 import {
   Table,
   TableBody,
@@ -149,116 +148,115 @@ export function MailReader({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      {canShowHtml ? (
-        <header className="app-drag-region flex h-10 shrink-0 items-center gap-3 border-b bg-card/60 px-4 text-xs">
-          <div className="flex min-w-0 flex-1 items-center gap-2 text-muted-foreground">
-            <ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />
-            <span className="truncate">
-              {externalContentAllowed
-                ? t('mail.reader.safeFull')
-                : canLoadFullContent
-                  ? t('mail.reader.safeBlocked', { count: blockedCount })
-                  : t('mail.reader.safePreview')}
-            </span>
-          </div>
-          <div className="app-no-drag flex shrink-0 items-center gap-2">
-            {loadingBody ? (
-              <Button size="sm" variant="outline" disabled>
-                <Loader2 data-icon="inline-start" className="animate-spin" />
-                {t('mail.reader.loadingBody')}
+      <header className="app-drag-region app-window-controls-inset native-toolbar flex h-12 shrink-0 items-center gap-2 border-b px-3 text-xs">
+        <div className="flex min-w-0 flex-1 items-center gap-2 text-muted-foreground">
+          {canShowHtml ? (
+            <>
+              <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />
+              <span className="truncate">
+                {externalContentAllowed
+                  ? t('mail.reader.safeFull')
+                  : canLoadFullContent
+                    ? t('mail.reader.safeBlocked', { count: blockedCount })
+                    : t('mail.reader.safePreview')}
+              </span>
+            </>
+          ) : null}
+        </div>
+        <div className="app-no-drag flex shrink-0 items-center gap-1">
+          {loadingBody ? (
+            <Button size="sm" variant="ghost" disabled>
+              <SweepShine>{t('mail.reader.loadingBody')}</SweepShine>
+            </Button>
+          ) : canLoadFullContent ? (
+            <>
+              <RemoteImagesHelpLink />
+              <Button
+                size="sm"
+                variant="ghost"
+                className="rounded-lg text-primary hover:bg-primary/10 hover:text-primary"
+                onClick={allowExternalContent}
+              >
+                <Image data-icon="inline-start" />
+                {t('mail.reader.loadFullContent')}
               </Button>
-            ) : canLoadFullContent ? (
-              <>
-                <RemoteImagesHelpLink />
-                <Button size="sm" variant="outline" onClick={allowExternalContent}>
-                  <Image data-icon="inline-start" />
-                  {t('mail.reader.loadFullContent')}
-                </Button>
-              </>
-            ) : !hasLoadedBody && message.bodyStatus === 'error' ? (
-              <Button size="sm" variant="outline" onClick={onLoadBody}>
-                {loadingBody ? (
-                  <Loader2 data-icon="inline-start" className="animate-spin" />
-                ) : (
-                  <FileText data-icon="inline-start" />
-                )}
-                {t('mail.reader.retryLoadBody')}
-              </Button>
-            ) : null}
-          </div>
-        </header>
-      ) : null}
+            </>
+          ) : !hasLoadedBody && message.bodyStatus === 'error' ? (
+            <Button size="sm" variant="ghost" onClick={onLoadBody}>
+              <FileText data-icon="inline-start" />
+              {t('mail.reader.retryLoadBody')}
+            </Button>
+          ) : null}
+          <TooltipProvider>
+            <div className="ml-1 flex items-center gap-0.5 border-l pl-1.5">
+              <MailActionButton
+                label={t('mail.reader.reply')}
+                disabled={actionPending}
+                onClick={onReply}
+              >
+                <Reply aria-hidden="true" />
+              </MailActionButton>
+              <MailActionButton
+                label={t('mail.reader.forward')}
+                disabled={actionPending}
+                onClick={onForward}
+              >
+                <Forward aria-hidden="true" />
+              </MailActionButton>
+              <MailActionButton
+                label={t('common.delete')}
+                disabled={deleting}
+                onClick={onDelete}
+              >
+                <Trash2 aria-hidden="true" />
+              </MailActionButton>
+            </div>
+          </TooltipProvider>
+        </div>
+      </header>
 
       <article className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <section className="shrink-0 border-b px-5 py-4">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div
+              className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-[15px] font-semibold text-muted-foreground"
+              aria-hidden="true"
+            >
+              {getAvatarLabel(displaySender)}
+            </div>
             <div className="min-w-0 flex-1">
-              <h2 className="text-base font-semibold leading-snug tracking-normal">
+              <div className="flex min-w-0 items-start justify-between gap-3">
+                <h2 className="truncate text-[15px] font-semibold leading-5 tracking-normal">
+                  {displaySender}
+                </h2>
+                <time
+                  className="shrink-0 pt-0.5 text-[11px] tabular-nums text-muted-foreground"
+                  title={formatAbsoluteTime(message.receivedAt)}
+                >
+                  {formatRelativeTime(message.receivedAt, locale)}
+                </time>
+              </div>
+              <p className="mt-0.5 truncate text-[13px] leading-5 text-foreground">
                 {displaySubject}
-              </h2>
+              </p>
               <TooltipProvider>
-                <div className="mt-2 flex flex-col gap-0.5 text-xs text-muted-foreground">
+                <div className="mt-1 flex flex-col gap-0.5 text-[11px] leading-4 text-muted-foreground">
                   <MetaLine
                     label={t('mail.reader.from')}
-                    value={formatAddress(displaySender, message.fromAddress)}
+                    value={message.fromAddress || displaySender}
                   />
                   <MetaLine label={t('mail.reader.to')} value={displayRecipientAddress} />
                   {message.cc ? <MetaLine label={t('mail.reader.cc')} value={message.cc} /> : null}
                 </div>
               </TooltipProvider>
             </div>
-            <div className="flex shrink-0 flex-col items-end gap-2">
-              <div
-                className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
-                title={formatAbsoluteTime(message.receivedAt)}
-              >
-                {formatRelativeTime(message.receivedAt, locale)}
-              </div>
-              <TooltipProvider>
-                <div className="flex items-center gap-1">
-                  <MailActionButton
-                    label={t('mail.reader.reply')}
-                    disabled={actionPending}
-                    onClick={onReply}
-                  >
-                    {actionPending ? (
-                      <Loader2 className="animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Reply aria-hidden="true" />
-                    )}
-                  </MailActionButton>
-                  <MailActionButton
-                    label={t('mail.reader.forward')}
-                    disabled={actionPending}
-                    onClick={onForward}
-                  >
-                    {actionPending ? (
-                      <Loader2 className="animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Forward aria-hidden="true" />
-                    )}
-                  </MailActionButton>
-                  <MailActionButton
-                    label={t('common.delete')}
-                    disabled={deleting}
-                    onClick={onDelete}
-                  >
-                    {deleting ? (
-                      <Loader2 className="animate-spin" aria-hidden="true" />
-                    ) : (
-                      <Trash2 aria-hidden="true" />
-                    )}
-                  </MailActionButton>
-                </div>
-              </TooltipProvider>
-            </div>
           </div>
         </section>
 
-        <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+        <div className="mail-reader-scroll min-h-0 flex-1 overflow-auto px-6 py-5">
           {loading && !message.detailLoaded ? (
             <section className="text-xs text-muted-foreground">
-              {t('mail.reader.loadingDetails')}
+              <SweepShine>{t('mail.reader.loadingDetails')}</SweepShine>
             </section>
           ) : (
             <MessageBody
@@ -303,6 +301,7 @@ function MailActionButton({
         <Button
           size="icon-sm"
           variant="ghost"
+          className="rounded-lg text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/8"
           aria-label={label}
           disabled={disabled}
           onClick={onClick}
@@ -359,11 +358,11 @@ function MessageBody({
   onLoadBody: () => void
 }): React.JSX.Element {
   if (!canShowHtml && loadingBody) {
-    return <MessageBodySkeleton />
+    return <MessageBodyLoading />
   }
 
   if (canShowHtml && !preparedHtml) {
-    return <MessageBodySkeleton />
+    return <MessageBodyLoading />
   }
 
   if (!canShowHtml && !message.bodyLoaded) {
@@ -409,27 +408,12 @@ function MessageBody({
   )
 }
 
-function MessageBodySkeleton(): React.JSX.Element {
+function MessageBodyLoading(): React.JSX.Element {
+  const { t } = useI18n()
+
   return (
-    <section className="flex min-h-40 flex-col gap-4 rounded-md border bg-card p-5">
-      <div className="flex items-center gap-3">
-        <Skeleton className="size-9 rounded-full" />
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <Skeleton className="h-3 w-44 max-w-full" />
-          <Skeleton className="h-3 w-28 max-w-full" />
-        </div>
-      </div>
-      <div className="flex flex-col gap-2.5">
-        <Skeleton className="h-3 w-full" />
-        <Skeleton className="h-3 w-[92%]" />
-        <Skeleton className="h-3 w-[86%]" />
-        <Skeleton className="h-3 w-[74%]" />
-      </div>
-      <div className="flex flex-col gap-2.5 pt-2">
-        <Skeleton className="h-3 w-[96%]" />
-        <Skeleton className="h-3 w-[88%]" />
-        <Skeleton className="h-3 w-[64%]" />
-      </div>
+    <section className="flex min-h-40 items-center justify-center rounded-md border bg-card p-5 text-xs text-muted-foreground">
+      <SweepShine>{t('mail.reader.loadingBody')}</SweepShine>
     </section>
   )
 }
@@ -484,12 +468,12 @@ function AttachmentList({
                 if (canDownload) onDownloadAttachment?.(attachment)
               }}
             >
+              <Download data-icon="inline-start" />
               {isDownloading ? (
-                <Loader2 data-icon="inline-start" className="animate-spin" />
+                <SweepShine>{t('common.download')}</SweepShine>
               ) : (
-                <Download data-icon="inline-start" />
+                t('common.download')
               )}
-              {t('common.download')}
             </Button>
           )
         }
@@ -581,6 +565,6 @@ function MetaLine({ label, value }: { label: string; value: string }): React.JSX
   )
 }
 
-function formatAddress(name: string, email?: string): string {
-  return email ? `${name} <${email}>` : name
+function getAvatarLabel(name: string): string {
+  return Array.from(name.trim())[0]?.toUpperCase() ?? '?'
 }

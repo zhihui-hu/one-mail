@@ -1,11 +1,12 @@
 use std::{
-    fs,
+    fs::{self, File},
+    io::Read,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use regex::Regex;
-use rusqlite::{types::ValueRef, Connection};
+use rusqlite::{backup::Backup, params, Connection, OpenFlags};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
@@ -16,6 +17,9 @@ use crate::{
 };
 
 const MAX_BACKUP_CLOCK_SKEW_SECONDS: u64 = 5 * 60;
+const NATIVE_BACKUP_EXTENSION: &str = "onemail";
+const NATIVE_BACKUP_FORMAT_VERSION: i64 = 1;
+const SQLITE_HEADER: &[u8; 16] = b"SQLite format 3\0";
 
 #[derive(Clone)]
 struct BackupInfo {
@@ -33,8 +37,8 @@ pub async fn settings_import_sql(
     let Some(file) = app
         .dialog()
         .file()
-        .add_filter("OneMail SQL Backup", &["sql"])
-        .set_title("导入 SQL 备份")
+        .add_filter("OneMail Backup", &["onemail", "sqlite", "sql"])
+        .set_title("导入 OneMail 备份")
         .blocking_pick_file()
     else {
         return Ok(json!({ "imported": false }));
@@ -50,28 +54,48 @@ pub async fn settings_import_sql(
         20,
         Some(&file_path),
     );
-    let raw_sql =
-        fs::read_to_string(&file_path).map_err(|error| format!("读取备份文件失败：{error}"))?;
-    // Older exports could embed binary PDF/OFD bytes in text fields. SQLite's
-    // SQL parser cannot consume NUL bytes inside a string literal.
-    let sql = raw_sql.replace('\0', "\u{fffd}");
-    emit_progress(
-        &app,
-        operation_id.as_deref(),
-        "validating_backup",
-        35,
-        Some(&file_path),
-    );
-    let info = validate_backup(&sql, &file_path)?;
-
-    emit_progress(
-        &app,
-        operation_id.as_deref(),
-        "restoring_database",
-        55,
-        Some(&file_path),
-    );
-    restore_database(&state, &sql, &info.key)?;
+    let info = if is_sqlite_file(&file_path)? {
+        emit_progress(
+            &app,
+            operation_id.as_deref(),
+            "validating_backup",
+            35,
+            Some(&file_path),
+        );
+        let info = validate_native_backup(&file_path)?;
+        emit_progress(
+            &app,
+            operation_id.as_deref(),
+            "restoring_database",
+            55,
+            Some(&file_path),
+        );
+        restore_native_database(&state, &file_path, &info.key)?;
+        info
+    } else {
+        let raw_sql =
+            fs::read_to_string(&file_path).map_err(|error| format!("读取备份文件失败：{error}"))?;
+        // Older exports could embed binary PDF/OFD bytes in text fields. SQLite's
+        // SQL parser cannot consume NUL bytes inside a string literal.
+        let sql = raw_sql.replace('\0', "\u{fffd}");
+        emit_progress(
+            &app,
+            operation_id.as_deref(),
+            "validating_backup",
+            35,
+            Some(&file_path),
+        );
+        let info = validate_sql_backup(&sql, &file_path)?;
+        emit_progress(
+            &app,
+            operation_id.as_deref(),
+            "restoring_database",
+            55,
+            Some(&file_path),
+        );
+        restore_sql_database(&state, &sql, &info.key)?;
+        info
+    };
     emit_progress(
         &app,
         operation_id.as_deref(),
@@ -116,14 +140,13 @@ pub async fn settings_export_sql(
 ) -> Result<Option<String>, String> {
     let exported_at = unix_timestamp();
     let key = state.database_key()?;
-    let file_name = format!("{key}_{exported_at}.sql");
-    let sql = dump_database(&state, exported_at, &key)?;
+    let file_name = format!("{key}_{exported_at}.{NATIVE_BACKUP_EXTENSION}");
 
     let mut dialog = app
         .dialog()
         .file()
-        .add_filter("OneMail SQL Backup", &["sql"])
-        .set_title("导出 SQL 备份")
+        .add_filter("OneMail Backup", &[NATIVE_BACKUP_EXTENSION])
+        .set_title("导出 OneMail 备份")
         .set_file_name(&file_name);
     if let Ok(documents) = app.path().document_dir() {
         dialog = dialog.set_directory(documents);
@@ -134,11 +157,177 @@ pub async fn settings_export_sql(
     let file_path = file
         .into_path()
         .map_err(|error| format!("无法读取保存路径：{error}"))?;
-    fs::write(&file_path, sql).map_err(|error| format!("写入备份文件失败：{error}"))?;
+    create_native_backup(&state, &file_path, exported_at, &key)?;
     Ok(Some(file_path.to_string_lossy().into_owned()))
 }
 
-fn validate_backup(sql: &str, file_path: &Path) -> Result<BackupInfo, String> {
+fn is_sqlite_file(file_path: &Path) -> Result<bool, String> {
+    let mut file = File::open(file_path).map_err(|error| format!("读取备份文件失败：{error}"))?;
+    let mut header = [0_u8; SQLITE_HEADER.len()];
+    let bytes_read = file
+        .read(&mut header)
+        .map_err(|error| format!("读取备份文件失败：{error}"))?;
+    Ok(bytes_read == SQLITE_HEADER.len() && &header == SQLITE_HEADER)
+}
+
+fn create_native_backup(
+    state: &AppState,
+    file_path: &Path,
+    exported_at: u64,
+    key: &str,
+) -> Result<(), String> {
+    if file_path == state.database_path {
+        return Err("不能将备份文件覆盖当前 OneMail 数据库。".to_string());
+    }
+    remove_database_files(file_path)?;
+
+    let result = (|| {
+        let source = db::open(state)?;
+        let mut destination = Connection::open(file_path)
+            .map_err(|error| format!("创建 OneMail 备份失败：{error}"))?;
+        destination
+            .busy_timeout(Duration::from_secs(5))
+            .map_err(|error| format!("配置备份超时失败：{error}"))?;
+
+        {
+            let backup = Backup::new(&source, &mut destination)
+                .map_err(|error| format!("创建 OneMail 备份失败：{error}"))?;
+            backup
+                .run_to_completion(256, Duration::from_millis(5), None)
+                .map_err(|error| format!("写入 OneMail 备份失败：{error}"))?;
+        }
+
+        finalize_native_backup(&destination, key, exported_at)?;
+        Ok(())
+    })();
+
+    if result.is_err() {
+        let _ = remove_database_files(file_path);
+    }
+    result
+}
+
+fn finalize_native_backup(
+    connection: &Connection,
+    key: &str,
+    exported_at: u64,
+) -> Result<(), String> {
+    connection
+        .pragma_update(None, "journal_mode", "DELETE")
+        .map_err(|error| format!("整理 OneMail 备份失败：{error}"))?;
+    connection
+        .execute_batch(
+            "DROP TABLE IF EXISTS onemail_backup_metadata;
+             CREATE TABLE onemail_backup_metadata (
+               format_version INTEGER NOT NULL,
+               database_key TEXT NOT NULL,
+               exported_at INTEGER NOT NULL
+             );",
+        )
+        .and_then(|_| {
+            connection.execute(
+                "INSERT INTO onemail_backup_metadata
+                 (format_version,database_key,exported_at) VALUES (?1,?2,?3)",
+                params![NATIVE_BACKUP_FORMAT_VERSION, key, exported_at],
+            )
+        })
+        .map_err(|error| format!("写入备份元数据失败：{error}"))?;
+    validate_database_integrity(connection)
+}
+
+fn validate_native_backup(file_path: &Path) -> Result<BackupInfo, String> {
+    let connection = open_native_backup(file_path)?;
+    validate_database_integrity(&connection)?;
+    validate_required_schema(&connection)?;
+
+    let (format_version, key, exported_at) = connection
+        .query_row(
+            "SELECT format_version,database_key,exported_at
+             FROM onemail_backup_metadata LIMIT 1",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
+        )
+        .map_err(|error| format!("备份文件缺少有效的 OneMail 元数据：{error}"))?;
+    if format_version != NATIVE_BACKUP_FORMAT_VERSION {
+        return Err(format!("暂不支持此 OneMail 备份版本：{format_version}"));
+    }
+    let exported_at =
+        u64::try_from(exported_at).map_err(|_| "备份文件中的导出时间无效。".to_string())?;
+    validate_key_and_timestamp(&key, exported_at)?;
+    validate_canonical_file_name(file_path, &key, exported_at, NATIVE_BACKUP_EXTENSION)?;
+    Ok(BackupInfo { key, exported_at })
+}
+
+fn open_native_backup(file_path: &Path) -> Result<Connection, String> {
+    let connection = Connection::open_with_flags(
+        file_path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|error| format!("打开 OneMail 备份失败：{error}"))?;
+    connection
+        .busy_timeout(Duration::from_secs(5))
+        .and_then(|_| connection.execute_batch("PRAGMA query_only=ON; PRAGMA trusted_schema=OFF;"))
+        .map_err(|error| format!("配置 OneMail 备份校验失败：{error}"))?;
+    Ok(connection)
+}
+
+fn validate_database_integrity(connection: &Connection) -> Result<(), String> {
+    let result: String = connection
+        .query_row("PRAGMA quick_check(1)", [], |row| row.get(0))
+        .map_err(|error| format!("校验 OneMail 备份失败：{error}"))?;
+    if result != "ok" {
+        return Err(format!("OneMail 备份完整性校验失败：{result}"));
+    }
+    Ok(())
+}
+
+fn validate_required_schema(connection: &Connection) -> Result<(), String> {
+    for table_name in ["onemail_mail_accounts", "onemail_app_settings"] {
+        let count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name=?1",
+                [table_name],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("校验 OneMail 数据表失败：{error}"))?;
+        if count != 1 {
+            return Err(format!("备份文件缺少 OneMail 数据表：{table_name}"));
+        }
+    }
+
+    let encrypted_password_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('onemail_mail_accounts')
+             WHERE name='encrypted_password'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("校验账号密码密文字段失败：{error}"))?;
+    if encrypted_password_count != 1 {
+        return Err("备份文件缺少账号密码密文字段。".to_string());
+    }
+
+    let legacy_table_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_schema
+             WHERE type='table' AND name IN ('onemail_crypto_keys','onemail_account_credentials')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("校验旧版凭据表失败：{error}"))?;
+    if legacy_table_count != 0 {
+        return Err("备份文件包含旧版凭据表，请使用新库重新导出。".to_string());
+    }
+    Ok(())
+}
+
+fn validate_sql_backup(sql: &str, file_path: &Path) -> Result<BackupInfo, String> {
     let lower = sql.to_ascii_lowercase();
     if !lower.contains("create table") || !lower.contains("onemail_mail_accounts") {
         return Err("备份 SQL 缺少 OneMail 账号表。".to_string());
@@ -167,27 +356,70 @@ fn validate_backup(sql: &str, file_path: &Path) -> Result<BackupInfo, String> {
         .ok_or_else(|| "备份 SQL 缺少有效的导出时间。".to_string())?;
     validate_key_and_timestamp(&key, exported_at)?;
 
-    if let Some(file_name) = file_path.file_name().and_then(|value| value.to_str()) {
-        let canonical_name =
-            Regex::new(r"^k\d{10}[0-9a-f]{16}_\d{10}\.sql$").map_err(|error| error.to_string())?;
-        let expected = format!("{key}_{exported_at}.sql");
-        if canonical_name.is_match(file_name) && file_name != expected {
-            return Err("备份 SQL 头部信息与文件名不一致。".to_string());
-        }
-    }
+    validate_canonical_file_name(file_path, &key, exported_at, "sql")?;
 
     Ok(BackupInfo { key, exported_at })
 }
 
-fn restore_database(state: &AppState, sql: &str, key: &str) -> Result<(), String> {
+fn validate_canonical_file_name(
+    file_path: &Path,
+    key: &str,
+    exported_at: u64,
+    extension: &str,
+) -> Result<(), String> {
+    let Some(file_name) = file_path.file_name().and_then(|value| value.to_str()) else {
+        return Ok(());
+    };
+    let canonical_name = Regex::new(&format!(
+        r"^k\d{{10}}[0-9a-f]{{16}}_\d{{10}}\.{}$",
+        regex::escape(extension)
+    ))
+    .map_err(|error| error.to_string())?;
+    let expected = format!("{key}_{exported_at}.{extension}");
+    if canonical_name.is_match(file_name) && file_name != expected {
+        return Err("备份元数据与文件名不一致。".to_string());
+    }
+    Ok(())
+}
+
+fn restore_native_database(state: &AppState, file_path: &Path, key: &str) -> Result<(), String> {
     let database_dir = state
         .database_path
         .parent()
         .ok_or_else(|| "数据库目录无效。".to_string())?;
     let temp_path = database_dir.join("onemail.importing.sqlite");
-    let rollback_path = database_dir.join("onemail.rollback.sqlite");
     remove_database_files(&temp_path)?;
-    remove_database_files(&rollback_path)?;
+
+    {
+        let source = open_native_backup(file_path)?;
+        let mut destination =
+            Connection::open(&temp_path).map_err(|error| format!("创建临时数据库失败：{error}"))?;
+        {
+            let backup = Backup::new(&source, &mut destination)
+                .map_err(|error| format!("准备恢复 OneMail 备份失败：{error}"))?;
+            backup
+                .run_to_completion(256, Duration::from_millis(5), None)
+                .map_err(|error| format!("恢复 OneMail 备份失败：{error}"))?;
+        }
+        destination
+            .execute_batch(
+                "DROP TABLE onemail_backup_metadata;
+                 PRAGMA journal_mode=DELETE;",
+            )
+            .map_err(|error| format!("整理恢复数据库失败：{error}"))?;
+        validate_database_integrity(&destination)?;
+        validate_required_schema(&destination)?;
+    }
+    replace_database(state, &temp_path, key)
+}
+
+fn restore_sql_database(state: &AppState, sql: &str, key: &str) -> Result<(), String> {
+    let database_dir = state
+        .database_path
+        .parent()
+        .ok_or_else(|| "数据库目录无效。".to_string())?;
+    let temp_path = database_dir.join("onemail.importing.sqlite");
+    remove_database_files(&temp_path)?;
 
     {
         let connection =
@@ -196,11 +428,18 @@ fn restore_database(state: &AppState, sql: &str, key: &str) -> Result<(), String
             .execute_batch("PRAGMA foreign_keys = OFF;")
             .and_then(|_| connection.execute_batch(sql))
             .map_err(|error| format!("恢复 SQL 备份失败：{error}"))?;
-        connection
-            .query_row("SELECT COUNT(*) FROM onemail_mail_accounts", [], |_| Ok(()))
-            .map_err(|error| format!("导入后的账号表无效：{error}"))?;
+        validate_required_schema(&connection)?;
     }
+    replace_database(state, &temp_path, key)
+}
 
+fn replace_database(state: &AppState, temp_path: &Path, key: &str) -> Result<(), String> {
+    let database_dir = state
+        .database_path
+        .parent()
+        .ok_or_else(|| "数据库目录无效。".to_string())?;
+    let rollback_path = database_dir.join("onemail.rollback.sqlite");
+    remove_database_files(&rollback_path)?;
     if state.database_path.exists() {
         if let Ok(connection) = db::open(state) {
             let _ = connection.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
@@ -224,116 +463,6 @@ fn restore_database(state: &AppState, sql: &str, key: &str) -> Result<(), String
 
     remove_database_files(&rollback_path)?;
     Ok(())
-}
-
-fn dump_database(state: &AppState, exported_at: u64, key: &str) -> Result<String, String> {
-    let connection = db::open(state)?;
-    let mut output = vec![
-        "-- OneMail SQL Backup".to_string(),
-        format!("-- key: {key}"),
-        format!("-- exported_at: {exported_at}"),
-        "PRAGMA foreign_keys = OFF;".to_string(),
-        "BEGIN TRANSACTION;".to_string(),
-    ];
-
-    let mut schema_statement = connection
-        .prepare(
-            "SELECT sql FROM sqlite_schema
-             WHERE sql IS NOT NULL
-               AND type IN ('table', 'index', 'trigger', 'view')
-               AND name NOT LIKE 'sqlite_%'
-               AND name NOT LIKE 'onemail_message_search_%'
-             ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1
-                      WHEN 'trigger' THEN 2 ELSE 3 END, name",
-        )
-        .map_err(|error| format!("读取数据库结构失败：{error}"))?;
-    let schema_rows = schema_statement
-        .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|error| format!("读取数据库结构失败：{error}"))?;
-    for row in schema_rows {
-        output.push(format!(
-            "{};",
-            row.map_err(|error| format!("读取数据库结构失败：{error}"))?
-        ));
-    }
-
-    let table_names = {
-        let mut statement = connection
-            .prepare(
-                "SELECT name FROM sqlite_schema
-                 WHERE type = 'table'
-                   AND name NOT LIKE 'sqlite_%'
-                   AND name NOT LIKE 'onemail_message_search_%'
-                 ORDER BY name",
-            )
-            .map_err(|error| format!("读取数据表失败：{error}"))?;
-        let names = statement
-            .query_map([], |row| row.get::<_, String>(0))
-            .map_err(|error| format!("读取数据表失败：{error}"))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| format!("读取数据表失败：{error}"))?;
-        names
-    };
-
-    for table_name in table_names {
-        let sql = format!("SELECT * FROM \"{}\"", escape_identifier(&table_name));
-        let mut statement = connection
-            .prepare(&sql)
-            .map_err(|error| format!("读取 {table_name} 失败：{error}"))?;
-        let columns = statement
-            .column_names()
-            .iter()
-            .map(|name| format!("\"{}\"", escape_identifier(name)))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let column_count = statement.column_count();
-        let rows = statement
-            .query_map([], |row| {
-                let values = (0..column_count)
-                    .map(|index| format_sql_value(row.get_ref(index)?))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(values.join(", "))
-            })
-            .map_err(|error| format!("读取 {table_name} 失败：{error}"))?;
-
-        for row in rows {
-            output.push(format!(
-                "INSERT INTO \"{}\" ({columns}) VALUES ({});",
-                escape_identifier(&table_name),
-                row.map_err(|error| format!("读取 {table_name} 失败：{error}"))?
-            ));
-        }
-    }
-
-    output.push("COMMIT;".to_string());
-    output.push("PRAGMA foreign_keys = ON;".to_string());
-    Ok(format!("{}\n", output.join("\n")))
-}
-
-fn format_sql_value(value: ValueRef<'_>) -> Result<String, rusqlite::Error> {
-    Ok(match value {
-        ValueRef::Null => "NULL".to_string(),
-        ValueRef::Integer(value) => value.to_string(),
-        ValueRef::Real(value) => value.to_string(),
-        ValueRef::Text(value) => {
-            if value.contains(&0) {
-                let hex = value
-                    .iter()
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect::<String>();
-                format!("CAST(X'{hex}' AS TEXT)")
-            } else {
-                format!("'{}'", String::from_utf8_lossy(value).replace('\'', "''"))
-            }
-        }
-        ValueRef::Blob(value) => {
-            let hex = value
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>();
-            format!("X'{hex}'")
-        }
-    })
 }
 
 fn emit_progress(
@@ -414,6 +543,89 @@ fn database_file_set(path: &Path) -> [PathBuf; 3] {
     ]
 }
 
-fn escape_identifier(value: &str) -> String {
-    value.replace('"', "\"\"")
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_backup_keeps_required_metadata_and_schema() {
+        let exported_at = unix_timestamp();
+        let key = format!("k{exported_at}0123456789abcdef");
+        let source_path = temporary_database_path("source");
+        let backup_path = temporary_database_path("backup").with_extension(NATIVE_BACKUP_EXTENSION);
+        let restore_path = temporary_database_path("restore");
+        let _ = remove_database_files(&source_path);
+        let _ = remove_database_files(&backup_path);
+        let _ = remove_database_files(&restore_path);
+
+        let source = Connection::open(&source_path).expect("open source database");
+        source
+            .execute_batch(include_str!("../db/schema.sql"))
+            .expect("initialize source schema");
+        source
+            .pragma_update(None, "journal_mode", "WAL")
+            .expect("enable WAL mode");
+        source
+            .execute(
+                "INSERT INTO onemail_app_settings
+                 (setting_key,setting_value,value_type) VALUES ('backup_test','from_wal','string')",
+                [],
+            )
+            .expect("write committed WAL data");
+        let mut destination = Connection::open(&backup_path).expect("open backup database");
+        {
+            let backup = Backup::new(&source, &mut destination).expect("create online backup");
+            backup
+                .run_to_completion(64, Duration::ZERO, None)
+                .expect("copy source pages");
+        }
+        finalize_native_backup(&destination, &key, exported_at).expect("finalize native backup");
+        drop(destination);
+        drop(source);
+
+        let info = validate_native_backup(&backup_path).expect("validate native backup");
+        assert_eq!(info.key, key);
+        assert_eq!(info.exported_at, exported_at);
+        let backup = open_native_backup(&backup_path).expect("reopen native backup");
+        let wal_value: String = backup
+            .query_row(
+                "SELECT setting_value FROM onemail_app_settings WHERE setting_key='backup_test'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("read copied WAL data");
+        assert_eq!(wal_value, "from_wal");
+        drop(backup);
+
+        let source = open_native_backup(&backup_path).expect("open native backup for restore");
+        let mut restored = Connection::open(&restore_path).expect("open restore database");
+        {
+            let backup = Backup::new(&source, &mut restored).expect("create restore backup");
+            backup
+                .run_to_completion(64, Duration::ZERO, None)
+                .expect("restore native pages");
+        }
+        restored
+            .execute_batch(
+                "DROP TABLE onemail_backup_metadata;
+                 PRAGMA journal_mode=DELETE;",
+            )
+            .expect("remove backup-only metadata");
+        validate_database_integrity(&restored).expect("validate restored database");
+        validate_required_schema(&restored).expect("validate restored schema");
+        drop(restored);
+        drop(source);
+
+        remove_database_files(&source_path).expect("remove source database");
+        remove_database_files(&backup_path).expect("remove backup database");
+        remove_database_files(&restore_path).expect("remove restore database");
+    }
+
+    fn temporary_database_path(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "onemail-backup-test-{label}-{}-{}.sqlite",
+            std::process::id(),
+            unix_timestamp()
+        ))
+    }
 }

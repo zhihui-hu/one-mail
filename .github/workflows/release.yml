@@ -5,58 +5,53 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build (for example, v26.731.1200)
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
   cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
   build:
-    name: Build ${{ matrix.target }}
+    name: Build ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    env:
-      TZ: Asia/Shanghai
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            target: mac
-            build_args: --mac
-          - os: windows-latest
-            target: win
-            build_args: --win
-          - os: ubuntu-latest
-            target: linux
-            build_args: --linux AppImage deb
+          - name: macOS arm64
+            os: macos-15
+            target: aarch64-apple-darwin
+          - name: macOS x64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+          - name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - name: Linux x64
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set timezone (Linux)
-        if: runner.os == 'Linux'
-        shell: bash
-        run: sudo timedatectl set-timezone Asia/Shanghai
-
-      - name: Set timezone (macOS)
-        if: runner.os == 'macOS'
-        shell: bash
-        run: sudo systemsetup -settimezone Asia/Shanghai
-
-      - name: Set timezone (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          tzutil /s "China Standard Time"
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
+          version: 10.34.1
           run_install: false
 
       - name: Setup Node.js
@@ -66,12 +61,38 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: Install dependencies
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libappindicator3-dev \
+            libayatana-appindicator3-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            librsvg2-dev \
+            patchelf \
+            xdg-utils
+
+      - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build and publish
-        run: |
-          pnpm run build
-          pnpm exec electron-builder ${{ matrix.build_args }} --publish always
+      - name: Build and publish Tauri bundles
+        uses: tauri-apps/tauri-action@v1
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: .
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: OneMail ${{ env.RELEASE_TAG }}
+          releaseBody: Download the installer for your operating system and architecture.
+          releaseDraft: false
+          prerelease: false
+          args: --target ${{ matrix.target }}

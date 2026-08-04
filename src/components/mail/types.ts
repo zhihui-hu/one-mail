@@ -1,3 +1,5 @@
+import type { AccountConnectionStatus } from '@renderer/shared/types'
+
 export type MailFilterTag = 'unread' | 'starred' | 'today' | 'yesterday' | 'last7'
 
 export type Account = {
@@ -10,6 +12,7 @@ export type Account = {
   unread: number
   messageCount?: number
   status: string
+  connectionStatus?: AccountConnectionStatus
   credentialState?: string
   lastError?: string
   accent: string

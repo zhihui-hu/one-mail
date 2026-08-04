@@ -439,7 +439,7 @@ export async function saveComposedDraft(input: SendMessageInput): Promise<Outbox
 
 export async function loadOutboxMessages(): Promise<OutboxMessage[]> {
   const messages = await window.api.compose.listOutbox({
-    statuses: ['draft', 'failed', 'sending'],
+    statuses: ['draft', 'failed', 'sending', 'sent'],
     limit: 100
   })
   return messages.map(toUiOutboxMessage)
@@ -526,6 +526,7 @@ function toAccountList(accounts: MailAccount[], accountStats: AccountMailboxStat
       messageCount: stats?.totalCount ?? 0,
       credentialState: account.credentialState,
       status: account.status,
+      connectionStatus: account.connectionStatus ?? 'connected',
       lastError: account.lastError,
       accent: account.syncEnabled ? 'bg-muted-foreground' : 'bg-muted'
     }

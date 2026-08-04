@@ -1,4 +1,4 @@
-import { CheckCircle2, DatabaseBackup, Download, LoaderCircle, XCircle } from 'lucide-react'
+import { CheckCircle2, DatabaseBackup, Download, XCircle } from 'lucide-react'
 import * as React from 'react'
 
 import {
@@ -8,6 +8,7 @@ import {
 } from '@renderer/pages/mailbox/api'
 import { createBackupSyncDraft } from '@renderer/components/backup/backup-sync-draft'
 import { BackupSyncFields } from '@renderer/components/backup/backup-sync-fields'
+import { SweepShine } from '@renderer/components/sweep-shine'
 import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -290,28 +291,28 @@ function ImportProgressView({
   const activeStage = progress?.stage ?? stages[0]
   const activeIndex = Math.max(stages.indexOf(activeStage), 0)
   const completed = activeStage === 'completed'
-  const StatusIcon = completed ? CheckCircle2 : LoaderCircle
+  const StatusIcon = completed ? CheckCircle2 : DatabaseBackup
 
   return (
     <div className="flex flex-col gap-2.5 rounded-md border bg-card p-2.5">
       <div className="flex items-center gap-2">
-        <div
-          className={cn(
-            'flex size-6 shrink-0 items-center justify-center rounded-md bg-muted',
-            completed ? 'text-primary' : 'text-muted-foreground'
-          )}
-        >
-          <StatusIcon
-            className={cn('size-4', completed ? '' : 'animate-spin')}
-            aria-hidden="true"
-          />
+        <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-primary">
+          <StatusIcon className="size-4" aria-hidden="true" />
         </div>
         <div className="min-w-0">
           <div className="truncate text-sm font-medium">
-            {completed ? t('settings.backup.importStageCompleted') : t('settings.backup.importing')}
+            {completed ? (
+              t('settings.backup.importStageCompleted')
+            ) : (
+              <SweepShine>{t('settings.backup.importing')}</SweepShine>
+            )}
           </div>
           <div className="truncate text-xs text-muted-foreground">
-            {t(getImportStageLabelKey(activeStage))}
+            {completed ? (
+              t(getImportStageLabelKey(activeStage))
+            ) : (
+              <SweepShine>{t(getImportStageLabelKey(activeStage))}</SweepShine>
+            )}
           </div>
         </div>
       </div>
@@ -330,10 +331,7 @@ function ImportProgressView({
             {index < activeIndex || activeStage === 'completed' ? (
               <CheckCircle2 className="size-4 text-primary" aria-hidden="true" />
             ) : index === activeIndex ? (
-              <LoaderCircle
-                className="size-4 animate-spin text-muted-foreground"
-                aria-hidden="true"
-              />
+              <DatabaseBackup className="size-4 text-primary" aria-hidden="true" />
             ) : (
               <span className="size-3.5 rounded-full border" aria-hidden="true" />
             )}
@@ -463,7 +461,7 @@ function resolveRemoteImportSettings(
 function formatBackupImportSource(source: BackupImportDialogSource | BackupImportSource): string {
   if (source === 'webdav') return 'WebDAV'
   if (source === 's3') return 'S3'
-  return 'SQL'
+  return 'OneMail'
 }
 
 function getImportStageLabelKey(stage: BackupImportStage): TranslationKey {

@@ -1,8 +1,9 @@
 import * as React from 'react'
-import { Loader2, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 
 import type { Message } from '@renderer/components/mail/types'
 import { getDisplaySubject } from '@renderer/components/mail/mail-display'
+import { SweepShine } from '@renderer/components/sweep-shine'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,11 +51,7 @@ export function DeleteMessageDialog({
       <AlertDialogContent size="sm" className="sm:max-w-[360px]">
         <AlertDialogHeader className="gap-2">
           <AlertDialogMedia className="bg-destructive/10 text-destructive ring-1 ring-destructive/20">
-            {pending ? (
-              <Loader2 className="animate-spin" aria-hidden="true" />
-            ) : (
-              <Trash2 aria-hidden="true" />
-            )}
+            <Trash2 aria-hidden="true" />
           </AlertDialogMedia>
           <AlertDialogTitle className="font-semibold">{t('mail.delete.title')}</AlertDialogTitle>
           <AlertDialogDescription className="leading-5">
@@ -77,7 +74,11 @@ export function DeleteMessageDialog({
               onConfirm()
             }}
           >
-            {pending ? t('common.deleting') : t('mail.selection.deletePermanently')}
+            {pending ? (
+              <SweepShine>{t('common.deleting')}</SweepShine>
+            ) : (
+              t('mail.selection.deletePermanently')
+            )}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

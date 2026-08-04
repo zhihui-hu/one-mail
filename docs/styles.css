@@ -1,0 +1,158 @@
+:root {
+  color-scheme: light;
+  --text: #111827;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --primary: #2563eb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 24px;
+  color: var(--text);
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  line-height: 1.5;
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+}
+
+header,
+footer,
+section {
+  padding: 24px 0;
+}
+
+header,
+footer,
+[data-platform],
+p:has(a) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+header {
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+}
+
+header a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: inherit;
+  font-weight: 700;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+header img {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.logo {
+  width: 96px;
+  border-radius: 20px;
+}
+
+button,
+.primary {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px 12px;
+  color: inherit;
+  font: inherit;
+}
+
+.primary {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+h1 {
+  max-width: 720px;
+  margin: 8px 0 16px;
+  font-size: 48px;
+  line-height: 1.05;
+}
+
+h2 {
+  margin: 0 0 16px;
+  font-size: 28px;
+}
+
+p {
+  max-width: 680px;
+  color: var(--muted);
+}
+
+[data-platform] {
+  justify-content: space-between;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+
+[data-recommended] strong::after {
+  content: ' recommended';
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+html[lang='zh-CN'] [data-recommended] strong::after {
+  content: ' 推荐';
+}
+
+[data-assets] {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+footer {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+@media (max-width: 560px) {
+  body {
+    padding: 16px;
+  }
+
+  h1 {
+    font-size: 36px;
+  }
+
+  [data-platform] {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

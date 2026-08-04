@@ -32,7 +32,7 @@ const dateFilters: Array<{
 
 const dateFilterValues = dateFilters.map((filter) => filter.value)
 const filterBadgeClassName =
-  'h-6 rounded-full px-2.5 py-0 text-[11px] leading-none font-medium [&_svg:not([class*=size-])]:size-3'
+  'h-8 min-w-0 rounded-lg border-0 bg-muted/75 px-2 py-0 text-[11px] leading-none font-medium shadow-none hover:bg-muted data-[state=on]:bg-foreground data-[state=on]:text-background [&_svg:not([class*=size-])]:size-3.5'
 
 export function MailFilterTags({
   value,
@@ -48,7 +48,7 @@ export function MailFilterTags({
 
   return (
     <div
-      className="flex w-full flex-wrap items-center justify-start gap-1.5"
+      className="flex w-full items-center gap-1.5"
       aria-label={t('mail.filter.region')}
     >
       <ToggleGroup
@@ -60,7 +60,7 @@ export function MailFilterTags({
             ...getDateFilters(value)
           ])
         }
-        className="flex flex-wrap justify-start gap-1.5"
+        className="grid min-w-0 flex-[2] grid-cols-2 gap-1.5"
         aria-label={t('mail.filter.status')}
       >
         {quickFilters.map((filter) => {
@@ -86,7 +86,8 @@ export function MailFilterTags({
           className={cn(
             'inline-flex shrink-0 items-center justify-center gap-1 border border-border bg-background text-foreground whitespace-nowrap outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:shrink-0',
             filterBadgeClassName,
-            dateFilter && 'border-transparent bg-primary text-primary-foreground hover:bg-primary/90'
+            'min-w-0 flex-1',
+            dateFilter && 'border-transparent bg-foreground text-background hover:bg-foreground/90'
           )}
           aria-label={t('mail.filter.date')}
         >

@@ -58,7 +58,7 @@ import { useI18n } from '@renderer/lib/i18n'
 import type { MailAttachmentInput } from '@renderer/shared/types'
 
 const COMPOSER_ADDRESS_FIELD_CLASS =
-  'min-h-10 items-center gap-3 border-b px-4 py-1.5 *:data-[slot=field-label]:flex-none'
+  'min-h-9 items-center gap-2 border-b px-3 py-1 *:data-[slot=field-label]:flex-none'
 const COMPOSER_TEXT_ALIGNMENTS = ['left', 'center', 'right'] as const
 
 type ComposerTextAlign = (typeof COMPOSER_TEXT_ALIGNMENTS)[number]
@@ -255,13 +255,13 @@ export function MailComposer({
         aria-modal="false"
         aria-labelledby="mail-composer-title"
         className={cn(
-          'app-no-drag fixed right-4 bottom-9 flex max-h-[calc(100vh-5rem)] w-[min(calc(100vw-2rem),38rem)] flex-col overflow-hidden rounded-t-lg border bg-background shadow-2xl',
+          'app-no-drag fixed right-5 bottom-5 z-40 flex max-h-[calc(100vh-3rem)] w-[min(calc(100vw-2rem),38rem)] flex-col overflow-hidden rounded-xl border border-black/10 bg-background shadow-[0_24px_70px_rgb(0_0_0/0.28)] dark:border-white/12',
           expanded &&
-            'top-10 bottom-10 w-[min(calc(100vw-2rem),56rem)] sm:right-8 sm:w-[min(calc(100vw-4rem),56rem)]'
+            'top-8 bottom-8 w-[min(calc(100vw-2rem),56rem)] sm:right-8 sm:w-[min(calc(100vw-4rem),56rem)]'
         )}
       >
-        <header className="flex h-10 shrink-0 items-center justify-between gap-3 bg-muted px-3 text-foreground">
-          <div id="mail-composer-title" className="min-w-0 truncate text-sm font-medium">
+        <header className="flex h-9 shrink-0 items-center justify-between gap-3 border-b bg-muted/45 px-3 text-foreground">
+          <div id="mail-composer-title" className="min-w-0 truncate text-xs font-semibold">
             {t('mail.composer.newMessage')}
           </div>
           <div className="flex items-center gap-1">
@@ -367,7 +367,7 @@ export function MailComposer({
                 />
               </Field>
             ) : null}
-            <Field className="min-h-10 border-b px-4 py-1.5">
+            <Field className="min-h-9 border-b px-3 py-1">
               <Input
                 id="composer-subject"
                 value={form.subject}
@@ -386,8 +386,8 @@ export function MailComposer({
               onChange={(value) => updateForm(value)}
             />
             {form.attachments.length > 0 ? (
-              <div className="border-t px-3 py-2">
-                <div className="mb-2 text-xs text-muted-foreground">
+              <div className="border-t bg-muted/15 px-3 py-2">
+                <div className="mb-1.5 text-[11px] text-muted-foreground">
                   {t('mail.composer.attachmentsSummary', {
                     count: form.attachments.length,
                     size: formatAttachmentTotal(form.attachments)
@@ -397,7 +397,7 @@ export function MailComposer({
                   {form.attachments.map((attachment) => (
                     <div
                       key={getAttachmentKey(attachment)}
-                      className="flex min-h-9 items-center gap-2 rounded-md border px-2 text-xs"
+                      className="flex min-h-8 items-center gap-2 rounded-md border bg-background px-2 text-xs"
                     >
                       <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />
                       <span className="min-w-0 flex-1 truncate">
@@ -433,15 +433,15 @@ export function MailComposer({
               </div>
             ) : null}
             {unselectedForwardAttachments.length > 0 ? (
-              <div className="border-t px-3 py-2">
-                <div className="mb-2 text-xs text-muted-foreground">
+              <div className="border-t bg-muted/15 px-3 py-2">
+                <div className="mb-1.5 text-[11px] text-muted-foreground">
                   {t('mail.composer.originalAttachments')}
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {unselectedForwardAttachments.map((attachment) => (
                     <div
                       key={getAttachmentKey(attachment)}
-                      className="flex min-h-9 items-center gap-2 rounded-md border px-2 text-xs"
+                      className="flex min-h-8 items-center gap-2 rounded-md border bg-background px-2 text-xs"
                     >
                       <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />
                       <span className="min-w-0 flex-1 truncate">
@@ -471,10 +471,10 @@ export function MailComposer({
           </FieldGroup>
         </div>
 
-        <footer className="flex min-h-16 shrink-0 items-center justify-between gap-2 border-t px-4 py-3">
+        <footer className="flex min-h-12 shrink-0 items-center justify-between gap-2 border-t bg-muted/15 px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
             <Button
-              className="min-w-24 shrink-0"
+              className="h-8 min-w-20 shrink-0 rounded-lg"
               onClick={() => {
                 void handleSubmit('send')
               }}
@@ -529,7 +529,7 @@ function ComposerFieldLabel({
   return (
     <FieldLabel
       htmlFor={htmlFor}
-      className="w-14 shrink-0 justify-start text-left text-muted-foreground"
+      className="w-12 shrink-0 justify-start text-left text-xs text-muted-foreground"
     >
       {children}
     </FieldLabel>
@@ -554,7 +554,7 @@ function RecipientDisclosure({
   if (ccVisible && bccVisible) return null
 
   return (
-    <div className="flex shrink-0 items-center gap-2 text-sm">
+    <div className="flex shrink-0 items-center gap-1.5 text-xs">
       {!ccVisible ? (
         <button
           type="button"
@@ -617,7 +617,7 @@ function MailBodyEditor({
     editorProps: {
       attributes: {
         id: 'composer-body',
-        class: 'composer-body min-h-full px-3 py-3 outline-none break-words focus-visible:outline-none'
+        class: 'composer-body min-h-full px-4 py-3 outline-none break-words focus-visible:outline-none'
       }
     },
     onUpdate: ({ editor: currentEditor }) => {
@@ -641,11 +641,11 @@ function MailBodyEditor({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex min-h-10 shrink-0 items-center border-b bg-muted/30 px-3 py-1.5">
+      <div className="flex min-h-9 shrink-0 items-center border-b bg-muted/20 px-2.5 py-1">
         <EditorToolbar editor={editor} disabled={disabled} />
       </div>
       <div
-        className={cn('min-h-80 overflow-auto', expanded ? 'min-h-[28rem]' : 'max-h-[42vh]')}
+        className={cn('min-h-64 overflow-auto', expanded ? 'min-h-[28rem]' : 'max-h-[42vh]')}
         onClick={() => editor?.commands.focus()}
       >
         <EditorContent editor={editor} />
@@ -696,7 +696,7 @@ function EditorToolbar({
       >
         <Redo />
       </FormatButton>
-      <Separator orientation="vertical" className="mx-1 h-5" />
+      <Separator orientation="vertical" className="mx-0.5 h-4" />
       <FormatButton
         label={t('mail.composer.bold')}
         active={editor?.isActive('bold')}
@@ -733,7 +733,7 @@ function EditorToolbar({
       >
         <Strikethrough />
       </FormatButton>
-      <Separator orientation="vertical" className="mx-1 h-5" />
+      <Separator orientation="vertical" className="mx-0.5 h-4" />
       <FormatButton
         label={t('mail.composer.bulletList')}
         active={editor?.isActive('bulletList')}
@@ -752,7 +752,7 @@ function EditorToolbar({
       >
         <ListOrdered />
       </FormatButton>
-      <Separator orientation="vertical" className="mx-1 h-5" />
+      <Separator orientation="vertical" className="mx-0.5 h-4" />
       <FormatButton
         label={t('mail.composer.alignLeft')}
         active={isTextAlignActive(editor, 'left')}
@@ -780,7 +780,7 @@ function EditorToolbar({
       >
         <AlignRight />
       </FormatButton>
-      <Separator orientation="vertical" className="mx-1 h-5" />
+      <Separator orientation="vertical" className="mx-0.5 h-4" />
       <LinkFormatButton editor={editor} disabled={disabled} />
     </div>
   )
@@ -831,7 +831,7 @@ function LinkFormatButton({
         <Button
           type="button"
           variant={active ? 'secondary' : 'ghost'}
-          size="icon-sm"
+          size="icon-xs"
           aria-label={t('mail.composer.link')}
           aria-pressed={active}
           disabled={unavailable}
@@ -901,7 +901,7 @@ function ComposerToolButton({
         <Button
           type="button"
           variant={active ? 'secondary' : 'ghost'}
-          size="icon-sm"
+          size="icon-xs"
           aria-label={label}
           aria-pressed={active}
           disabled={disabled}
@@ -937,7 +937,7 @@ function FormatButton({
         <Button
           type="button"
           variant={active ? 'secondary' : 'ghost'}
-          size="icon-sm"
+          size="icon-xs"
           aria-label={label}
           aria-pressed={active}
           disabled={disabled}

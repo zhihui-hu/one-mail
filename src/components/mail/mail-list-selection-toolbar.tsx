@@ -31,37 +31,49 @@ export function MailListSelectionToolbar({
   const { t } = useI18n()
 
   return (
-    <div className="app-no-drag flex min-h-10 items-center gap-2 border-t px-4 py-2">
-      <Checkbox
-        checked={allVisibleSelected ? true : someVisibleSelected ? 'indeterminate' : false}
+    <div className="app-no-drag absolute bottom-4 left-1/2 z-30 flex h-14 max-w-[calc(100%_-_24px)] -translate-x-1/2 items-center gap-1.5 rounded-2xl border border-black/10 bg-background/95 px-2.5 shadow-[0_16px_36px_rgb(0_0_0/0.18),0_2px_8px_rgb(0_0_0/0.08)] backdrop-blur-xl dark:border-white/12">
+      <label className="flex h-9 shrink-0 cursor-pointer items-center gap-2 rounded-xl border bg-muted/35 px-3 text-sm font-semibold shadow-xs">
+        <Checkbox
+          checked={allVisibleSelected ? true : someVisibleSelected ? 'indeterminate' : false}
+          disabled={disabled}
+          aria-label={t('mail.selection.selectVisible')}
+          onCheckedChange={onSelectAllVisible}
+        />
+        <span className="whitespace-nowrap">
+          {t('mail.selection.selectedCount', { count: selectedCount })}
+        </span>
+      </label>
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        className="rounded-xl"
         disabled={disabled}
-        aria-label={t('mail.selection.selectVisible')}
-        onCheckedChange={onSelectAllVisible}
-      />
-      <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-        {t('mail.selection.selectedCount', { count: selectedCount })}
-      </span>
+        aria-label={t('mail.selection.clear')}
+        onClick={onClearSelection}
+      >
+        <X aria-hidden="true" />
+      </Button>
+      <span className="mx-1 h-7 w-px shrink-0 bg-border" aria-hidden="true" />
       <Button
         size="sm"
         variant="outline"
+        className="h-9 shrink-0 rounded-xl px-3 shadow-xs"
         disabled={disabled || unreadSelectedCount === 0}
         onClick={onMarkSelectedRead}
       >
         <CheckCheck data-icon="inline-start" />
         {t('mail.selection.markRead')}
       </Button>
-      <Button size="sm" variant="outline" disabled={disabled} onClick={onDeleteSelected}>
-        <Trash2 data-icon="inline-start" />
-        {t('mail.selection.deletePermanently')}
-      </Button>
       <Button
         size="icon-sm"
         variant="ghost"
+        className="rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive"
         disabled={disabled}
-        aria-label={t('mail.selection.clear')}
-        onClick={onClearSelection}
+        aria-label={t('mail.selection.deletePermanently')}
+        title={t('mail.selection.deletePermanently')}
+        onClick={onDeleteSelected}
       >
-        <X aria-hidden="true" />
+        <Trash2 aria-hidden="true" />
       </Button>
     </div>
   )

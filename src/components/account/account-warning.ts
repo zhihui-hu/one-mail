@@ -27,7 +27,9 @@ export function getAccountWarning(account: Account, t: Translate): AccountWarnin
   const lastError = account.lastError?.trim()
   const isOAuthAccount = account.authType === 'oauth2'
   const needsOAuthReauthorization =
-    isOAuthAccount && lastError ? isMicrosoftReauthorizationError(lastError) : false
+    isOAuthAccount &&
+    (account.connectionStatus === 'reauthorize' ||
+      (lastError ? isMicrosoftReauthorizationError(lastError) : false))
 
   if (status === 'syncing') return null
 
@@ -55,7 +57,7 @@ export function getAccountWarning(account: Account, t: Translate): AccountWarnin
     CREDENTIAL_WARNING_STATES.has(credentialState ?? '') ||
     needsOAuthReauthorization
   ) {
-    const message = getCredentialWarningMessage(isOAuthAccount, t, lastError)
+    const message = getCredentialWarningMessage(isOAuthAccount, account.providerKey, t, lastError)
     const primaryAction = isOAuthAccount ? 'reauthorize' : 'edit'
 
     return withTooltip(t, {
@@ -71,11 +73,7 @@ export function getAccountWarning(account: Account, t: Translate): AccountWarnin
       secondaryAction: 'retry',
       secondaryLabel: t('account.warning.resync'),
       steps: isOAuthAccount
-        ? [
-            t('account.warning.oauthStep1'),
-            t('account.warning.oauthStep2'),
-            t('account.warning.oauthStep3')
-          ]
+        ? getOAuthWarningSteps(account.providerKey, t)
         : [
             t('account.warning.credentialStep1'),
             t('account.warning.credentialStep2'),
@@ -134,14 +132,38 @@ export function getAccountWarning(account: Account, t: Translate): AccountWarnin
   return null
 }
 
+function getOAuthWarningSteps(
+  providerKey: string | undefined,
+  t: Translate
+): string[] {
+  if (providerKey === 'gmail' || providerKey === 'google') {
+    return [
+      t('account.warning.googleStep1'),
+      t('account.warning.googleStep2'),
+      t('account.warning.googleStep3')
+    ]
+  }
+
+  return [
+    t('account.warning.oauthStep1'),
+    t('account.warning.oauthStep2'),
+    t('account.warning.oauthStep3')
+  ]
+}
+
 function getCredentialWarningMessage(
   isOAuthAccount: boolean,
+  providerKey: string | undefined,
   t: Translate,
   lastError?: string
 ): string {
   if (!isOAuthAccount) return lastError || t('account.warning.credentialMessage')
 
-  if (!lastError) return t('account.warning.oauthMissingMessage')
+  if (!lastError) {
+    return providerKey === 'gmail' || providerKey === 'google'
+      ? t('account.warning.googleMissingMessage')
+      : t('account.warning.oauthMissingMessage')
+  }
 
   if (isMicrosoftReauthorizationError(lastError)) {
     return t('account.warning.oauthScopeMessage')

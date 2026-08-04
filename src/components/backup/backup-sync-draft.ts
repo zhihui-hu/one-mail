@@ -18,7 +18,7 @@ export function createBackupSyncDraft(
           endpoint: '',
           region: 'us-east-1',
           bucket: '',
-          key: 'onemail-backup.sql',
+          key: 'onemail-backup.onemail',
           accessKeyId: ''
         }
   }

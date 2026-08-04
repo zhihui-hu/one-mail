@@ -3,14 +3,22 @@ import {
   AlertTriangle,
   ChevronRight,
   Edit3,
-  MailWarning,
-  Pencil,
+  Inbox,
   Plus,
   RefreshCw,
   Trash2
 } from 'lucide-react'
+import alibabaCloudIcon from 'simple-icons/icons/alibabacloud.svg?raw'
+import gmailIcon from 'simple-icons/icons/gmail.svg?raw'
+import icloudIcon from 'simple-icons/icons/icloud.svg?raw'
+import mailRuIcon from 'simple-icons/icons/maildotru.svg?raw'
+import qqIcon from 'simple-icons/icons/qq.svg?raw'
+import sinaWeiboIcon from 'simple-icons/icons/sinaweibo.svg?raw'
 
+import microsoftOutlookIcon from '@renderer/assets/provider-icons/microsoft-outlook.png'
+import neteaseMailIcon from '@renderer/assets/provider-icons/netease-mail.png'
 import type { Account } from '@renderer/components/mail/types'
+import { SweepShine } from '@renderer/components/sweep-shine'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -21,10 +29,7 @@ import {
   ContextMenuTrigger
 } from '@renderer/components/ui/context-menu'
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
+  TooltipProvider
 } from '@renderer/components/ui/tooltip'
 import { useI18n, type TranslationKey } from '@renderer/lib/i18n'
 import { cn } from '@renderer/lib/utils'
@@ -32,19 +37,14 @@ import {
   getProviderLogoMetadata,
   normalizeProviderKey
 } from '@renderer/shared/provider-metadata'
-import oneMailIcon from '../../assets/onemail-icon.png'
+import { AccountStatusIndicator } from './account-status-indicator'
 import { getAccountWarning } from './account-warning'
 
 type AccountListProps = {
   accounts: Account[]
   selectedAccountId: string
   syncingAccountIds: Set<string>
-  actionsDisabled: boolean
-  composePending: boolean
-  outboxPending: boolean
   onSelectAccount: (accountId: string) => void
-  onCompose: () => void
-  onOpenOutbox: () => void
   onRefreshAccount: (account: Account) => void
   onEditAccount: (account: Account) => void
   onDeleteAccount: (account: Account) => void
@@ -61,12 +61,7 @@ export function AccountList({
   accounts,
   selectedAccountId,
   syncingAccountIds,
-  actionsDisabled,
-  composePending,
-  outboxPending,
   onSelectAccount,
-  onCompose,
-  onOpenOutbox,
   onRefreshAccount,
   onEditAccount,
   onDeleteAccount,
@@ -93,51 +88,26 @@ export function AccountList({
   }
 
   return (
-    <aside className="flex h-full min-w-0 flex-col bg-card/60 text-xs text-foreground">
-      <div className="shrink-0 border-b px-2 py-2">
-        <TooltipProvider>
-          <div className="flex items-center gap-1.5">
-            <Button
-              className="min-w-0 flex-1"
-              size="sm"
-              aria-label={t('account.list.compose')}
-              disabled={actionsDisabled || composePending}
-              onClick={onCompose}
-            >
-              <Pencil data-icon="inline-start" />
-              {t('account.list.compose')}
-            </Button>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label={t('account.list.outbox')}
-                  disabled={actionsDisabled || outboxPending}
-                  onClick={onOpenOutbox}
-                >
-                  <MailWarning aria-hidden="true" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">{t('account.list.outbox')}</TooltipContent>
-            </Tooltip>
-          </div>
-        </TooltipProvider>
-      </div>
+    <aside className="native-sidebar flex min-h-0 min-w-0 flex-1 flex-col text-xs text-foreground">
       <div className="min-h-0 flex-1 overflow-auto px-1.5 py-1.5">
         <TooltipProvider>
           <div className="flex flex-col gap-0.5">
             {allAccount ? (
-              <AccountRow
-                account={allAccount}
-                selected={selectedAccountId === allAccount.id}
-                syncing={syncingAccountIds.has(allAccount.id)}
-                onClick={() => onSelectAccount(allAccount.id)}
-                onRefresh={() => onRefreshAccount(allAccount)}
-                onEdit={() => undefined}
-                onDelete={() => undefined}
-                onResolveWarning={() => onResolveAccountWarning(allAccount)}
-              />
+              <section className="mb-1">
+                <div className="px-2 pb-1 pt-1 text-[11px] font-semibold text-muted-foreground/80">
+                  {t('account.all.address')}
+                </div>
+                <AccountRow
+                  account={allAccount}
+                  selected={selectedAccountId === allAccount.id}
+                  syncing={syncingAccountIds.has(allAccount.id)}
+                  onClick={() => onSelectAccount(allAccount.id)}
+                  onRefresh={() => onRefreshAccount(allAccount)}
+                  onEdit={() => undefined}
+                  onDelete={() => undefined}
+                  onResolveWarning={() => onResolveAccountWarning(allAccount)}
+                />
+              </section>
             ) : null}
             {groups.length > 0 ? (
               groups.map((group) => {
@@ -147,7 +117,7 @@ export function AccountList({
                   <section key={group.key}>
                     <button
                       type="button"
-                      className="flex h-6 w-full items-center gap-1 rounded-md px-1.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="flex h-7 w-full items-center gap-1 rounded-md px-1.5 text-left text-[11px] font-semibold text-muted-foreground/80 outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       onClick={() => toggleGroup(group.key)}
                     >
                       <ChevronRight
@@ -208,32 +178,31 @@ function AccountRow({
   const { t } = useI18n()
   const canModify = Boolean(account.accountId)
   const warning = getAccountWarning(account, t)
+  const connectionStatus = account.id === 'all' ? undefined : account.connectionStatus ?? 'connected'
   const handleSelect = warning ? onResolveWarning : onClick
   const rowContent = (
     <div
       className={cn(
-        'group grid h-7 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-0.5 rounded-md px-1.5 transition-colors hover:bg-muted focus-within:ring-2 focus-within:ring-ring',
-        selected && 'bg-secondary text-secondary-foreground'
+        'group grid h-8 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-0.5 rounded-md px-2 transition-colors hover:bg-white/45 focus-within:ring-2 focus-within:ring-ring dark:hover:bg-white/8',
+        selected &&
+          'bg-primary/15 text-foreground shadow-[inset_0_0_0_1px_rgb(0_0_0/0.025)]'
       )}
     >
       <button
         type="button"
         onClick={handleSelect}
         className={cn(
-          'grid min-w-0 grid-cols-[24px_minmax(0,1fr)] items-center gap-0.5 text-left outline-none',
-          warning && 'text-warning-foreground'
+          'grid min-w-0 grid-cols-[24px_minmax(0,1fr)] items-center gap-1 text-left outline-none',
+          warning && 'text-warning'
         )}
       >
         <ProviderLogo account={account} selected={selected} warning={Boolean(warning)} />
-        <span className="flex min-w-0 items-center gap-1">
-          <span className="truncate font-medium">{getAccountDisplayName(account, t)}</span>
-          {warning ? (
-            <AlertTriangle
-              className="size-3.5 shrink-0 text-warning-foreground"
-              aria-hidden="true"
-              strokeWidth={2}
-            />
-          ) : null}
+        <span className="min-w-0 truncate font-medium">
+          {syncing ? (
+            <SweepShine>{getAccountDisplayName(account, t)}</SweepShine>
+          ) : (
+            getAccountDisplayName(account, t)
+          )}
         </span>
       </button>
       <span className="flex min-w-5 items-center justify-end gap-1">
@@ -241,7 +210,7 @@ function AccountRow({
           <Badge
             variant="secondary"
             className={cn(
-              'h-4 min-w-4 rounded-full px-1 text-[10px] group-hover:hidden',
+              'h-[18px] min-w-[18px] rounded-full border-0 bg-black/7 px-1.5 text-[10px] tabular-nums text-foreground/75 shadow-none group-hover:hidden dark:bg-white/10',
               syncing && 'hidden'
             )}
           >
@@ -252,7 +221,7 @@ function AccountRow({
           type="button"
           aria-label={t('account.list.refreshAccount')}
           className={cn(
-            'hidden size-5 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-background hover:text-foreground focus-visible:inline-flex focus-visible:ring-2 focus-visible:ring-ring group-hover:inline-flex [&_svg]:size-3',
+            'hidden size-5 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-white/60 hover:text-foreground focus-visible:inline-flex focus-visible:ring-2 focus-visible:ring-ring group-hover:inline-flex dark:hover:bg-white/10 [&_svg]:size-3',
             syncing && 'inline-flex'
           )}
           onClick={(event) => {
@@ -260,24 +229,20 @@ function AccountRow({
             onRefresh()
           }}
         >
-          <RefreshCw className={cn(syncing && 'animate-spin')} aria-hidden="true" strokeWidth={2} />
+          <RefreshCw aria-hidden="true" strokeWidth={2} />
         </button>
+        <AccountStatusIndicator
+          status={connectionStatus}
+          warning={Boolean(warning)}
+          warningTooltip={warning?.tooltip}
+        />
       </span>
     </div>
   )
 
   return (
     <ContextMenu>
-      {warning ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <ContextMenuTrigger asChild>{rowContent}</ContextMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent side="right">{warning.tooltip}</TooltipContent>
-        </Tooltip>
-      ) : (
-        <ContextMenuTrigger asChild>{rowContent}</ContextMenuTrigger>
-      )}
+      <ContextMenuTrigger asChild>{rowContent}</ContextMenuTrigger>
       <ContextMenuContent className="w-36">
         <ContextMenuGroup>
           <ContextMenuItem onSelect={warning ? onResolveWarning : onRefresh}>
@@ -319,36 +284,22 @@ function ProviderLogo({
 }): React.JSX.Element {
   const isUnifiedInbox = account.id === 'all'
   const logo = getProviderLogoMetadata(account.providerKey, account.address)
-  const [src, setSrc] = React.useState<string | null>(null)
-
-  React.useEffect(() => {
-    if (isUnifiedInbox) return undefined
-
-    let cancelled = false
-    setSrc(null)
-
-    void window.api.logos.get(logo.domain).then((nextSrc) => {
-      if (!cancelled) setSrc(nextSrc)
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [logo.domain, isUnifiedInbox])
+  const providerKey = normalizeProviderKey(account.providerKey)
+  const imageIcon = PROVIDER_IMAGE_ICONS[providerKey]
 
   return (
     <span
       className={cn(
-        'flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-md bg-background text-muted-foreground [&_img]:size-4 [&_img]:object-contain [&_svg]:size-4',
-        isUnifiedInbox && 'bg-transparent [&_img]:size-5 [&_img]:rounded-md [&_img]:object-cover',
+        'flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white/55 text-muted-foreground shadow-[inset_0_0_0_1px_rgb(0_0_0/0.04)] dark:bg-white/8 [&_img]:size-4 [&_img]:object-contain [&_svg]:size-[17px]',
+        isUnifiedInbox && 'bg-transparent text-primary shadow-none',
         warning && 'text-warning-foreground',
-        selected && 'text-foreground'
+        selected && !isUnifiedInbox && 'text-foreground'
       )}
     >
       {isUnifiedInbox ? (
-        <img src={oneMailIcon} alt="" />
-      ) : src ? (
-        <img src={src} alt="" />
+        <Inbox aria-hidden="true" strokeWidth={1.8} />
+      ) : imageIcon ? (
+        <img src={imageIcon} alt="" aria-hidden="true" />
       ) : (
         <span className="text-[10px] font-semibold leading-none" aria-hidden="true">
           {logo.fallback}
@@ -356,6 +307,23 @@ function ProviderLogo({
       )}
     </span>
   )
+}
+
+const PROVIDER_IMAGE_ICONS: Record<string, string | undefined> = {
+  gmail: createBrandIconUrl(gmailIcon, '#EA4335'),
+  qq: createBrandIconUrl(qqIcon, '#1EBAFC'),
+  aliyun: createBrandIconUrl(alibabaCloudIcon, '#FF6A00'),
+  aliyunEnterprise: createBrandIconUrl(alibabaCloudIcon, '#FF6A00'),
+  icloud: createBrandIconUrl(icloudIcon, '#3693F3'),
+  mailru: createBrandIconUrl(mailRuIcon, '#005FF9'),
+  sina: createBrandIconUrl(sinaWeiboIcon, '#E6162D'),
+  outlook: microsoftOutlookIcon,
+  '163': neteaseMailIcon
+}
+
+function createBrandIconUrl(source: string, color: string): string {
+  const coloredSource = source.replace('<svg ', `<svg fill="${color}" `)
+  return `data:image/svg+xml,${encodeURIComponent(coloredSource)}`
 }
 
 function getAccountDisplayName(account: Account, t: (key: TranslationKey) => string): string {

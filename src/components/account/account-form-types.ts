@@ -49,7 +49,7 @@ export const providerPresets: ProviderPreset[] = [
     kind: 'gmail',
     labelKey: 'account.provider.gmail',
     providerKey: 'gmail',
-    authType: 'app_password',
+    authType: 'oauth2',
     imapHost: 'imap.gmail.com',
     imapPort: 993,
     imapSecurity: 'ssl_tls',
@@ -360,7 +360,11 @@ export function createAccountSchema(t: (key: TranslationKey) => string) {
       imapSecurity: z.enum(['ssl_tls', 'starttls', 'none'])
     })
     .superRefine((value, context) => {
-      if (value.kind !== 'outlook' && !z.email().safeParse(value.email).success) {
+      if (
+        value.kind !== 'outlook' &&
+        value.authType !== 'oauth2' &&
+        !z.email().safeParse(value.email).success
+      ) {
         context.addIssue({
           code: 'custom',
           path: ['email'],
@@ -368,7 +372,7 @@ export function createAccountSchema(t: (key: TranslationKey) => string) {
         })
       }
 
-      if (value.kind !== 'outlook' && !value.password?.trim()) {
+      if (value.kind !== 'outlook' && value.authType !== 'oauth2' && !value.password?.trim()) {
         context.addIssue({
           code: 'custom',
           path: ['password'],
@@ -396,7 +400,7 @@ export const defaultAccountFormValues: AccountFormValues = {
   password: '',
   accountLabel: '',
   providerKey: 'gmail',
-  authType: 'app_password',
+  authType: 'oauth2',
   imapHost: 'imap.gmail.com',
   imapPort: 993,
   imapSecurity: 'ssl_tls'

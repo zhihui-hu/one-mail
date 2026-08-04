@@ -124,7 +124,7 @@ export function TitleBar({
     <header
       data-tauri-drag-region
       className={cn(
-        'app-titlebar app-drag-region flex h-10 shrink-0 items-center border-b bg-background',
+        'app-titlebar app-drag-region native-sidebar-titlebar flex h-12 shrink-0 items-center border-b border-black/5 dark:border-white/8',
         placeActionsOnLeft ? 'justify-start' : 'justify-end'
       )}
     >
@@ -159,7 +159,13 @@ function AddAccountButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline" size="icon-sm" aria-label={label} onClick={onClick}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="rounded-lg text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/8"
+          aria-label={label}
+          onClick={onClick}
+        >
           <Plus aria-hidden="true" />
         </Button>
       </TooltipTrigger>
@@ -178,7 +184,13 @@ function SettingsButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="outline" size="icon-sm" aria-label={label} onClick={onClick}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="rounded-lg text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/8"
+          aria-label={label}
+          onClick={onClick}
+        >
           <Settings aria-hidden="true" />
         </Button>
       </TooltipTrigger>
@@ -194,7 +206,6 @@ export function StatusBar({
   messageCount,
   syncNotice,
   updateStatus,
-  onRevealDatabase,
   onOpenVersion,
   onInstallUpdate
 }: {
@@ -204,7 +215,6 @@ export function StatusBar({
   messageCount: number
   syncNotice: SyncNotice
   updateStatus: AppUpdateStatus | null
-  onRevealDatabase: () => void
   onOpenVersion: () => void
   onInstallUpdate: () => void
 }): React.JSX.Element {
@@ -219,34 +229,24 @@ export function StatusBar({
       : hasUpdate
         ? t('status.openHomepageForUpdateGeneric')
         : t('status.openRepository')
-  const databasePath = systemInfo?.databasePath
-  const databaseLabel = databasePath ? getFileName(databasePath) : t('common.loading')
 
   return (
-    <footer className="app-drag-region flex h-7 shrink-0 items-center justify-between gap-3 border-t bg-muted/40 px-3 text-xs text-muted-foreground">
-      <button
-        type="button"
-        className="app-no-drag flex w-72 shrink-0 items-center gap-1 overflow-hidden text-left outline-none transition-colors hover:text-foreground focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-60"
-        onClick={onRevealDatabase}
-        title={databasePath}
-        aria-label={
-          databasePath
-            ? t('status.openDatabaseFolder', { name: databaseLabel })
-            : t('status.databaseLoading')
-        }
-        disabled={!databasePath}
-      >
-        <span className="shrink-0">{t('status.database')}</span>
-        <span className="min-w-0 truncate">{databaseLabel}</span>
-      </button>
-      <div className="app-no-drag flex shrink-0 items-center gap-2">
+    <footer className="app-drag-region native-statusbar flex h-7 shrink-0 items-center justify-end border-t px-2 text-[11px] text-muted-foreground">
+      <div className="app-no-drag flex min-w-0 items-center justify-end gap-1.5 overflow-hidden">
         {syncText ? (
-          <span className="max-w-80 truncate text-foreground" title={syncText}>
+          <span
+            className="flex min-w-0 items-center gap-1 truncate text-foreground"
+            title={syncText}
+          >
+            <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden="true" />
             {syncText}
           </span>
         ) : null}
         {updateText ? (
-          <span className="max-w-64 truncate text-foreground" title={updateText}>
+          <span
+            className="max-w-52 truncate rounded-sm bg-background/60 px-1.5 text-foreground"
+            title={updateText}
+          >
             {updateText}
           </span>
         ) : null}
@@ -256,9 +256,19 @@ export function StatusBar({
             {t('status.updateRestart')}
           </Button>
         ) : null}
-        <span>{t('status.accounts', { count: accountCount })}</span>
-        <span>{t('status.messages', { count: messageCount })}</span>
-        <span>{t('status.cacheDays', { days: settings?.syncWindowDays ?? 90 })}</span>
+        <span className="hidden shrink-0 sm:inline">
+          {t('status.accounts', { count: accountCount })}
+        </span>
+        <span className="hidden shrink-0 sm:inline" aria-hidden="true">
+          ·
+        </span>
+        <span className="shrink-0">{t('status.messages', { count: messageCount })}</span>
+        <span
+          className="hidden shrink-0 lg:inline"
+          title={t('status.cacheDays', { days: settings?.syncWindowDays ?? 90 })}
+        >
+          · {t('status.cacheDays', { days: settings?.syncWindowDays ?? 90 })}
+        </span>
         <button
           type="button"
           className={cn(
@@ -299,9 +309,4 @@ function formatUpdateStatus(
   if (status.state === 'unsupported') return t('status.updateUnsupported')
 
   return null
-}
-
-function getFileName(path: string): string {
-  const parts = path.split(/[\\/]/).filter(Boolean)
-  return parts.at(-1) ?? path
 }

@@ -5,7 +5,7 @@
   "identifier": "com.huzhihui.onemail",
   "build": {
     "beforeDevCommand": "pnpm dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:27502",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"
   },
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "OneMail",
+        "title": "",
         "width": 1180,
         "height": 760,
         "minWidth": 920,

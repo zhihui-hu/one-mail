@@ -2,6 +2,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import {
   BadgeInfo,
   CalendarRange,
+  ChevronRight,
+  Cloud,
   Clock3,
   DatabaseBackup,
   Download,
@@ -10,10 +12,9 @@ import {
   FolderOpen,
   KeyRound,
   Languages,
-  LoaderCircle,
   Power,
   RefreshCcw,
-  Save,
+  Server,
   ShieldCheck,
   Upload
 } from 'lucide-react'
@@ -34,9 +35,10 @@ import {
   BackupImportDialog,
   type BackupImportDialogSource
 } from '@renderer/components/backup/backup-import-dialog'
+import { BackupSyncConfigDialog } from '@renderer/components/backup/backup-sync-config-dialog'
 import { getBackupSyncSettingsKey } from '@renderer/components/backup/backup-sync-draft'
-import { BackupSyncFields } from '@renderer/components/backup/backup-sync-fields'
 import { ResponsiveDialog } from '@renderer/components/responsive-dialog'
+import { SweepShine } from '@renderer/components/sweep-shine'
 import { UnderlineHover } from '@renderer/components/underline-hover'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -57,7 +59,7 @@ import {
   SelectValue
 } from '@renderer/components/ui/select'
 import { Switch } from '@renderer/components/ui/switch'
-import { Alert, AlertDescription, AlertTitle } from '@renderer/components/ui/alert'
+import { Alert, AlertTitle } from '@renderer/components/ui/alert'
 import type {
   AppSettings,
   AppUpdateStatus,
@@ -68,7 +70,6 @@ import type {
   SettingsUpdateInput,
   SystemInfo
 } from '@renderer/shared/types'
-import { cn } from '@renderer/lib/utils'
 import { useI18n, type TranslationKey } from '@renderer/lib/i18n'
 import { ONEMAIL_HOMEPAGE_URL, hasAvailableUpdate } from '@renderer/lib/update-status'
 
@@ -240,6 +241,7 @@ export function SettingsDialog({
 
   React.useEffect(() => {
     if (!open || section !== 'backup') return
+    if (!('__TAURI_INTERNALS__' in window)) return
 
     let cancelled = false
     void loadBackupSyncSettings()
@@ -321,16 +323,16 @@ export function SettingsDialog({
     openBackupImportDialog('sql')
   }
 
-  async function handleSaveBackupSync(input: BackupSyncSettings): Promise<void> {
-    await runBackupAction('saveRemote', async () => {
+  async function handleSaveBackupSync(input: BackupSyncSettings): Promise<boolean> {
+    return runBackupAction('saveRemote', async () => {
       const nextSettings = await saveBackupSyncSettings(input)
       setBackupSyncSettings(nextSettings)
       setBackupMessage({ label: t('settings.backup.remoteSaved') })
     })
   }
 
-  async function handleTestBackupSync(input: BackupSyncSettings): Promise<void> {
-    await runBackupAction('testRemote', async () => {
+  async function handleTestBackupSync(input: BackupSyncSettings): Promise<boolean> {
+    return runBackupAction('testRemote', async () => {
       const result = await testBackupSyncSettings(input)
       setBackupMessage({
         label: t('settings.backup.remoteTested'),
@@ -388,15 +390,17 @@ export function SettingsDialog({
   async function runBackupAction(
     action: Exclude<BackupPending, null>,
     task: () => Promise<void>
-  ): Promise<void> {
+  ): Promise<boolean> {
     setBackupPending(action)
     setBackupError(null)
     setBackupMessage(null)
 
     try {
       await task()
+      return true
     } catch (backupActionError) {
       setBackupError(getBackupActionErrorMessage(backupActionError, t))
+      return false
     } finally {
       setBackupPending(null)
     }
@@ -408,57 +412,64 @@ export function SettingsDialog({
         open={open}
         onOpenChange={handleOpenChange}
         title={t('settings.title')}
-        contentClassName="h-[min(560px,82vh)] grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-2xl"
-        headerClassName="shrink-0 border-b px-4 py-3 pr-12 [&_[data-slot=dialog-title]]:text-sm! [&_[data-slot=drawer-title]]:text-sm!"
+        contentClassName="h-[min(560px,90dvh)] grid-rows-[auto_auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-lg p-0 sm:h-[min(500px,86vh)] sm:max-w-[720px] md:grid-rows-[auto_minmax(0,1fr)]"
+        headerClassName="shrink-0 border-b bg-background px-4 py-2.5 pr-12 [&_[data-slot=dialog-title]]:text-sm! [&_[data-slot=drawer-title]]:text-sm!"
         bodyClassName="h-full min-h-0 overflow-hidden"
       >
-        <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden md:grid-cols-[136px_minmax(0,1fr)] md:grid-rows-1">
-          <nav className="min-h-0 shrink-0 border-b bg-muted/30 p-1.5 md:border-r md:border-b-0 md:p-2">
-            <div className="flex gap-1 md:flex-col">
-              {sections.map((item) => {
-                const Icon = item.icon
-                const active = section === item.value
-
-                return (
-                  <button
-                    key={item.value}
-                    type="button"
-                    className={cn(
-                      'flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-left text-xs outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring md:w-full md:flex-none [&_svg]:size-3.5',
-                      active
-                        ? 'bg-background text-foreground shadow-xs'
-                        : 'text-muted-foreground hover:bg-background/70 hover:text-foreground'
-                    )}
-                    onClick={() => setSection(item.value)}
-                  >
-                    <Icon className="shrink-0" aria-hidden="true" />
-                    <span className="min-w-0 truncate font-medium">{t(item.labelKey)}</span>
-                  </button>
-                )
-              })}
-            </div>
+        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden md:grid-cols-[144px_minmax(0,1fr)] md:grid-rows-1">
+          <nav
+            className="flex shrink-0 gap-1 border-b bg-muted/40 p-2 md:h-full md:flex-col md:border-r md:border-b-0"
+            aria-label={t('settings.title')}
+          >
+            {sections.map((item) => {
+              const Icon = item.icon
+              const active = section === item.value
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  aria-current={active ? 'page' : undefined}
+                  className={`flex h-8 min-w-0 flex-1 items-center justify-center gap-2 rounded-md px-2 text-xs font-medium transition-colors md:flex-none md:justify-start ${
+                    active
+                      ? 'bg-background/95 text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/8'
+                      : 'text-muted-foreground hover:bg-background/60 hover:text-foreground'
+                  }`}
+                  onClick={() => setSection(item.value)}
+                >
+                  <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+                  <span className="truncate">{t(item.labelKey)}</span>
+                </button>
+              )
+            })}
           </nav>
 
-          <div className="h-full min-h-0 overflow-auto">
-            {section === 'general' ? (
-              <GeneralSettingsForm form={form} error={error} />
-            ) : section === 'backup' ? (
-              <BackupSettings
-                key={getBackupSyncSettingsKey(backupSyncSettings)}
-                pending={backupPending}
-                message={backupMessage}
-                error={backupError}
-                syncSettings={backupSyncSettings}
-                onExport={handleExport}
-                onImport={handleImport}
-                onSaveSync={handleSaveBackupSync}
-                onTestSync={handleTestBackupSync}
-                onUploadSync={handleUploadBackupSync}
-                onDownloadSync={handleDownloadBackupSync}
-              />
-            ) : (
-              <AboutSettings systemInfo={systemInfo} updateStatus={updateStatus} />
-            )}
+          <div className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] bg-muted/25">
+            <div className="flex h-10 items-center border-b bg-background/90 px-4">
+              <h2 className="text-sm font-semibold">
+                {t(sections.find((item) => item.value === section)?.labelKey ?? 'settings.general')}
+              </h2>
+            </div>
+            <div className="min-h-0 overflow-auto">
+              {section === 'general' ? (
+                <GeneralSettingsForm form={form} error={error} />
+              ) : section === 'backup' ? (
+                <BackupSettings
+                  key={getBackupSyncSettingsKey(backupSyncSettings)}
+                  pending={backupPending}
+                  message={backupMessage}
+                  error={backupError}
+                  syncSettings={backupSyncSettings}
+                  onExport={handleExport}
+                  onImport={handleImport}
+                  onSaveSync={handleSaveBackupSync}
+                  onTestSync={handleTestBackupSync}
+                  onUploadSync={handleUploadBackupSync}
+                  onDownloadSync={handleDownloadBackupSync}
+                />
+              ) : (
+                <AboutSettings systemInfo={systemInfo} updateStatus={updateStatus} />
+              )}
+            </div>
           </div>
         </div>
       </ResponsiveDialog>
@@ -488,120 +499,135 @@ function GeneralSettingsForm({
   const { t } = useI18n()
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-[540px] flex-col gap-3 p-3 sm:p-4">
-      <FieldGroup className="gap-2.5">
-        <Controller
-          control={form.control}
-          name="openAtLogin"
-          render={({ field }) => (
-            <SettingRow
-              icon={Power}
-              title={t('settings.openAtLogin.title')}
-              description={t('settings.openAtLogin.description')}
-              control={
-                <Switch
-                  id="open-at-login"
-                  size="sm"
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
-              }
-            />
-          )}
-        />
-
-        <SettingRow
-          icon={Clock3}
-          title={t('settings.syncInterval.title')}
-          description={t('settings.syncInterval.description')}
-          control={
-            <Input
-              id="sync-interval-minutes"
-              className="w-28"
-              type="number"
-              min={0}
-              max={1440}
-              aria-invalid={Boolean(form.formState.errors.syncIntervalMinutes)}
-              {...form.register('syncIntervalMinutes', { valueAsNumber: true })}
-            />
-          }
-          error={form.formState.errors.syncIntervalMinutes?.message}
-          invalid={Boolean(form.formState.errors.syncIntervalMinutes)}
-        />
-
-        <SettingRow
-          icon={CalendarRange}
-          title={t('settings.syncWindow.title')}
-          description={t('settings.syncWindow.description')}
-          control={
-            <Input
-              id="sync-window-days"
-              className="w-28"
-              type="number"
-              min={1}
-              max={3650}
-              aria-invalid={Boolean(form.formState.errors.syncWindowDays)}
-              {...form.register('syncWindowDays', { valueAsNumber: true })}
-            />
-          }
-          error={form.formState.errors.syncWindowDays?.message}
-          invalid={Boolean(form.formState.errors.syncWindowDays)}
-        />
-
-        <Controller
-          control={form.control}
-          name="externalImagesBlocked"
-          render={({ field }) => (
-            <SettingRow
-              icon={ShieldCheck}
-              title={t('settings.externalContent.title')}
-              description={t('settings.externalContent.description')}
-              control={
-                <Switch
-                  id="external-images-blocked"
-                  size="sm"
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
-              }
-            />
-          )}
-        />
-
-        <Controller
-          control={form.control}
-          name="locale"
-          render={({ field }) => (
-            <SettingRow
-              icon={Languages}
-              title={t('settings.locale.title')}
-              description={t('settings.locale.description')}
-              control={
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger
-                    id="locale"
+    <div className="flex min-h-full w-full flex-col gap-3 p-3 sm:p-4">
+      <SettingsGroup title={t('settings.group.application')}>
+        <FieldGroup className={SETTINGS_LIST_CLASS}>
+          <Controller
+            control={form.control}
+            name="openAtLogin"
+            render={({ field }) => (
+              <SettingRow
+                icon={Power}
+                iconClassName="bg-blue-500"
+                title={t('settings.openAtLogin.title')}
+                description={t('settings.openAtLogin.description')}
+                control={
+                  <Switch
+                    id="open-at-login"
                     size="sm"
-                    className="w-36"
-                    aria-invalid={Boolean(form.formState.errors.locale)}
-                  >
-                    <SelectValue placeholder={t('settings.locale.placeholder')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value="zh-CN">{t('settings.locale.zhCN')}</SelectItem>
-                      <SelectItem value="en-US">{t('settings.locale.enUS')}</SelectItem>
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-              }
-              error={form.formState.errors.locale?.message}
-              invalid={Boolean(form.formState.errors.locale)}
-            />
-          )}
-        />
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                }
+              />
+            )}
+          />
 
-        {error ? <FieldError>{error}</FieldError> : null}
-      </FieldGroup>
+          <Controller
+            control={form.control}
+            name="locale"
+            render={({ field }) => (
+              <SettingRow
+                icon={Languages}
+                iconClassName="bg-indigo-500"
+                title={t('settings.locale.title')}
+                description={t('settings.locale.description')}
+                control={
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger
+                      id="locale"
+                      size="sm"
+                      className="w-32"
+                      aria-invalid={Boolean(form.formState.errors.locale)}
+                    >
+                      <SelectValue placeholder={t('settings.locale.placeholder')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="zh-CN">{t('settings.locale.zhCN')}</SelectItem>
+                        <SelectItem value="en-US">{t('settings.locale.enUS')}</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                }
+                error={form.formState.errors.locale?.message}
+                invalid={Boolean(form.formState.errors.locale)}
+              />
+            )}
+          />
+        </FieldGroup>
+      </SettingsGroup>
+
+      <SettingsGroup title={t('settings.group.sync')}>
+        <FieldGroup className={SETTINGS_LIST_CLASS}>
+          <SettingRow
+            icon={Clock3}
+            iconClassName="bg-emerald-500"
+            title={t('settings.syncInterval.title')}
+            description={t('settings.syncInterval.description')}
+            control={
+              <Input
+                id="sync-interval-minutes"
+                className="h-7 w-24 px-2 text-xs"
+                type="number"
+                min={0}
+                max={1440}
+                aria-invalid={Boolean(form.formState.errors.syncIntervalMinutes)}
+                {...form.register('syncIntervalMinutes', { valueAsNumber: true })}
+              />
+            }
+            error={form.formState.errors.syncIntervalMinutes?.message}
+            invalid={Boolean(form.formState.errors.syncIntervalMinutes)}
+          />
+
+          <SettingRow
+            icon={CalendarRange}
+            iconClassName="bg-cyan-500"
+            title={t('settings.syncWindow.title')}
+            description={t('settings.syncWindow.description')}
+            control={
+              <Input
+                id="sync-window-days"
+                className="h-7 w-24 px-2 text-xs"
+                type="number"
+                min={1}
+                max={3650}
+                aria-invalid={Boolean(form.formState.errors.syncWindowDays)}
+                {...form.register('syncWindowDays', { valueAsNumber: true })}
+              />
+            }
+            error={form.formState.errors.syncWindowDays?.message}
+            invalid={Boolean(form.formState.errors.syncWindowDays)}
+          />
+        </FieldGroup>
+      </SettingsGroup>
+
+      <SettingsGroup title={t('settings.group.privacy')}>
+        <FieldGroup className={SETTINGS_LIST_CLASS}>
+          <Controller
+            control={form.control}
+            name="externalImagesBlocked"
+            render={({ field }) => (
+              <SettingRow
+                icon={ShieldCheck}
+                iconClassName="bg-orange-500"
+                title={t('settings.externalContent.title')}
+                description={t('settings.externalContent.description')}
+                control={
+                  <Switch
+                    id="external-images-blocked"
+                    size="sm"
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                }
+              />
+            )}
+          />
+        </FieldGroup>
+      </SettingsGroup>
+
+      {error ? <FieldError className="px-1 text-xs">{error}</FieldError> : null}
     </div>
   )
 }
@@ -624,110 +650,171 @@ function BackupSettings({
   syncSettings: BackupSyncSettings | null
   onExport: () => Promise<void>
   onImport: () => void
-  onSaveSync: (input: BackupSyncSettings) => Promise<void>
-  onTestSync: (input: BackupSyncSettings) => Promise<void>
+  onSaveSync: (input: BackupSyncSettings) => Promise<boolean>
+  onTestSync: (input: BackupSyncSettings) => Promise<boolean>
   onUploadSync: () => Promise<void>
   onDownloadSync: (input: BackupSyncSettings) => void
 }): React.JSX.Element {
   const { t } = useI18n()
-  const [draft, setDraft] = React.useState<BackupSyncSettings>(
-    () => syncSettings ?? { provider: 'none' }
-  )
+  const [configOpen, setConfigOpen] = React.useState(false)
   const disabled = Boolean(pending)
-  const remoteConfigured = Boolean(syncSettings && syncSettings.provider !== 'none')
+  const remoteSettings =
+    syncSettings && syncSettings.provider !== 'none' ? syncSettings : null
+  const RemoteIcon = remoteSettings?.provider === 'webdav' ? Server : Cloud
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-[540px] flex-col gap-3 p-3 sm:p-4">
-      <FieldGroup className="gap-2.5">
-        <Alert className="bg-muted/30 py-2 text-xs">
-          <KeyRound />
-          <AlertTitle>{t('settings.backup.securityTitle')}</AlertTitle>
-          <AlertDescription className="text-xs">
-            {t('settings.backup.securityDescription')}
-          </AlertDescription>
-        </Alert>
-
-        <div className="grid gap-2 sm:grid-cols-2">
-          <BackupActionButton
-            icon={Download}
-            title={t('settings.backup.export')}
-            loadingTitle={t('settings.backup.exporting')}
-            description={t('settings.backup.exportDescription')}
-            loading={pending === 'export'}
-            disabled={disabled}
-            onClick={onExport}
-          />
-          <BackupActionButton
-            icon={FileUp}
-            title={t('settings.backup.import')}
-            loadingTitle={t('settings.backup.importing')}
-            description={t('settings.backup.importDescription')}
-            loading={pending === 'import'}
-            disabled={disabled}
-            onClick={onImport}
-          />
-        </div>
-
-        <div className="flex flex-col gap-2 rounded-md border bg-card p-3">
-          <div className="flex flex-col gap-1">
-            <FieldLabel className="text-xs">{t('settings.backup.remoteTitle')}</FieldLabel>
-            <FieldDescription className="text-xs leading-snug">
-              {t('settings.backup.remoteDescription')}
-            </FieldDescription>
-          </div>
-
-          <BackupSyncFields
-            draft={draft}
-            currentSettings={syncSettings}
-            disabled={disabled}
-            onChange={setDraft}
-          />
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            <BackupActionButton
-              icon={Save}
-              title={t('settings.backup.remoteSave')}
-              loadingTitle={t('settings.backup.remoteSaving')}
-              description={t('settings.backup.remoteSaveDescription')}
-              loading={pending === 'saveRemote'}
-              disabled={disabled}
-              onClick={() => onSaveSync(draft)}
-            />
-            <BackupActionButton
-              icon={RefreshCcw}
-              title={t('settings.backup.remoteTest')}
-              loadingTitle={t('settings.backup.remoteTesting')}
-              description={t('settings.backup.remoteTestDescription')}
-              loading={pending === 'testRemote'}
-              disabled={disabled || draft.provider === 'none'}
-              onClick={() => onTestSync(draft)}
-            />
-            <BackupActionButton
-              icon={Upload}
-              title={t('settings.backup.remoteUpload')}
-              loadingTitle={t('settings.backup.remoteUploading')}
-              description={t('settings.backup.remoteUploadDescription')}
-              loading={pending === 'uploadRemote'}
-              disabled={disabled || !remoteConfigured}
-              onClick={onUploadSync}
-            />
+    <>
+      <div className="flex min-h-full w-full flex-col gap-3 p-3 sm:p-4">
+        <SettingsGroup title={t('settings.backup.localGroup')}>
+          <div className={SETTINGS_LIST_CLASS}>
             <BackupActionButton
               icon={Download}
-              title={t('settings.backup.remoteDownload')}
-              loadingTitle={t('settings.backup.remoteDownloading')}
-              description={t('settings.backup.remoteDownloadDescription')}
-              loading={pending === 'downloadRemote'}
-              disabled={disabled || draft.provider === 'none'}
-              onClick={() => onDownloadSync(draft)}
+              iconClassName="bg-blue-500"
+              title={t('settings.backup.export')}
+              loadingTitle={t('settings.backup.exporting')}
+              description={t('settings.backup.exportDescription')}
+              loading={pending === 'export'}
+              disabled={disabled}
+              onClick={onExport}
+            />
+            <BackupActionButton
+              icon={FileUp}
+              iconClassName="bg-emerald-500"
+              title={t('settings.backup.import')}
+              loadingTitle={t('settings.backup.importing')}
+              description={t('settings.backup.importDescription')}
+              loading={pending === 'import'}
+              disabled={disabled}
+              onClick={onImport}
             />
           </div>
-        </div>
+        </SettingsGroup>
+
+        <SettingsGroup title={t('settings.backup.remoteGroup')}>
+          <div className={SETTINGS_LIST_CLASS}>
+            {remoteSettings ? (
+              <button
+                type="button"
+                className="flex min-h-12 w-full min-w-0 items-center gap-2.5 px-3 py-2 text-left outline-none transition-colors hover:bg-muted/45 focus-visible:bg-muted/45"
+                disabled={disabled}
+                onClick={() => setConfigOpen(true)}
+              >
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-cyan-500 text-white shadow-sm">
+                  <RemoteIcon className="size-3.5" aria-hidden="true" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium">
+                    {remoteSettings.provider === 'webdav' ? 'WebDAV' : 'S3'}
+                  </div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {formatRemoteSettingsSummary(remoteSettings)}
+                  </div>
+                </div>
+                <span className="shrink-0 text-[11px] text-muted-foreground">
+                  {t('settings.backup.remoteEdit')}
+                </span>
+                <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/70" aria-hidden="true" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="flex min-h-12 w-full items-center gap-2.5 px-3 py-2 text-left outline-none transition-colors hover:bg-muted/45 focus-visible:bg-muted/45"
+                disabled={disabled}
+                onClick={() => setConfigOpen(true)}
+              >
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-cyan-500 text-white shadow-sm">
+                  <Cloud className="size-3.5" aria-hidden="true" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium">
+                    {t('settings.backup.remoteEmptyTitle')}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {t('settings.backup.remoteEmptyDescription')}
+                  </div>
+                </div>
+                <span className="shrink-0 text-[11px] text-primary">
+                  {t('settings.backup.remoteAdd')}
+                </span>
+                <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/70" aria-hidden="true" />
+              </button>
+            )}
+
+            {remoteSettings ? (
+              <>
+                <BackupActionButton
+                  icon={RefreshCcw}
+                  iconClassName="bg-teal-500"
+                  title={t('settings.backup.remoteTest')}
+                  loadingTitle={t('settings.backup.remoteTesting')}
+                  loading={pending === 'testRemote'}
+                  disabled={disabled}
+                  onClick={async () => {
+                    await onTestSync(remoteSettings)
+                  }}
+                />
+                <BackupActionButton
+                  icon={Upload}
+                  iconClassName="bg-blue-500"
+                  title={t('settings.backup.remoteUpload')}
+                  loadingTitle={t('settings.backup.remoteUploading')}
+                  loading={pending === 'uploadRemote'}
+                  disabled={disabled}
+                  onClick={onUploadSync}
+                />
+                <BackupActionButton
+                  icon={Download}
+                  iconClassName="bg-orange-500"
+                  title={t('settings.backup.remoteDownload')}
+                  loadingTitle={t('settings.backup.remoteDownloading')}
+                  loading={pending === 'downloadRemote'}
+                  disabled={disabled}
+                  onClick={() => onDownloadSync(remoteSettings)}
+                />
+              </>
+            ) : null}
+          </div>
+        </SettingsGroup>
+
+        <SettingsGroup title={t('settings.backup.securityGroup')}>
+          <div className={`${SETTINGS_LIST_CLASS} flex min-h-12 items-center gap-2.5 px-3 py-2`}>
+            <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-amber-500 text-white shadow-sm">
+              <KeyRound className="size-3.5" aria-hidden="true" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-xs font-medium">{t('settings.backup.securityTitle')}</div>
+              <div className="line-clamp-2 text-xs leading-tight text-muted-foreground">
+                {t('settings.backup.securityDescription')}
+              </div>
+            </div>
+          </div>
+        </SettingsGroup>
 
         {message ? <BackupMessageView message={message} /> : null}
-        {error ? <FieldError>{error}</FieldError> : null}
-      </FieldGroup>
-    </div>
+        {error && !configOpen ? <FieldError>{error}</FieldError> : null}
+      </div>
+
+      <BackupSyncConfigDialog
+        open={configOpen}
+        currentSettings={syncSettings}
+        saving={pending === 'saveRemote'}
+        testing={pending === 'testRemote'}
+        error={error}
+        onOpenChange={setConfigOpen}
+        onSave={onSaveSync}
+        onTest={onTestSync}
+      />
+    </>
   )
+}
+
+function formatRemoteSettingsSummary(settings: BackupSyncSettings): string {
+  if (settings.provider === 'webdav') return settings.remoteUrl
+  if (settings.provider === 's3') {
+    const endpoint = settings.endpoint ? `${settings.endpoint.replace(/\/$/, '')} · ` : ''
+    return `${endpoint}${settings.bucket}/${settings.key}`
+  }
+  return ''
 }
 
 function formatImportResultMessage(
@@ -776,45 +863,48 @@ function AboutSettings({
         : undefined
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-[540px] flex-col gap-3 p-3 sm:p-4">
-      <FieldGroup className="gap-2.5">
-        <SettingRow
-          icon={BadgeInfo}
-          title="OneMail"
-          description={
-            <span>
-              {t('settings.about.versionPrefix')}{' '}
-              {hasUpdate ? (
-                <UnderlineHover asChild>
-                  <button
-                    type="button"
-                    className="rounded-sm font-medium text-warning outline-none transition-colors hover:text-warning focus-visible:ring-2 focus-visible:ring-ring"
-                    title={versionTitle}
-                    onClick={() => void openExternalUrl(ONEMAIL_HOMEPAGE_URL)}
-                  >
-                    {version}
-                  </button>
-                </UnderlineHover>
-              ) : (
-                <span>{version}</span>
-              )}
-              {t('settings.about.versionSuffix')}
-            </span>
-          }
-          control={
-            <UnderlineHover asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void openExternalUrl('https://github.com/zhihui-hu/one-mail')}
-              >
-                <ExternalLink data-icon="inline-start" />
-                GitHub
-              </Button>
-            </UnderlineHover>
-          }
-        />
-      </FieldGroup>
+    <div className="flex min-h-full w-full flex-col gap-3 p-3 sm:p-4">
+      <SettingsGroup title={t('settings.about.appGroup')}>
+        <FieldGroup className={SETTINGS_LIST_CLASS}>
+          <SettingRow
+            icon={BadgeInfo}
+            iconClassName="bg-blue-500"
+            title="OneMail"
+            description={
+              <span>
+                {t('settings.about.versionPrefix')}{' '}
+                {hasUpdate ? (
+                  <UnderlineHover asChild>
+                    <button
+                      type="button"
+                      className="rounded-sm font-medium text-warning outline-none transition-colors hover:text-warning focus-visible:ring-2 focus-visible:ring-ring"
+                      title={versionTitle}
+                      onClick={() => void openExternalUrl(ONEMAIL_HOMEPAGE_URL)}
+                    >
+                      {version}
+                    </button>
+                  </UnderlineHover>
+                ) : (
+                  <span>{version}</span>
+                )}
+                {t('settings.about.versionSuffix')}
+              </span>
+            }
+            control={
+              <UnderlineHover asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void openExternalUrl('https://github.com/zhihui-hu/one-mail')}
+                >
+                  <ExternalLink data-icon="inline-start" />
+                  GitHub
+                </Button>
+              </UnderlineHover>
+            }
+          />
+        </FieldGroup>
+      </SettingsGroup>
     </div>
   )
 }
@@ -855,8 +945,26 @@ function BackupMessageView({ message }: { message: BackupMessage }): React.JSX.E
   )
 }
 
+function SettingsGroup({
+  title,
+  children
+}: {
+  title: string
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <section className="grid gap-1.5">
+      <div className="flex min-h-5 items-center gap-2 px-1">
+        <h3 className="text-[11px] font-medium text-muted-foreground">{title}</h3>
+      </div>
+      {children}
+    </section>
+  )
+}
+
 function SettingRow({
   icon: Icon,
+  iconClassName,
   title,
   description,
   control,
@@ -864,6 +972,7 @@ function SettingRow({
   invalid = false
 }: {
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
+  iconClassName: string
   title: string
   description: React.ReactNode
   control?: React.ReactNode
@@ -872,14 +981,16 @@ function SettingRow({
 }): React.JSX.Element {
   return (
     <Field data-invalid={invalid || undefined}>
-      <div className="grid gap-2 rounded-md border bg-card p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <div className="grid min-h-12 gap-2 px-3 py-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div className="flex min-w-0 gap-2.5">
-          <div className="mt-px flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground [&_svg]:size-3.5">
+          <div
+            className={`mt-px flex size-7 shrink-0 items-center justify-center rounded-md text-white shadow-sm [&_svg]:size-3.5 ${iconClassName}`}
+          >
             <Icon aria-hidden="true" />
           </div>
           <FieldContent>
-            <FieldLabel className="text-xs">{title}</FieldLabel>
-            <FieldDescription className="text-xs leading-snug">{description}</FieldDescription>
+            <FieldLabel className="text-xs font-medium">{title}</FieldLabel>
+            <FieldDescription className="text-xs leading-tight">{description}</FieldDescription>
             <FieldError className="text-xs">{error}</FieldError>
           </FieldContent>
         </div>
@@ -891,6 +1002,7 @@ function SettingRow({
 
 function BackupActionButton({
   icon: Icon,
+  iconClassName,
   title,
   loadingTitle,
   description,
@@ -899,33 +1011,41 @@ function BackupActionButton({
   onClick
 }: {
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>
+  iconClassName: string
   title: string
   loadingTitle: string
-  description: string
+  description?: string
   loading: boolean
   disabled: boolean
   onClick: () => void | Promise<void>
 }): React.JSX.Element {
   return (
-    <Button
-      className="h-auto justify-start px-3 py-2 text-left"
-      variant="outline"
-      size="sm"
+    <button
+      type="button"
+      className="flex min-h-12 w-full min-w-0 items-center gap-2.5 border-t border-border/60 px-3 py-2 text-left outline-none first:border-t-0 hover:bg-muted/45 focus-visible:bg-muted/45 disabled:pointer-events-none disabled:opacity-50"
       onClick={onClick}
       disabled={disabled}
     >
-      {loading ? (
-        <LoaderCircle data-icon="inline-start" className="animate-spin" />
-      ) : (
-        <Icon data-icon="inline-start" />
-      )}
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="truncate">{loading ? loadingTitle : title}</span>
-        <span className="text-xs font-normal text-muted-foreground">{description}</span>
+      <span
+        className={`flex size-7 shrink-0 items-center justify-center rounded-md text-white shadow-sm ${iconClassName}`}
+      >
+        <Icon className="size-3.5" aria-hidden="true" />
       </span>
-    </Button>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="truncate">
+          {loading ? <SweepShine>{loadingTitle}</SweepShine> : title}
+        </span>
+        {description ? (
+          <span className="text-xs font-normal text-muted-foreground">{description}</span>
+        ) : null}
+      </span>
+      <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/70" aria-hidden="true" />
+    </button>
   )
 }
+
+const SETTINGS_LIST_CLASS =
+  'gap-0 overflow-hidden rounded-lg bg-background shadow-sm ring-1 ring-black/5 dark:ring-white/8 [&>[data-slot=field]+[data-slot=field]]:border-t [&>[data-slot=field]+[data-slot=field]]:border-border/60'
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 function createSettingsSchema(t: (key: TranslationKey) => string) {

@@ -67,7 +67,7 @@ export function BackupSyncFields({
             id={`${idPrefix}-webdav-url`}
             label={t('settings.backup.webdavUrl')}
             value={draft.remoteUrl}
-            placeholder="https://dav.example.com/onemail-backup.sql"
+            placeholder="https://dav.example.com/onemail-backup.onemail"
             disabled={disabled}
             onChange={(value) => onChange({ ...draft, remoteUrl: value })}
           />
@@ -125,7 +125,7 @@ export function BackupSyncFields({
             id={`${idPrefix}-s3-key`}
             label={t('settings.backup.s3Key')}
             value={draft.key}
-            placeholder="onemail/onemail-backup.sql"
+            placeholder="onemail/onemail-backup.onemail"
             disabled={disabled}
             onChange={(value) => onChange({ ...draft, key: value })}
           />
@@ -179,6 +179,7 @@ function BackupTextField({
       </FieldLabel>
       <Input
         id={id}
+        className="h-7 px-2.5 text-xs"
         type={type}
         value={value}
         placeholder={placeholder}

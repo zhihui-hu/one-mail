@@ -1,7 +1,8 @@
 use std::{
+    collections::HashMap,
     fs,
     path::{Path, PathBuf},
-    sync::RwLock,
+    sync::{Arc, Mutex, RwLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -15,6 +16,7 @@ pub struct AppState {
     pub user_data_path: PathBuf,
     pub app_version: String,
     database_key: RwLock<String>,
+    oauth_refresh_locks: Mutex<HashMap<i64, Arc<tokio::sync::Mutex<()>>>>,
 }
 
 impl AppState {
@@ -36,7 +38,22 @@ impl AppState {
             user_data_path,
             app_version: app.package_info().version.to_string(),
             database_key: RwLock::new(database_key),
+            oauth_refresh_locks: Mutex::new(HashMap::new()),
         })
+    }
+
+    pub fn oauth_refresh_lock(
+        &self,
+        account_id: i64,
+    ) -> Result<Arc<tokio::sync::Mutex<()>>, String> {
+        let mut locks = self
+            .oauth_refresh_locks
+            .lock()
+            .map_err(|_| "无法获取 OAuth 续期锁。".to_string())?;
+        Ok(locks
+            .entry(account_id)
+            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
+            .clone())
     }
 
     pub fn database_key(&self) -> Result<String, String> {
