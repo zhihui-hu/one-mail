@@ -1,3 +1,4 @@
+mod ai;
 mod commands;
 mod db;
 mod mail_body;
@@ -34,6 +35,7 @@ pub fn run() {
             system::accounts_open_add_window,
             system::accounts_close_add_window,
             data::accounts::accounts_list,
+            data::accounts::accounts_discover_folders,
             data::accounts::accounts_create,
             data::accounts::accounts_update,
             data::accounts::accounts_reauthorize,
@@ -73,6 +75,10 @@ pub fn run() {
             data::settings::settings_upload_backup_sync,
             data::settings::settings_download_backup_sync,
             data::settings::settings_import_backup_from_remote,
+            data::ai::ai_settings_get,
+            data::ai::ai_settings_verify_and_save,
+            data::ai::ai_settings_clear,
+            data::ai::ai_chat,
             backup::settings_export_sql,
             backup::settings_import_sql,
             data::updates::updates_check,

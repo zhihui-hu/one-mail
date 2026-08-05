@@ -21,6 +21,7 @@ import {
   createAccountSchema,
   defaultAccountFormValues,
   getProviderPreset,
+  normalizeAccountPassword,
   providerPresets,
   resolveProviderPreset,
   type AccountFormValues,
@@ -30,6 +31,7 @@ import { AccountFormField } from './account-form-field'
 import { CommonAccountFields } from './common-account-fields'
 import { CustomImapAccountForm } from './custom-imap-account-form'
 import { GmailAccountForm } from './gmail-account-form'
+import { ImapFolderSelector } from './imap-folder-selector'
 import { OutlookAccountForm } from './outlook-account-form'
 
 const ACCOUNT_ADD_GUIDE_URL =
@@ -64,6 +66,7 @@ export function AddAccountForm({
     defaultValues: defaultAccountFormValues,
     mode: 'onSubmit'
   })
+  const currentAuthType = form.watch('authType')
 
   function handleKindChange(nextKind: string): void {
     const preset = getProviderPreset(nextKind as AccountKind)
@@ -75,6 +78,11 @@ export function AddAccountForm({
     form.setValue('imapHost', preset.imapHost)
     form.setValue('imapPort', preset.imapPort)
     form.setValue('imapSecurity', preset.imapSecurity)
+    form.setValue('smtpHost', preset.smtpHost ?? '')
+    form.setValue('smtpPort', preset.smtpPort ?? 465)
+    form.setValue('smtpSecurity', preset.smtpSecurity ?? 'ssl_tls')
+    form.setValue('smtpEnabled', preset.smtpEnabled ?? false)
+    form.setValue('syncFolders', [])
     form.clearErrors()
     setError(null)
   }
@@ -87,12 +95,13 @@ export function AddAccountForm({
     const authType = values.kind === 'gmail' ? values.authType : preset.authType
     const smtpAuthType =
       values.kind === 'gmail' ? (authType === 'oauth2' ? 'oauth2' : 'app_password') : preset.smtpAuthType
+    const smtpEnabled = values.kind === 'custom' ? values.smtpEnabled : preset.smtpEnabled
 
     try {
       await onSubmit({
         providerKey: preset.providerKey,
         email: values.email?.trim(),
-        password: values.password ? normalizePassword(values.password, authType) : undefined,
+        password: values.password ? normalizeAccountPassword(values.password, authType) : undefined,
         accountLabel: optionalText(values.accountLabel),
         authType,
         oauthAuthorizationMode: authType === 'oauth2' ? 'system_browser' : undefined,
@@ -100,11 +109,23 @@ export function AddAccountForm({
           values.kind === 'custom' ? values.imapHost?.trim() || preset.imapHost : preset.imapHost,
         imapPort: values.kind === 'custom' ? values.imapPort : preset.imapPort,
         imapSecurity: values.kind === 'custom' ? values.imapSecurity : preset.imapSecurity,
-        smtpHost: preset.smtpHost,
-        smtpPort: preset.smtpPort,
-        smtpSecurity: preset.smtpSecurity,
-        smtpAuthType,
-        smtpEnabled: preset.smtpEnabled
+        smtpHost:
+          values.kind === 'custom'
+            ? smtpEnabled
+              ? optionalText(values.smtpHost)
+              : undefined
+            : preset.smtpHost,
+        smtpPort: values.kind === 'custom' ? (smtpEnabled ? values.smtpPort : undefined) : preset.smtpPort,
+        smtpSecurity:
+          values.kind === 'custom'
+            ? smtpEnabled
+              ? values.smtpSecurity
+              : undefined
+            : preset.smtpSecurity,
+        smtpAuthType: values.kind === 'custom' ? (smtpEnabled ? authType : undefined) : smtpAuthType,
+        smtpEnabled,
+        syncFolders:
+          authType !== 'oauth2' && values.syncFolders.length > 0 ? values.syncFolders : undefined
       })
       form.reset(defaultAccountFormValues)
       setKind(defaultAccountFormValues.kind)
@@ -147,19 +168,22 @@ export function AddAccountForm({
           </Select>
         </AccountFormField>
 
-        <FieldGroup className="gap-2.5">{renderProviderForm(kind, form, t)}</FieldGroup>
+        <FieldGroup className="gap-2.5">
+          {renderProviderForm(kind, form, t)}
+          {currentAuthType !== 'oauth2' ? <ImapFolderSelector form={form} kind={kind} /> : null}
+        </FieldGroup>
 
       </div>
 
       <div className={footerClassName}>
         <Button type="submit" disabled={pending}>
           {pending
-            ? kind === 'outlook' || (kind === 'gmail' && form.watch('authType') === 'oauth2')
+            ? kind === 'outlook' || (kind === 'gmail' && currentAuthType === 'oauth2')
               ? t('account.add.waitingAuth')
               : t('common.testing')
             : kind === 'outlook'
               ? t('account.add.microsoftLogin')
-              : kind === 'gmail' && form.watch('authType') === 'oauth2'
+              : kind === 'gmail' && currentAuthType === 'oauth2'
                 ? t('account.add.googleLogin')
                 : t('account.add.saveAccount')}
         </Button>
@@ -252,11 +276,6 @@ function getAccountGuideText(
 function optionalText(value?: string): string | undefined {
   const text = value?.trim()
   return text ? text : undefined
-}
-
-function normalizePassword(value: string, authType: AccountCreateInput['authType']): string {
-  const password = value.trim()
-  return authType === 'app_password' ? password.replace(/\s+/g, '') : password
 }
 
 function formatAccountSubmitError(error: unknown, fallback: string, kind: AccountKind): string {

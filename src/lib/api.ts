@@ -4,6 +4,10 @@ import type {
   AccountCreatedEvent,
   AccountCreateInput,
   AccountUpdateInput,
+  AiChatInput,
+  AiChatResult,
+  AiSettings,
+  AiSettingsInput,
   AppSettings,
   AppUpdateCheckResult,
   AppUpdateStatus,
@@ -22,6 +26,8 @@ import type {
   MailMessageBody,
   MailMessageSummary,
   MailSendInput,
+  ImapFolder,
+  ImapFolderDiscoveryInput,
   MessageBulkReadStateResult,
   MessageReadStateUpdate,
   MessageFilterTag,
@@ -184,6 +190,12 @@ export async function createAccount(input: AccountCreateInput): Promise<MailAcco
   return window.api.accounts.create(input)
 }
 
+export async function discoverImapFolders(
+  input: ImapFolderDiscoveryInput
+): Promise<ImapFolder[]> {
+  return window.api.accounts.discoverFolders(input)
+}
+
 export async function openAddAccountWindow(): Promise<boolean> {
   return window.api.accounts.openAddWindow()
 }
@@ -237,6 +249,22 @@ export function onMailboxChanged(callback: (event: MailboxChangedEvent) => void)
 
 export async function saveSettings(input: SettingsUpdateInput): Promise<AppSettings> {
   return window.api.settings.update(input)
+}
+
+export async function loadAiSettings(): Promise<AiSettings> {
+  return window.api.ai.getSettings()
+}
+
+export async function verifyAndSaveAiSettings(input: AiSettingsInput): Promise<AiSettings> {
+  return window.api.ai.verifyAndSave(input)
+}
+
+export async function clearAiSettings(): Promise<AiSettings> {
+  return window.api.ai.clear()
+}
+
+export async function chatWithAi(input: AiChatInput): Promise<AiChatResult> {
+  return window.api.ai.chat(input)
 }
 
 export async function exportSqlBackup(): Promise<string | null> {

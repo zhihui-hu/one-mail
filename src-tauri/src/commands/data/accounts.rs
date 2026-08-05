@@ -1,8 +1,9 @@
 use rusqlite::{params, Connection, OptionalExtension};
+use serde::Deserialize;
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, State};
 
-use crate::{db, oauth, state::AppState};
+use crate::{db, mail_transport, oauth, state::AppState};
 
 use super::utils::{
     database_error, encrypt_password, optional_bool, optional_i64, optional_string, require_object,
@@ -13,6 +14,25 @@ use super::utils::{
 pub fn accounts_list(state: State<'_, AppState>) -> Result<Value, String> {
     let connection = db::open(&state)?;
     Ok(Value::Array(list_accounts(&connection)?))
+}
+
+#[tauri::command]
+pub async fn accounts_discover_folders(input: Value) -> Result<Value, String> {
+    let object = require_object(&input)?;
+    let email = required_string(object, "email", "邮箱地址不能为空。")?;
+    let password = required_string(object, "password", "请输入邮箱授权码或密码。")?;
+    let imap_host = required_string(object, "imapHost", "IMAP 地址不能为空。")?;
+    let imap_port = u16::try_from(required_i64(object, "imapPort", "IMAP 端口无效。")?)
+        .map_err(|_| "IMAP 端口无效。".to_string())?;
+    let imap_security = required_string(object, "imapSecurity", "IMAP 加密方式不能为空。")?;
+    let config = mail_transport::ImapConnectionConfig {
+        email: email.trim().to_string(),
+        imap_host: imap_host.trim().to_string(),
+        imap_port,
+        imap_security,
+    };
+    let folders = mail_transport::discover_folders(&config, &password).await?;
+    serde_json::to_value(folders).map_err(|error| format!("序列化 IMAP 文件夹失败：{error}"))
 }
 
 #[tauri::command]
@@ -66,6 +86,7 @@ pub async fn accounts_create(
     let smtp_auth_type =
         optional_string(object, "smtpAuthType").unwrap_or_else(|| auth_type.clone());
     let smtp_enabled = optional_bool(object, "smtpEnabled").unwrap_or(true);
+    let sync_folders = parse_sync_folders(object)?;
 
     let connection = db::open(&state)?;
     connection
@@ -124,6 +145,13 @@ pub async fn accounts_create(
         )
         .map_err(|error| format!("保存账号失败：{error}"))?;
     let account_id = connection.last_insert_rowid();
+    if let Err(error) = persist_sync_folders(&connection, account_id, &sync_folders) {
+        let _ = connection.execute(
+            "DELETE FROM onemail_mail_accounts WHERE account_id=?1",
+            [account_id],
+        );
+        return Err(error);
+    }
     if let Some(authorized) = authorized {
         let provider = oauth::provider_for(&provider_key)?;
         if let Err(error) = oauth::save_token(
@@ -147,6 +175,97 @@ pub async fn accounts_create(
         json!({ "account": account, "requestedSync": true }),
     );
     Ok(account)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SyncFolderInput {
+    path: String,
+    #[serde(default)]
+    delimiter: Option<String>,
+    #[serde(default)]
+    attributes: Vec<String>,
+    #[serde(default)]
+    is_selectable: Option<bool>,
+    #[serde(default)]
+    sync_enabled: bool,
+}
+
+fn parse_sync_folders(
+    object: &serde_json::Map<String, Value>,
+) -> Result<Vec<SyncFolderInput>, String> {
+    let Some(value) = object.get("syncFolders") else {
+        return Ok(Vec::new());
+    };
+    if value.is_null() {
+        return Ok(Vec::new());
+    }
+    serde_json::from_value(value.clone()).map_err(|error| format!("同步文件夹参数无效：{error}"))
+}
+
+fn persist_sync_folders(
+    connection: &Connection,
+    account_id: i64,
+    folders: &[SyncFolderInput],
+) -> Result<(), String> {
+    connection
+        .execute(
+            "INSERT OR IGNORE INTO onemail_mail_folders
+               (account_id,path,name,role,attributes_json,is_selectable,sync_enabled,sort_order)
+             VALUES (?1,'INBOX','INBOX','inbox','[]',1,1,0)",
+            [account_id],
+        )
+        .map_err(|error| format!("保存收件箱失败：{error}"))?;
+
+    for (index, folder) in folders.iter().enumerate() {
+        let raw_path = folder.path.as_str();
+        if raw_path.is_empty() {
+            return Err("同步文件夹路径不能为空。".to_string());
+        }
+        let is_inbox = raw_path.eq_ignore_ascii_case("INBOX");
+        let path = if is_inbox { "INBOX" } else { raw_path };
+        let selectable_from_attributes = mail_transport::is_folder_selectable(&folder.attributes);
+        let is_selectable = if is_inbox {
+            true
+        } else {
+            folder.is_selectable.unwrap_or(selectable_from_attributes) && selectable_from_attributes
+        };
+        let sync_enabled = is_inbox || (folder.sync_enabled && is_selectable);
+        let name = if is_inbox {
+            "INBOX".to_string()
+        } else {
+            mail_transport::decode_modified_utf7(path)
+        };
+        let role = mail_transport::folder_role(path, &folder.attributes);
+        let attributes_json = serde_json::to_string(&folder.attributes)
+            .map_err(|error| format!("序列化文件夹属性失败：{error}"))?;
+        let sort_order = if is_inbox { 0 } else { index as i64 + 1 };
+
+        connection
+            .execute(
+                "INSERT INTO onemail_mail_folders
+                   (account_id,path,name,delimiter,role,attributes_json,is_selectable,sync_enabled,sort_order)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
+                 ON CONFLICT(account_id,path) DO UPDATE SET
+                   name=excluded.name,delimiter=excluded.delimiter,role=excluded.role,
+                   attributes_json=excluded.attributes_json,is_selectable=excluded.is_selectable,
+                   sync_enabled=excluded.sync_enabled,sort_order=excluded.sort_order,
+                   updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')",
+                params![
+                    account_id,
+                    path,
+                    name,
+                    folder.delimiter,
+                    role,
+                    attributes_json,
+                    is_selectable,
+                    sync_enabled,
+                    sort_order
+                ],
+            )
+            .map_err(|error| format!("保存 IMAP 文件夹失败：{error}"))?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -367,4 +486,92 @@ fn map_account(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
         "lastSyncAt": row.get::<_, Option<String>>(18)?,
         "lastError": row.get::<_, Option<String>>(19)?
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{persist_sync_folders, SyncFolderInput};
+    use rusqlite::Connection;
+
+    #[test]
+    fn persists_all_discovered_folders_and_forces_canonical_inbox_sync() {
+        let connection = Connection::open_in_memory().expect("open database");
+        connection
+            .execute_batch(
+                "CREATE TABLE onemail_mail_folders (
+                   folder_id INTEGER PRIMARY KEY,
+                   account_id INTEGER NOT NULL,
+                   path TEXT NOT NULL,
+                   name TEXT NOT NULL,
+                   delimiter TEXT,
+                   role TEXT NOT NULL,
+                   attributes_json TEXT NOT NULL,
+                   is_selectable INTEGER NOT NULL,
+                   sync_enabled INTEGER NOT NULL,
+                   sort_order INTEGER NOT NULL,
+                   updated_at TEXT,
+                   UNIQUE(account_id,path)
+                 );",
+            )
+            .expect("create folder table");
+        let folders = vec![
+            SyncFolderInput {
+                path: "Inbox".to_string(),
+                delimiter: Some("/".to_string()),
+                attributes: vec!["\\Noselect".to_string()],
+                is_selectable: Some(false),
+                sync_enabled: false,
+            },
+            SyncFolderInput {
+                path: "Archive".to_string(),
+                delimiter: Some("/".to_string()),
+                attributes: vec!["\\Archive".to_string()],
+                is_selectable: Some(true),
+                sync_enabled: true,
+            },
+            SyncFolderInput {
+                path: "Parent".to_string(),
+                delimiter: Some("/".to_string()),
+                attributes: vec!["\\NonExistent".to_string()],
+                is_selectable: Some(true),
+                sync_enabled: true,
+            },
+            SyncFolderInput {
+                path: " Padded ".to_string(),
+                delimiter: None,
+                attributes: Vec::new(),
+                is_selectable: Some(true),
+                sync_enabled: false,
+            },
+        ];
+
+        persist_sync_folders(&connection, 7, &folders).expect("persist folders");
+
+        let rows = connection
+            .prepare(
+                "SELECT path,role,is_selectable,sync_enabled FROM onemail_mail_folders
+                 WHERE account_id=7 ORDER BY sort_order,path",
+            )
+            .expect("prepare folder query")
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                ))
+            })
+            .expect("query folders")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("collect folders");
+        assert_eq!(
+            rows,
+            vec![
+                ("INBOX".to_string(), "inbox".to_string(), 1, 1),
+                ("Archive".to_string(), "archive".to_string(), 1, 1),
+                ("Parent".to_string(), "custom".to_string(), 0, 0),
+                (" Padded ".to_string(), "custom".to_string(), 1, 0),
+            ]
+        );
+    }
 }

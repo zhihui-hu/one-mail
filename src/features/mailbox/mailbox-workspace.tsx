@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useNavigate, useParams } from 'react-router'
 import { AccountList } from '@renderer/components/account/account-list'
+import { AiAssistant } from '@renderer/components/ai/ai-assistant'
 import { AccountWarningDialog } from '@renderer/components/account/account-warning-dialog'
 import { EditAccountDialog } from '@renderer/components/account/edit-account-dialog'
 import { OutlookImapHelpDialog } from '@renderer/components/account/outlook-imap-help-dialog'
@@ -24,6 +25,10 @@ import {
 } from '@renderer/components/ui/resizable'
 import type {
   AccountUpdateInput,
+  AiChatInput,
+  AiChatResult,
+  AiSettings,
+  AiSettingsInput,
   AppSettings,
   AppUpdateStatus,
   BackupImportSource,
@@ -33,11 +38,14 @@ import type {
   SystemInfo
 } from '@renderer/shared/types'
 import {
+  chatWithAi,
+  clearAiSettings,
   deleteDraftMessage,
   deleteOutboxMessage,
   getAppUpdateStatus,
   installAppUpdate,
   loadAccounts,
+  loadAiSettings,
   loadInitialData,
   loadMessageDetail,
   loadMessages,
@@ -55,7 +63,8 @@ import {
   syncAllAccounts,
   syncAccount,
   toMessageQuery,
-  updateAccount
+  updateAccount,
+  verifyAndSaveAiSettings
 } from '@renderer/pages/mailbox/api'
 import { normalizeLocale, useI18n } from '@renderer/lib/i18n'
 import { ONEMAIL_HOMEPAGE_URL, hasAvailableUpdate } from '@renderer/lib/update-status'
@@ -107,6 +116,7 @@ export function MailboxWorkspace(): React.JSX.Element {
   const internalRouteRef = React.useRef<string | null>(null)
   const [accounts, setAccounts] = React.useState<Account[]>([])
   const [settings, setSettings] = React.useState<AppSettings | null>(null)
+  const [aiSettings, setAiSettings] = React.useState<AiSettings | null>(null)
   const [systemInfo, setSystemInfo] = React.useState<SystemInfo | null>(null)
   const [updateStatus, setUpdateStatus] = React.useState<AppUpdateStatus | null>(null)
   const [selectedAccountId, setSelectedAccountId] = React.useState('all')
@@ -260,9 +270,13 @@ export function MailboxWorkspace(): React.JSX.Element {
   )
 
   const reloadInitialData = React.useCallback(async () => {
-    const data = await loadInitialData()
+    const [data, nextAiSettings] = await Promise.all([
+      loadInitialData(),
+      loadAiSettings().catch(() => null)
+    ])
     setAccounts(data.accounts)
     setSettings(data.settings)
+    setAiSettings(nextAiSettings)
     setLocale(normalizeLocale(data.settings.locale))
     setSystemInfo(data.systemInfo)
     setSelectedAccountId(data.selectedAccountId)
@@ -279,10 +293,14 @@ export function MailboxWorkspace(): React.JSX.Element {
       try {
         setLoading(true)
         setError(null)
-        const data = await loadInitialData()
+        const [data, nextAiSettings] = await Promise.all([
+          loadInitialData(),
+          loadAiSettings().catch(() => null)
+        ])
         if (cancelled) return
         setAccounts(data.accounts)
         setSettings(data.settings)
+        setAiSettings(nextAiSettings)
         setLocale(normalizeLocale(data.settings.locale))
         setSystemInfo(data.systemInfo)
         setSelectedAccountId(data.selectedAccountId)
@@ -619,6 +637,31 @@ export function MailboxWorkspace(): React.JSX.Element {
     const nextSettings = await saveSettings(input)
     setSettings(nextSettings)
     setLocale(normalizeLocale(nextSettings.locale))
+  }
+
+  async function handleVerifyAiSettings(input: AiSettingsInput): Promise<AiSettings> {
+    const nextSettings = await verifyAndSaveAiSettings(input)
+    setAiSettings(nextSettings)
+    return nextSettings
+  }
+
+  async function handleClearAiSettings(): Promise<AiSettings> {
+    const nextSettings = await clearAiSettings()
+    setAiSettings(nextSettings)
+    return nextSettings
+  }
+
+  async function handleAiChat(input: AiChatInput): Promise<AiChatResult> {
+    try {
+      return await chatWithAi(input)
+    } catch (chatError) {
+      try {
+        setAiSettings(await loadAiSettings())
+      } catch {
+        setAiSettings(null)
+      }
+      throw chatError
+    }
   }
 
   function handleImportBackup(source: BackupImportDialogSource): void {
@@ -999,11 +1042,23 @@ export function MailboxWorkspace(): React.JSX.Element {
         settings={settings}
         systemInfo={systemInfo}
         updateStatus={updateStatus}
+        aiSettings={aiSettings}
         initialSection={settingsInitialSection}
         onOpenChange={(open) => setDialogKind(open ? 'settings' : null)}
         onSubmit={handleUpdateSettings}
+        onVerifyAi={handleVerifyAiSettings}
+        onClearAi={handleClearAiSettings}
         onImported={reloadInitialData}
       />
+      {aiSettings?.verified ? (
+        <AiAssistant
+          settings={aiSettings}
+          launcherHidden={composerOpen}
+          messageId={selectedMessage?.messageId}
+          messageSubject={selectedMessage?.subject}
+          onChat={handleAiChat}
+        />
+      ) : null}
       <BackupImportDialog
         open={backupImportDialogOpen}
         defaultSource={backupImportSource}

@@ -11,6 +11,7 @@ export const accountKinds = [
   'mail189',
   'sohu',
   'qq',
+  'tencentEnterprise',
   'outlook',
   'netease163',
   'sina',
@@ -163,6 +164,23 @@ export const providerPresets: ProviderPreset[] = [
     passwordLabelKey: 'account.form.authCode',
     passwordPlaceholderKey: 'account.form.qqPasswordPlaceholder',
     guideKey: 'account.add.guide.qq'
+  },
+  {
+    kind: 'tencentEnterprise',
+    labelKey: 'account.provider.tencentEnterprise',
+    providerKey: 'tencent_enterprise',
+    authType: 'password',
+    imapHost: 'imap.exmail.qq.com',
+    imapPort: 993,
+    imapSecurity: 'ssl_tls',
+    smtpHost: 'smtp.exmail.qq.com',
+    smtpPort: 465,
+    smtpSecurity: 'ssl_tls',
+    smtpAuthType: 'password',
+    smtpEnabled: true,
+    passwordLabelKey: 'account.form.passwordOrClientSpecificPassword',
+    passwordPlaceholderKey: 'account.form.tencentEnterprisePasswordPlaceholder',
+    guideKey: 'account.add.guide.tencentEnterprise'
   },
   {
     kind: 'netease163',
@@ -338,7 +356,12 @@ export const providerPresets: ProviderPreset[] = [
     authType: 'manual',
     imapHost: '',
     imapPort: 993,
-    imapSecurity: 'ssl_tls'
+    imapSecurity: 'ssl_tls',
+    smtpHost: '',
+    smtpPort: 465,
+    smtpSecurity: 'ssl_tls',
+    smtpAuthType: 'manual',
+    smtpEnabled: true
   }
 ]
 
@@ -357,7 +380,26 @@ export function createAccountSchema(t: (key: TranslationKey) => string) {
         .int(t('account.form.portInteger'))
         .min(1, t('account.form.portMin'))
         .max(65535, t('account.form.portMax')),
-      imapSecurity: z.enum(['ssl_tls', 'starttls', 'none'])
+      imapSecurity: z.enum(['ssl_tls', 'starttls', 'none']),
+      smtpHost: z.string().trim().optional(),
+      smtpPort: z.coerce
+        .number<number>(t('account.form.portRequired'))
+        .int(t('account.form.portInteger'))
+        .min(1, t('account.form.portMin'))
+        .max(65535, t('account.form.portMax')),
+      smtpSecurity: z.enum(['ssl_tls', 'starttls', 'none']),
+      smtpEnabled: z.boolean(),
+      syncFolders: z.array(
+        z.object({
+          path: z.string(),
+          name: z.string(),
+          delimiter: z.string().nullable().optional(),
+          role: z.string(),
+          attributes: z.array(z.string()),
+          isSelectable: z.boolean(),
+          syncEnabled: z.boolean()
+        })
+      )
     })
     .superRefine((value, context) => {
       if (
@@ -389,6 +431,14 @@ export function createAccountSchema(t: (key: TranslationKey) => string) {
           message: t('account.form.requiredImapHost')
         })
       }
+
+      if (value.smtpEnabled && !value.smtpHost?.trim()) {
+        context.addIssue({
+          code: 'custom',
+          path: ['smtpHost'],
+          message: t('account.form.requiredSmtpHost')
+        })
+      }
     })
 }
 
@@ -403,7 +453,12 @@ export const defaultAccountFormValues: AccountFormValues = {
   authType: 'oauth2',
   imapHost: 'imap.gmail.com',
   imapPort: 993,
-  imapSecurity: 'ssl_tls'
+  imapSecurity: 'ssl_tls',
+  smtpHost: 'smtp.gmail.com',
+  smtpPort: 465,
+  smtpSecurity: 'ssl_tls',
+  smtpEnabled: true,
+  syncFolders: []
 }
 
 export function getProviderPreset(kind: AccountKind): ProviderPreset {
@@ -431,4 +486,9 @@ export function resolveProviderPreset(kind: AccountKind, email?: string): Provid
   }
 
   return preset
+}
+
+export function normalizeAccountPassword(value: string, authType: AuthType): string {
+  const password = value.trim()
+  return authType === 'app_password' ? password.replace(/\s+/g, '') : password
 }

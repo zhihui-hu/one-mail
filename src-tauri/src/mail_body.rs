@@ -318,7 +318,7 @@ fn sanitize_html(value: &str) -> Option<String> {
     (!sanitized.is_empty()).then_some(sanitized)
 }
 
-fn html_to_text(value: &str) -> String {
+pub(crate) fn html_to_text(value: &str) -> String {
     Regex::new(r"(?is)<[^>]+>")
         .expect("valid html regex")
         .replace_all(value, " ")

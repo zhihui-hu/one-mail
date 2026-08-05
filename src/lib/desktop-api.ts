@@ -40,6 +40,7 @@ export function createDesktopApi(): OneMailApi {
     accounts: {
       list: () => command('accounts_list'),
       create: (input) => command('accounts_create', { input }),
+      discoverFolders: (input) => command('accounts_discover_folders', { input }),
       onCreated: (callback) =>
         subscribe<AccountCreatedEvent>('accounts/created', callback),
       openAddWindow: () => command('accounts_open_add_window'),
@@ -108,6 +109,12 @@ export function createDesktopApi(): OneMailApi {
       importSql: (operationId) => command('settings_import_sql', { operationId }),
       onBackupImportProgress: (callback) =>
         subscribe<BackupImportProgress>('settings/backupImportProgress', callback)
+    },
+    ai: {
+      getSettings: () => command('ai_settings_get'),
+      verifyAndSave: (input) => command('ai_settings_verify_and_save', { input }),
+      clear: () => command('ai_settings_clear'),
+      chat: (input) => command('ai_chat', { input })
     },
     updates: {
       check: () => command('updates_check'),

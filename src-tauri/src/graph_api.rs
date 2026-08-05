@@ -138,6 +138,7 @@ async fn sync_with_token(
         &connection,
         account.account_id,
         folder_id,
+        "INBOX",
         &messages,
         Some(&format!("{CURSOR_PREFIX}{delta_link}")),
         "graph-delta",

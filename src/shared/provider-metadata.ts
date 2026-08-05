@@ -4,6 +4,7 @@ export type NormalizedProviderKey =
   | 'outlook'
   | '163'
   | 'qq'
+  | 'tencentEnterprise'
   | 'aliyun'
   | 'aliyunEnterprise'
   | '189'
@@ -31,6 +32,7 @@ const PROVIDER_LOGO_METADATA: Record<string, ProviderLogoMetadata> = {
   outlook: { domain: 'outlook.com', fallback: 'O' },
   '163': { domain: '163.com', fallback: '易' },
   qq: { domain: 'qq.com', fallback: 'Q' },
+  tencentEnterprise: { domain: 'exmail.qq.com', fallback: '企' },
   aliyun: { domain: 'aliyun.com', fallback: '阿' },
   aliyunEnterprise: { domain: 'qiye.aliyun.com', fallback: '企' },
   '189': { domain: '189.cn', fallback: '天' },
@@ -68,6 +70,13 @@ export function normalizeProviderKey(providerKey?: string): NormalizedProviderKe
     normalized.includes('netease')
   ) {
     return '163'
+  }
+  if (
+    normalized.includes('tencent_enterprise') ||
+    normalized.includes('tencententerprise') ||
+    normalized.includes('exmail')
+  ) {
+    return 'tencentEnterprise'
   }
   if (normalized.includes('qq') || normalized.includes('foxmail')) return 'qq'
   if (

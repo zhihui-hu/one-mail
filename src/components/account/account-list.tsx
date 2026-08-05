@@ -373,6 +373,7 @@ function getProviderLabel(providerKey: string, t: (key: TranslationKey) => strin
     outlook: 'account.provider.outlook',
     '163': 'account.provider.netease163',
     qq: 'account.provider.qq',
+    tencentEnterprise: 'account.provider.tencentEnterprise',
     aliyun: 'account.provider.aliyun',
     aliyunEnterprise: 'account.provider.aliyunEnterprise',
     '189': 'account.provider.mail189',

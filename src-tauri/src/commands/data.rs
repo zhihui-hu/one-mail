@@ -1,4 +1,5 @@
 pub(crate) mod accounts;
+pub(crate) mod ai;
 pub(crate) mod compose;
 pub(crate) mod messages;
 pub(crate) mod settings;

@@ -13,6 +13,27 @@ export type CredentialState = 'pending' | 'stored' | 'invalid' | 'expired' | 're
 export type OAuthAuthorizationMode = 'system_browser' | 'copy_link'
 export type SyncMode = 'initial' | 'refresh'
 
+export type ImapFolder = {
+  path: string
+  name: string
+  delimiter?: string | null
+  role: string
+  attributes: string[]
+  isSelectable: boolean
+}
+
+export type ImapSyncFolder = ImapFolder & {
+  syncEnabled: boolean
+}
+
+export type ImapFolderDiscoveryInput = {
+  email: string
+  password: string
+  imapHost: string
+  imapPort: number
+  imapSecurity: ImapSecurity
+}
+
 export type MailAccount = {
   accountId: number
   providerKey: string
@@ -51,6 +72,7 @@ export type AccountCreateInput = {
   smtpSecurity?: SmtpSecurity
   smtpAuthType?: AuthType
   smtpEnabled?: boolean
+  syncFolders?: ImapSyncFolder[]
 }
 
 export type AccountCreatedEvent = {
@@ -375,6 +397,35 @@ export type AppSettings = {
 
 export type SettingsUpdateInput = Partial<AppSettings>
 
+export type AiSettings = {
+  baseUrl: string
+  model: string
+  apiKeyConfigured: boolean
+  verified: boolean
+  verifiedAt?: string
+}
+
+export type AiSettingsInput = {
+  baseUrl: string
+  model: string
+  apiKey?: string
+}
+
+export type AiChatMessage = {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export type AiChatInput = {
+  messageId?: number
+  messages: AiChatMessage[]
+}
+
+export type AiChatResult = {
+  message: AiChatMessage
+  model: string
+}
+
 export type BackupSyncProvider = 'none' | 'webdav' | 's3'
 
 export type BackupSyncSettings =
@@ -496,6 +547,7 @@ export type OneMailApi = {
   accounts: {
     list: () => Promise<MailAccount[]>
     create: (input: AccountCreateInput) => Promise<MailAccount>
+    discoverFolders: (input: ImapFolderDiscoveryInput) => Promise<ImapFolder[]>
     onCreated: (callback: (event: AccountCreatedEvent) => void) => () => void
     openAddWindow: () => Promise<boolean>
     closeAddWindow: () => Promise<boolean>
@@ -558,6 +610,12 @@ export type OneMailApi = {
     exportSql: () => Promise<string | null>
     importSql: (operationId?: string) => Promise<BackupImportResult>
     onBackupImportProgress: (callback: (progress: BackupImportProgress) => void) => () => void
+  }
+  ai: {
+    getSettings: () => Promise<AiSettings>
+    verifyAndSave: (input: AiSettingsInput) => Promise<AiSettings>
+    clear: () => Promise<AiSettings>
+    chat: (input: AiChatInput) => Promise<AiChatResult>
   }
   updates: {
     check: () => Promise<AppUpdateCheckResult>

@@ -16,6 +16,7 @@ pub struct AppState {
     pub user_data_path: PathBuf,
     pub app_version: String,
     database_key: RwLock<String>,
+    ai_operation_lock: tokio::sync::Mutex<()>,
     oauth_refresh_locks: Mutex<HashMap<i64, Arc<tokio::sync::Mutex<()>>>>,
 }
 
@@ -38,6 +39,7 @@ impl AppState {
             user_data_path,
             app_version: app.package_info().version.to_string(),
             database_key: RwLock::new(database_key),
+            ai_operation_lock: tokio::sync::Mutex::new(()),
             oauth_refresh_locks: Mutex::new(HashMap::new()),
         })
     }
@@ -54,6 +56,10 @@ impl AppState {
             .entry(account_id)
             .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
             .clone())
+    }
+
+    pub(crate) fn ai_operation_lock(&self) -> &tokio::sync::Mutex<()> {
+        &self.ai_operation_lock
     }
 
     pub fn database_key(&self) -> Result<String, String> {
