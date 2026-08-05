@@ -47,6 +47,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -84,15 +86,62 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build and publish Tauri bundles
+      - name: Sync package version from release tag
+        shell: bash
+        run: |
+          node -e "const fs=require('fs');const version=process.env.RELEASE_TAG.replace(/^v/,'');const path='package.json';const pkg=JSON.parse(fs.readFileSync(path,'utf8'));pkg.version=version;fs.writeFileSync(path,JSON.stringify(pkg,null,2)+'\n')"
+          node -e "const pkg=require('./package.json');console.log('Building OneMail v'+pkg.version)"
+
+      - name: Build Tauri bundles
         uses: tauri-apps/tauri-action@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: .
-          tagName: ${{ env.RELEASE_TAG }}
-          releaseName: OneMail ${{ env.RELEASE_TAG }}
-          releaseBody: Download the installer for your operating system and architecture.
-          releaseDraft: false
-          prerelease: false
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: onemail-[platform]-[arch]-[bundle]
           args: --target ${{ matrix.target }}
+
+  release:
+    name: Upload release assets
+    runs-on: ubuntu-24.04
+    needs: build
+    timeout-minutes: 20
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Prepare release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --title "OneMail $RELEASE_TAG" \
+              --notes "Download the installer for your operating system and architecture." \
+              --prerelease=false
+          else
+            gh release create "$RELEASE_TAG" \
+              --title "OneMail $RELEASE_TAG" \
+              --notes "Download the installer for your operating system and architecture." \
+              --target "$GITHUB_SHA" \
+              --verify-tag \
+              --draft
+          fi
+
+      - name: Upload all build artifacts to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          mapfile -t assets < <(find release-assets -type f | sort)
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "::error::No release assets found"
+            exit 1
+          fi
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$RELEASE_TAG" --draft=false --prerelease=false

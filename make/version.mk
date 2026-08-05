@@ -14,3 +14,10 @@ update-version:
 	@test -f package.json || { echo "package.json not found"; exit 1; }
 	@node -e "const fs=require('fs');const path='package.json';const pkg=JSON.parse(fs.readFileSync(path,'utf8'));pkg.version='$(VERSION)';fs.writeFileSync(path,JSON.stringify(pkg,null,2)+'\n')"
 	@echo "Updated package.json to $(VERSION)"
+
+# 创建并推送标签
+push-tag: update-version
+	@echo "Creating and pushing tag v$(VERSION)"
+	@git tag v$(VERSION) && \
+		git push origin v$(VERSION) || \
+		(echo "Failed to create and push tag"; exit 1)
