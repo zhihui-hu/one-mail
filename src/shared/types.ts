@@ -98,6 +98,7 @@ export type MailMessageSummary = {
   isStarred: boolean
   hasAttachments: boolean
   bodyStatus: 'none' | 'loading' | 'ready' | 'error'
+  bodyError?: string
   verificationCode?: string
 }
 

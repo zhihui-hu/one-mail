@@ -41,6 +41,7 @@ import { formatSyncNotice } from './use-sync-feedback'
 import { useI18n } from '@renderer/lib/i18n'
 import { cn } from '@renderer/lib/utils'
 import { hasAvailableUpdate } from '@renderer/lib/update-status'
+import { startWindowDrag } from '@renderer/lib/window-drag'
 
 export function NoAccountsBody({
   importingSql,
@@ -122,11 +123,11 @@ export function TitleBar({
 
   return (
     <header
-      data-tauri-drag-region
       className={cn(
         'app-titlebar app-drag-region native-sidebar-titlebar flex h-12 shrink-0 items-center border-b border-black/5 dark:border-white/8',
         placeActionsOnLeft ? 'justify-start' : 'justify-end'
       )}
+      onMouseDown={startWindowDrag}
     >
       <TooltipProvider>
         <div className="app-no-drag flex items-center gap-1">

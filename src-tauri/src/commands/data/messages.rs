@@ -102,7 +102,7 @@ pub fn messages_list(state: State<'_, AppState>, query: Option<Value>) -> Result
     let sql = format!(
         "SELECT m.message_id,m.account_id,m.folder_id,f.role,f.name,
                 m.rfc822_message_id,m.references_header,m.subject,m.from_name,m.from_email,
-                m.received_at,m.snippet,m.is_read,m.is_starred,m.has_attachments,m.body_status
+                m.received_at,m.snippet,m.is_read,m.is_starred,m.has_attachments,m.body_status,m.body_error
          FROM onemail_mail_messages m
          JOIN onemail_mail_folders f ON f.folder_id=m.folder_id
          LEFT JOIN onemail_message_bodies b ON b.message_id=m.message_id
@@ -351,7 +351,8 @@ fn map_message_summary(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
         "isRead": row.get::<_, i64>(12)? != 0,
         "isStarred": row.get::<_, i64>(13)? != 0,
         "hasAttachments": row.get::<_, i64>(14)? != 0,
-        "bodyStatus": row.get::<_, String>(15)?
+        "bodyStatus": row.get::<_, String>(15)?,
+        "bodyError": row.get::<_, Option<String>>(16)?
     }))
 }
 
@@ -363,7 +364,7 @@ pub(crate) fn get_message_detail(
         .query_row(
             "SELECT m.message_id,m.account_id,m.folder_id,f.role,f.name,
                     m.rfc822_message_id,m.references_header,m.subject,m.from_name,m.from_email,
-                    m.received_at,m.snippet,m.is_read,m.is_starred,m.has_attachments,m.body_status
+                    m.received_at,m.snippet,m.is_read,m.is_starred,m.has_attachments,m.body_status,m.body_error
              FROM onemail_mail_messages m
              JOIN onemail_mail_folders f ON f.folder_id=m.folder_id
              WHERE m.message_id=?1",

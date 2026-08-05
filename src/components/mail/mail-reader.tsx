@@ -11,6 +11,7 @@ import {
   Image,
   Paperclip,
   Reply,
+  RefreshCw,
   ShieldCheck,
   Trash2
 } from 'lucide-react'
@@ -47,6 +48,7 @@ import {
   TooltipTrigger
 } from '@renderer/components/ui/tooltip'
 import { useI18n, type TranslationKey } from '@renderer/lib/i18n'
+import { startWindowDrag } from '@renderer/lib/window-drag'
 
 const REMOTE_IMAGES_HELP_URL = 'https://huzhihui.com/blog/click-load-images-ip-leak-email-tracking'
 const MAIL_HTML_PREPARE_DELAY_MS = 40
@@ -148,7 +150,10 @@ export function MailReader({
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <header className="app-drag-region app-window-controls-inset native-toolbar flex h-12 shrink-0 items-center gap-2 border-b px-3 text-xs">
+      <header
+        className="app-drag-region app-window-controls-inset native-toolbar flex h-12 shrink-0 items-center gap-2 border-b px-3 text-xs"
+        onMouseDown={startWindowDrag}
+      >
         <div className="flex min-w-0 flex-1 items-center gap-2 text-muted-foreground">
           {canShowHtml ? (
             <>
@@ -165,7 +170,8 @@ export function MailReader({
         </div>
         <div className="app-no-drag flex shrink-0 items-center gap-1">
           {loadingBody ? (
-            <Button size="sm" variant="ghost" disabled>
+            <Button size="xs" variant="ghost" disabled>
+              <FileText data-icon="inline-start" />
               <SweepShine>{t('mail.reader.loadingBody')}</SweepShine>
             </Button>
           ) : canLoadFullContent ? (
@@ -182,9 +188,9 @@ export function MailReader({
               </Button>
             </>
           ) : !hasLoadedBody && message.bodyStatus === 'error' ? (
-            <Button size="sm" variant="ghost" onClick={onLoadBody}>
+            <Button size="xs" variant="ghost" onClick={onLoadBody}>
               <FileText data-icon="inline-start" />
-              {t('mail.reader.retryLoadBody')}
+              {t('common.retry')}
             </Button>
           ) : null}
           <TooltipProvider>
@@ -367,26 +373,28 @@ function MessageBody({
 
   if (!canShowHtml && !message.bodyLoaded) {
     return (
-      <section
-        role="button"
-        tabIndex={0}
-        className="flex min-h-40 cursor-pointer flex-col items-center justify-center gap-2 rounded-md border bg-card p-5 text-center text-xs text-muted-foreground outline-none transition-colors hover:bg-muted/40 focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={() => {
-          if (canLoadBody) onLoadBody()
-        }}
-        onKeyDown={(event) => {
-          if (!canLoadBody || (event.key !== 'Enter' && event.key !== ' ')) return
-          event.preventDefault()
-          onLoadBody()
-        }}
-      >
-        <FileText aria-hidden="true" />
-        <span>
-          {message.bodyStatus === 'error'
-            ? t('mail.reader.bodyErrorRetry')
-            : t('mail.reader.bodyClickLoad')}
+      <div className="flex w-full max-w-xl items-center gap-2 rounded-md border bg-card px-2.5 py-2 text-xs text-muted-foreground shadow-xs">
+        <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <FileText className="size-3.5" aria-hidden="true" />
         </span>
-      </section>
+        <span className="min-w-0 flex-1 truncate">
+          {message.bodyStatus === 'error'
+            ? message.bodyError || t('mail.reader.bodyErrorRetry')
+            : t('common.bodyNotLoaded')}
+        </span>
+        <Button
+          size="xs"
+          variant="outline"
+          className="shrink-0"
+          disabled={!canLoadBody}
+          onClick={onLoadBody}
+        >
+          <RefreshCw data-icon="inline-start" />
+          {message.bodyStatus === 'error'
+            ? t('common.retry')
+            : t('mail.reader.bodyClickLoad')}
+        </Button>
+      </div>
     )
   }
 
@@ -412,7 +420,14 @@ function MessageBodyLoading(): React.JSX.Element {
   const { t } = useI18n()
 
   return (
-    <section className="flex min-h-40 items-center justify-center rounded-md border bg-card p-5 text-xs text-muted-foreground">
+    <section
+      className="flex w-full max-w-xl items-center gap-2 rounded-md border bg-card px-2.5 py-2 text-xs text-muted-foreground shadow-xs"
+      role="status"
+      aria-live="polite"
+    >
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <FileText className="size-3.5" aria-hidden="true" />
+      </span>
       <SweepShine>{t('mail.reader.loadingBody')}</SweepShine>
     </section>
   )

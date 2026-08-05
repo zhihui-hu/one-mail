@@ -20,6 +20,7 @@ import {
 import { TooltipProvider } from '@renderer/components/ui/tooltip'
 import { useI18n, type AppLocale } from '@renderer/lib/i18n'
 import { cn } from '@renderer/lib/utils'
+import { startWindowDrag } from '@renderer/lib/window-drag'
 
 type MailListProps = {
   account: Account
@@ -112,8 +113,11 @@ export function MailList({
 
   return (
     <div className="relative flex h-full min-h-0 min-w-0 flex-col bg-background">
-      <header className="app-drag-region native-toolbar shrink-0 border-b">
-        <div className="app-no-drag flex h-12 items-center gap-3 px-4">
+      <header
+        className="app-drag-region native-toolbar shrink-0 border-b"
+        onMouseDown={startWindowDrag}
+      >
+        <div className="flex h-12 items-center gap-3 px-4">
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-[15px] font-semibold leading-5">
               {account.id === 'all' ? t('account.all.name') : account.name || account.address}
@@ -155,7 +159,7 @@ export function MailList({
             <CheckCheck aria-hidden="true" />
           </Button>
         </div>
-        <div className="app-no-drag flex items-center gap-2 px-3 pb-3">
+        <div className="flex items-center gap-2 px-3 pb-3">
           <InputGroup className="h-8 w-32 shrink-0 rounded-lg border-0 bg-black/5 shadow-[inset_0_0_0_1px_rgb(0_0_0/0.035)] dark:bg-white/8">
             <InputGroupAddon>
               <Search aria-hidden="true" />

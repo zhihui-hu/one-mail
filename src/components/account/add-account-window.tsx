@@ -5,6 +5,7 @@ import { AddAccountForm } from '@renderer/components/account/add-account-dialog'
 import { createAccount } from '@renderer/pages/accounts/new/api'
 import { useI18n } from '@renderer/lib/i18n'
 import type { AccountCreateInput } from '@renderer/shared/types'
+import { startWindowDrag } from '@renderer/lib/window-drag'
 
 export function AddAccountWindow(): React.JSX.Element {
   const { t } = useI18n()
@@ -20,8 +21,8 @@ export function AddAccountWindow(): React.JSX.Element {
   return (
     <main className="flex h-screen min-h-screen flex-col overflow-hidden bg-background text-foreground">
       <header
-        data-tauri-drag-region
         className="app-titlebar app-drag-region flex h-10 shrink-0 items-center border-b bg-background"
+        onMouseDown={startWindowDrag}
       >
         <h1 className="truncate text-sm font-semibold tracking-normal">{t('account.add.title')}</h1>
       </header>

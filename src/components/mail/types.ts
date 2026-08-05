@@ -58,6 +58,7 @@ export type Message = {
   body: string[]
   html?: string
   bodyStatus: 'none' | 'loading' | 'ready' | 'error'
+  bodyError?: string
   bodyLoaded: boolean
   detailLoaded: boolean
   externalImagesBlocked?: boolean

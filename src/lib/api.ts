@@ -363,7 +363,8 @@ export async function loadMessageBody(message: Message): Promise<Message> {
   if (!result.body) {
     return {
       ...message,
-      bodyStatus: result.error ? 'error' : message.bodyStatus
+      bodyStatus: result.error ? 'error' : message.bodyStatus,
+      bodyError: result.error
     }
   }
 
@@ -591,6 +592,7 @@ function toMessage(message: MailMessageSummary | MailMessageDetail): Message {
     body: bodyTextToParagraphs(bodyText),
     html: body?.bodyHtmlSanitized,
     bodyStatus: message.bodyStatus,
+    bodyError: message.bodyError,
     bodyLoaded: detailLoaded && message.bodyStatus === 'ready',
     detailLoaded,
     externalImagesBlocked: body?.externalImagesBlocked,
@@ -730,6 +732,7 @@ function mergeMessageBody(message: Message, body: MailMessageBody): Message {
     body: bodyTextToParagraphs(bodyText),
     html: body.bodyHtmlSanitized,
     bodyStatus: 'ready',
+    bodyError: undefined,
     bodyLoaded: true,
     detailLoaded: true,
     externalImagesBlocked: body.externalImagesBlocked

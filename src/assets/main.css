@@ -130,7 +130,6 @@
   }
 
   .app-drag-region {
-    -webkit-app-region: drag;
     cursor: grab;
   }
 
