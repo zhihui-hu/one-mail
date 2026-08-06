@@ -471,7 +471,11 @@ async fn refresh_access_token(
             Ok(token)
         }
         Err(error) => {
-            let _ = set_connection_state(state, account_id, "reauthorize", true, Some(&error));
+            if is_reauthorization_required(&error) {
+                let _ = set_connection_state(state, account_id, "reauthorize", true, Some(&error));
+            } else {
+                let _ = set_connection_state(state, account_id, "connected", false, Some(&error));
+            }
             Err(error)
         }
     }
@@ -599,10 +603,7 @@ async fn map_token_response<P: OAuthProvider + ?Sized>(
         .await
         .map_err(|error| format!("解析 {} OAuth 响应失败：{error}", provider.key()))?;
     if !status.is_success() || payload.error.is_some() {
-        return Err(payload
-            .error_description
-            .or(payload.error)
-            .unwrap_or_else(|| format!("HTTP {status}")));
+        return Err(token_response_error(&payload, status, provider.key()));
     }
     let access_token = payload
         .access_token
@@ -623,6 +624,37 @@ async fn map_token_response<P: OAuthProvider + ?Sized>(
     };
     provider.validate_token(&payload, &token)?;
     Ok(token)
+}
+
+fn token_response_error(
+    payload: &TokenResponse,
+    status: reqwest::StatusCode,
+    provider_key: &str,
+) -> String {
+    let code = payload
+        .error
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let description = payload
+        .error_description
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    match (code, description) {
+        (Some(code), Some(description)) if code != description => {
+            format!("{provider_key} OAuth 返回 {code}：{description}")
+        }
+        (Some(code), _) => format!("{provider_key} OAuth 返回 {code}"),
+        (_, Some(description)) => description.to_string(),
+        _ => format!("HTTP {status}"),
+    }
+}
+
+fn is_reauthorization_required(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.contains("invalid_grant") || error.contains("interaction_required")
 }
 
 fn should_refresh(token: &OAuthToken) -> bool {
@@ -760,7 +792,12 @@ fn decrypt_secret<T: for<'de> Deserialize<'de>>(
 
 #[cfg(test)]
 mod tests {
-    use super::{is_email, normalize_scope, MicrosoftOAuthProvider, OAuthProvider, Serializer};
+    use reqwest::StatusCode;
+
+    use super::{
+        is_email, is_reauthorization_required, normalize_scope, token_response_error,
+        MicrosoftOAuthProvider, OAuthProvider, Serializer, TokenResponse,
+    };
 
     #[test]
     fn microsoft_authorization_prompts_for_account_selection() {
@@ -779,5 +816,40 @@ mod tests {
             normalize_scope(" HTTPS://EXAMPLE.COM/ "),
             "https://example.com/"
         );
+    }
+
+    #[test]
+    fn token_response_error_preserves_oauth_error_code() {
+        let payload = TokenResponse {
+            access_token: None,
+            id_token: None,
+            refresh_token: None,
+            token_type: None,
+            expires_in: None,
+            scope: None,
+            error: Some("invalid_grant".to_string()),
+            error_description: Some("refresh token expired".to_string()),
+        };
+
+        assert_eq!(
+            token_response_error(&payload, StatusCode::BAD_REQUEST, "google"),
+            "google OAuth 返回 invalid_grant：refresh token expired"
+        );
+    }
+
+    #[test]
+    fn only_provider_interaction_errors_require_reauthorization() {
+        assert!(is_reauthorization_required(
+            "google OAuth 返回 invalid_grant：refresh token expired"
+        ));
+        assert!(is_reauthorization_required(
+            "microsoft OAuth 返回 interaction_required：AADSTS50076"
+        ));
+        assert!(!is_reauthorization_required(
+            "刷新 google OAuth 失败：error sending request"
+        ));
+        assert!(!is_reauthorization_required(
+            "解析 microsoft OAuth 响应失败：expected value"
+        ));
     }
 }

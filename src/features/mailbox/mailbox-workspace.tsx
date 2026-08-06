@@ -35,6 +35,7 @@ import type {
   BackupImportResult,
   BackupSyncDownloadResult,
   SettingsUpdateInput,
+  SyncAllRunResult,
   SystemInfo
 } from '@renderer/shared/types'
 import {
@@ -107,6 +108,42 @@ function formatImportResultMessage(
       messages: result.messageCount ?? 0
     }
   )
+}
+
+type SyncAllFailure = {
+  accountId: number
+  error: string
+}
+
+function getSyncAllFailureMessage(result: SyncAllRunResult, accounts: Account[]): string | null {
+  const items = result.accounts
+
+  const failures = items
+    .map((item): SyncAllFailure | null => {
+      const { accountId, error, ok } = item
+      if (typeof accountId !== 'number' || ok !== false) return null
+      return {
+        accountId,
+        error: typeof error === 'string' && error.trim() ? error : '同步失败'
+      }
+    })
+    .filter((item): item is SyncAllFailure => Boolean(item))
+
+  if (failures.length === 0) return null
+
+  const accountNames = new Map(
+    accounts
+      .filter((account) => typeof account.accountId === 'number')
+      .map((account) => [account.accountId, account.name || account.address || account.id])
+  )
+  const examples = failures.slice(0, 3).map((failure) => {
+    const accountName = accountNames.get(failure.accountId) ?? `#${failure.accountId}`
+    return `${accountName}：${failure.error}`
+  })
+  const remainingCount = failures.length - examples.length
+  const remainingText = remainingCount > 0 ? `；另有 ${remainingCount} 个账号失败` : ''
+
+  return `${failures.length} 个账号同步失败：${examples.join('；')}${remainingText}`
 }
 
 export function MailboxWorkspace(): React.JSX.Element {
@@ -599,15 +636,20 @@ export function MailboxWorkspace(): React.JSX.Element {
     setError(null)
 
     try {
+      let syncFailureMessage: string | null = null
       if (account.accountId) {
         await syncAccount(account.accountId)
       } else if (account.id === 'all') {
-        await syncAllAccounts()
+        const syncResult = await syncAllAccounts()
+        syncFailureMessage = getSyncAllFailureMessage(syncResult, accounts)
       } else {
         return
       }
       await refreshAccounts()
       await refreshMessages(selectedAccountId, filters, searchKeyword)
+      if (syncFailureMessage) {
+        throw new Error(syncFailureMessage)
+      }
       finishSyncing(account.id, 'success', {
         label: account.name,
         startedAt,

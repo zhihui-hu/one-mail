@@ -348,6 +348,23 @@ export type SyncStatus = {
   lastStartedAt?: string
 }
 
+export type AccountSyncRunItem = {
+  accountId: number
+  email?: string
+  displayName?: string | null
+  accountLabel?: string | null
+  ok?: boolean
+  skipped?: boolean
+  error?: string
+  status?: AccountStatus
+  connectionStatus?: AccountConnectionStatus
+}
+
+export type SyncAllRunResult = {
+  mode?: SyncMode | null
+  accounts: AccountSyncRunItem[]
+}
+
 export type AccountSyncRunResult = SyncStatus & {
   accountId: number
   scannedCount: number
@@ -586,7 +603,7 @@ export type OneMailApi = {
     onSent: (callback: (result: MailSendResult) => void) => () => void
   }
   sync: {
-    startAll: (mode?: SyncMode) => Promise<SyncStatus>
+    startAll: (mode?: SyncMode) => Promise<SyncAllRunResult>
     startAccount: (accountId: number, mode?: SyncMode) => Promise<AccountSyncRunResult>
     status: () => Promise<SyncStatus>
     onMailboxChanged: (callback: (event: MailboxChangedEvent) => void) => () => void

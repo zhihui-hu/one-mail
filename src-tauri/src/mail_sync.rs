@@ -14,31 +14,103 @@ use crate::{db, mail_transport, state::AppState};
 const MAX_MESSAGES: usize = 200;
 
 pub async fn sync_all(state: &AppState, mode: Option<&str>) -> Result<Value, String> {
-    let account_ids = {
+    let accounts = {
         let connection = db::open(state)?;
         let mut statement = connection
             .prepare(
-                "SELECT account_id FROM onemail_mail_accounts
+                "SELECT account_id,email,account_label,display_name,auth_type,status,connection_state,last_error
+                 FROM onemail_mail_accounts
                  WHERE sync_enabled=1 AND status <> 'disabled'
                  ORDER BY sort_order,account_id",
             )
             .map_err(|error| format!("读取同步账号失败：{error}"))?;
-        let ids = statement
-            .query_map([], |row| row.get::<_, i64>(0))
+        let accounts = statement
+            .query_map([], |row| {
+                Ok(SyncAccountTarget {
+                    account_id: row.get(0)?,
+                    email: row.get(1)?,
+                    account_label: row.get(2)?,
+                    display_name: row.get(3)?,
+                    auth_type: row.get(4)?,
+                    status: row.get(5)?,
+                    connection_state: row.get(6)?,
+                    last_error: row.get(7)?,
+                })
+            })
             .map_err(|error| format!("读取同步账号失败：{error}"))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| format!("读取同步账号失败：{error}"))?;
-        ids
+        accounts
     };
 
-    let mut results = Vec::with_capacity(account_ids.len());
-    for account_id in account_ids {
-        results.push(match sync_account(state, account_id, mode).await {
+    let mut results = Vec::with_capacity(accounts.len());
+    for account in accounts {
+        if let Some(error) = sync_skip_reason(&account) {
+            results.push(account_sync_skipped(&account, error));
+            continue;
+        }
+        results.push(match sync_account(state, account.account_id, mode).await {
             Ok(value) => value,
-            Err(error) => json!({ "accountId": account_id, "ok": false, "error": error }),
+            Err(error) => json!({ "accountId": account.account_id, "ok": false, "error": error }),
         });
     }
     Ok(json!({ "mode": mode, "accounts": results }))
+}
+
+#[derive(Clone, Debug)]
+struct SyncAccountTarget {
+    account_id: i64,
+    email: String,
+    account_label: Option<String>,
+    display_name: Option<String>,
+    auth_type: String,
+    status: String,
+    connection_state: String,
+    last_error: Option<String>,
+}
+
+fn sync_skip_reason(account: &SyncAccountTarget) -> Option<String> {
+    if account.connection_state == "reauthorize" {
+        return Some(
+            non_empty_error(account)
+                .unwrap_or_else(|| "账号需要重新授权，请点击重新授权后再刷新。".to_string()),
+        );
+    }
+
+    if account.status == "auth_error" {
+        return Some(non_empty_error(account).unwrap_or_else(|| {
+            if account.auth_type == "oauth2" {
+                "账号需要重新授权，请点击重新授权后再刷新。".to_string()
+            } else {
+                "账号凭据无效，请编辑账号并更新授权码或应用密码后再刷新。".to_string()
+            }
+        }));
+    }
+
+    None
+}
+
+fn non_empty_error(account: &SyncAccountTarget) -> Option<String> {
+    account
+        .last_error
+        .as_deref()
+        .map(str::trim)
+        .filter(|error| !error.is_empty())
+        .map(str::to_string)
+}
+
+fn account_sync_skipped(account: &SyncAccountTarget, error: String) -> Value {
+    json!({
+        "accountId": account.account_id,
+        "email": account.email,
+        "accountLabel": account.account_label,
+        "displayName": account.display_name,
+        "status": account.status,
+        "connectionStatus": account.connection_state,
+        "ok": false,
+        "skipped": true,
+        "error": error
+    })
 }
 
 pub async fn sync_account(
@@ -559,7 +631,7 @@ fn parse_from(value: Option<&str>) -> (Option<String>, Option<String>) {
 
 #[cfg(test)]
 mod tests {
-    use super::uid_validity_changed;
+    use super::{sync_skip_reason, uid_validity_changed, SyncAccountTarget};
 
     #[test]
     fn only_resets_a_folder_when_known_uid_validity_changes() {
@@ -567,5 +639,40 @@ mod tests {
         assert!(!uid_validity_changed(Some("123"), Some("123")));
         assert!(!uid_validity_changed(None, Some("123")));
         assert!(!uid_validity_changed(Some("123"), None));
+    }
+
+    #[test]
+    fn skips_accounts_that_already_need_attention() {
+        let mut account = SyncAccountTarget {
+            account_id: 1,
+            email: "owner@example.com".to_string(),
+            account_label: None,
+            display_name: None,
+            auth_type: "oauth2".to_string(),
+            status: "active".to_string(),
+            connection_state: "reauthorize".to_string(),
+            last_error: Some("refresh token 不存在".to_string()),
+        };
+        assert_eq!(
+            sync_skip_reason(&account),
+            Some("refresh token 不存在".to_string())
+        );
+
+        account.status = "auth_error".to_string();
+        account.connection_state = "connected".to_string();
+        account.last_error = None;
+        assert_eq!(
+            sync_skip_reason(&account),
+            Some("账号需要重新授权，请点击重新授权后再刷新。".to_string())
+        );
+
+        account.auth_type = "app_password".to_string();
+        assert_eq!(
+            sync_skip_reason(&account),
+            Some("账号凭据无效，请编辑账号并更新授权码或应用密码后再刷新。".to_string())
+        );
+
+        account.status = "active".to_string();
+        assert_eq!(sync_skip_reason(&account), None);
     }
 }

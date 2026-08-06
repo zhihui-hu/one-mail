@@ -35,8 +35,8 @@ import type {
   MailboxChangedEvent,
   OutboxMessage as SharedOutboxMessage,
   SettingsUpdateInput,
+  SyncAllRunResult,
   SyncMode,
-  SyncStatus,
   SystemInfo
 } from '@renderer/shared/types'
 import { normalizeMailBodyText, normalizeMailDisplayText } from '@renderer/shared/mail-text'
@@ -231,7 +231,7 @@ export async function syncAccount(
   return startAccount(accountId, mode)
 }
 
-export async function syncAllAccounts(mode: SyncMode = 'refresh'): Promise<SyncStatus> {
+export async function syncAllAccounts(mode: SyncMode = 'refresh'): Promise<SyncAllRunResult> {
   const startAll = window.api?.sync?.startAll
   if (typeof startAll !== 'function') {
     throw new Error(getStaticTranslation('sync.serviceUnavailable'))

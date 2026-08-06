@@ -17,6 +17,9 @@ use crate::{db, oauth, state::AppState};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const DISCOVER_TIMEOUT: Duration = Duration::from_secs(30);
+const IMAP_CLIENT_NAME: &str = "OneMail";
+const IMAP_CLIENT_VENDOR: &str = "Huzhihui";
+const IMAP_CLIENT_SUPPORT_URL: &str = "https://github.com/zhihui-hu/one-mail";
 
 pub(crate) trait ImapStream:
     AsyncRead + AsyncWrite + Unpin + Send + std::fmt::Debug
@@ -203,11 +206,13 @@ async fn connect_with_password(
     config: &ImapConnectionConfig,
     password: &str,
 ) -> Result<ImapSession, String> {
-    connect_client(config)
+    let mut session = connect_client(config)
         .await?
         .login(&config.email, password)
         .await
-        .map_err(|(error, _)| format!("IMAP 登录认证失败：{error}"))
+        .map_err(|(error, _)| format!("IMAP 登录认证失败：{error}"))?;
+    announce_imap_client_id(&mut session).await;
+    Ok(session)
 }
 
 pub async fn fetch_raw_message(
@@ -432,7 +437,10 @@ async fn authenticate_xoauth2(
             access_token,
         };
         match client.authenticate("XOAUTH2", auth).await {
-            Ok(session) => return Ok(session),
+            Ok(mut session) => {
+                announce_imap_client_id(&mut session).await;
+                return Ok(session);
+            }
             Err((error, next_client)) => {
                 last_error = Some(error.to_string());
                 client = next_client;
@@ -440,6 +448,19 @@ async fn authenticate_xoauth2(
         }
     }
     Err(last_error.unwrap_or_else(|| "XOAUTH2 认证失败。".to_string()))
+}
+
+async fn announce_imap_client_id(session: &mut ImapSession) {
+    let _ = session.id(imap_client_identification()).await;
+}
+
+fn imap_client_identification() -> [(&'static str, Option<&'static str>); 4] {
+    [
+        ("name", Some(IMAP_CLIENT_NAME)),
+        ("version", Some(env!("CARGO_PKG_VERSION"))),
+        ("vendor", Some(IMAP_CLIENT_VENDOR)),
+        ("support-url", Some(IMAP_CLIENT_SUPPORT_URL)),
+    ]
 }
 
 fn is_xoauth2_auth_error(error: &str) -> bool {
@@ -517,7 +538,10 @@ impl Authenticator for XOAuth2<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_modified_utf7, folder_role, is_folder_selectable};
+    use super::{
+        decode_modified_utf7, folder_role, imap_client_identification, is_folder_selectable,
+        IMAP_CLIENT_NAME, IMAP_CLIENT_SUPPORT_URL, IMAP_CLIENT_VENDOR,
+    };
 
     #[test]
     fn decodes_modified_utf7_mailbox_names_and_literal_ampersands() {
@@ -550,5 +574,18 @@ mod tests {
         assert!(!is_folder_selectable(&["\\Noselect".to_string()]));
         assert!(!is_folder_selectable(&["\\nonexistent".to_string()]));
         assert!(is_folder_selectable(&["\\HasChildren".to_string()]));
+    }
+
+    #[test]
+    fn builds_imap_client_identification_for_id_command() {
+        assert_eq!(
+            imap_client_identification(),
+            [
+                ("name", Some(IMAP_CLIENT_NAME)),
+                ("version", Some(env!("CARGO_PKG_VERSION"))),
+                ("vendor", Some(IMAP_CLIENT_VENDOR)),
+                ("support-url", Some(IMAP_CLIENT_SUPPORT_URL)),
+            ]
+        );
     }
 }

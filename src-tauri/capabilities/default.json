@@ -5,6 +5,7 @@
   "windows": ["main", "add-account"],
   "permissions": [
     "core:default",
+    "core:window:allow-start-dragging",
     "notification:default",
     "opener:default"
   ]
