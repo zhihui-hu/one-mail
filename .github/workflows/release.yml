@@ -7,15 +7,15 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing release tag to build (for example, v26.731.1200)
+        description: Existing version tag to build (for example, v26.85.2357)
         required: true
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 env:
@@ -23,41 +23,117 @@ env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
+  prepare:
+    name: Prepare draft release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      release_id: ${{ steps.release.outputs.result }}
+    steps:
+      - name: Create or reuse draft release
+        id: release
+        uses: actions/github-script@v8
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        with:
+          script: |
+            const tag = process.env.RELEASE_TAG
+
+            if (!/^v\d+\.\d+\.\d+$/.test(tag)) {
+              throw new Error(`Invalid release tag: ${tag}`)
+            }
+
+            try {
+              await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: `tags/${tag}`,
+              })
+            } catch (error) {
+              if (error.status === 404) {
+                throw new Error(`Release tag does not exist: ${tag}`)
+              }
+              throw error
+            }
+
+            try {
+              const { data: release } = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag,
+              })
+
+              if (!release.draft) {
+                throw new Error(`Release ${tag} is already published; refusing to overwrite it`)
+              }
+
+              return release.id
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error
+              }
+            }
+
+            const { data: release } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: `OneMail ${tag}`,
+              body: 'Download the installer for your operating system and architecture.',
+              draft: true,
+              prerelease: false,
+              generate_release_notes: true,
+            })
+
+            return release.id
+
   build:
     name: Build ${{ matrix.name }}
+    needs: prepare
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          - name: macOS arm64
+          - name: macOS arm64 DMG
             os: macos-15
             target: aarch64-apple-darwin
-          - name: macOS x64
+            bundles: dmg
+            apple_signing_identity: '-'
+          - name: macOS x64 DMG
             os: macos-15-intel
             target: x86_64-apple-darwin
-          - name: Windows x64
+            bundles: dmg
+            apple_signing_identity: '-'
+          - name: Windows x64 NSIS
             os: windows-latest
             target: x86_64-pc-windows-msvc
-          - name: Linux x64
-            os: ubuntu-24.04
+            bundles: nsis
+          - name: Linux x64 AppImage and DEB
+            os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout release tag
+        uses: actions/checkout@v7
         with:
           ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.34.1
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -67,6 +143,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -88,59 +169,41 @@ jobs:
       - name: Sync package version from release tag
         shell: bash
         run: |
-          node -e "const fs=require('fs');const version=process.env.RELEASE_TAG.replace(/^v/,'');const path='package.json';const pkg=JSON.parse(fs.readFileSync(path,'utf8'));pkg.version=version;fs.writeFileSync(path,JSON.stringify(pkg,null,2)+'\n')"
+          node -e "const fs=require('fs');const version=process.env.RELEASE_TAG.slice(1);const path='package.json';const pkg=JSON.parse(fs.readFileSync(path,'utf8'));pkg.version=version;fs.writeFileSync(path,JSON.stringify(pkg,null,2)+'\n')"
           node -e "const pkg=require('./package.json');console.log('Building OneMail v'+pkg.version)"
 
-      - name: Build Tauri bundles
+      - name: Build and upload Tauri bundles
         uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_SIGNING_IDENTITY: ${{ matrix.apple_signing_identity || '' }}
         with:
+          releaseId: ${{ needs.prepare.outputs.release_id }}
+          tagName: ${{ env.RELEASE_TAG }}
           projectPath: .
-          uploadWorkflowArtifacts: true
-          workflowArtifactNamePattern: onemail-[platform]-[arch]-[bundle]
-          args: --target ${{ matrix.target }}
+          uploadUpdaterJson: false
+          args: --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
 
-  release:
-    name: Upload release assets
-    runs-on: ubuntu-24.04
-    needs: build
-    timeout-minutes: 20
+  publish:
+    name: Publish release
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
     steps:
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
+      - name: Publish completed release
+        uses: actions/github-script@v8
+        env:
+          RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
         with:
-          path: release-assets
-
-      - name: Prepare release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG" \
-              --title "OneMail $RELEASE_TAG" \
-              --notes "Download the installer for your operating system and architecture." \
-              --prerelease=false
-          else
-            gh release create "$RELEASE_TAG" \
-              --title "OneMail $RELEASE_TAG" \
-              --notes "Download the installer for your operating system and architecture." \
-              --target "$GITHUB_SHA" \
-              --verify-tag \
-              --draft
-          fi
-
-      - name: Upload all build artifacts to release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          mapfile -t assets < <(find release-assets -type f | sort)
-          if [ "${#assets[@]}" -eq 0 ]; then
-            echo "::error::No release assets found"
-            exit 1
-          fi
-          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
-
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "$RELEASE_TAG" --draft=false --prerelease=false
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: Number(process.env.RELEASE_ID),
+              draft: false,
+              prerelease: false,
+            })

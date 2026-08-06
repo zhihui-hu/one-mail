@@ -5,6 +5,7 @@ import { ResponsiveDialog } from '@renderer/components/responsive-dialog'
 import { SweepShine } from '@renderer/components/sweep-shine'
 import { Alert, AlertTitle } from '@renderer/components/ui/alert'
 import { Button } from '@renderer/components/ui/button'
+import { Switch } from '@renderer/components/ui/switch'
 import { Textarea } from '@renderer/components/ui/textarea'
 import {
   Tooltip,
@@ -39,8 +40,10 @@ export function AiAssistant({
   const [open, setOpen] = React.useState(false)
   const [messages, setMessages] = React.useState<AiChatMessage[]>([])
   const [draft, setDraft] = React.useState('')
+  const [attachCurrentMessage, setAttachCurrentMessage] = React.useState(false)
   const [pending, setPending] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const attachMessageSwitchId = React.useId()
   const launcherRef = React.useRef<HTMLButtonElement | null>(null)
   const messagesEndRef = React.useRef<HTMLDivElement | null>(null)
   const requestTokenRef = React.useRef(0)
@@ -49,6 +52,7 @@ export function AiAssistant({
     requestTokenRef.current += 1
     setMessages([])
     setDraft('')
+    setAttachCurrentMessage(false)
     setPending(false)
     setError(null)
   }, [messageId, settings.baseUrl, settings.model, settings.verifiedAt])
@@ -57,7 +61,10 @@ export function AiAssistant({
     messagesEndRef.current?.scrollIntoView({ block: 'nearest' })
   }, [messages, pending])
 
-  async function sendMessage(content: string): Promise<void> {
+  async function sendMessage(
+    content: string,
+    includeCurrentMessage = attachCurrentMessage
+  ): Promise<void> {
     const normalizedContent = content.trim()
     if (!normalizedContent || pending) return
 
@@ -72,7 +79,7 @@ export function AiAssistant({
 
     try {
       const result = await onChat({
-        ...(messageId ? { messageId } : {}),
+        ...(includeCurrentMessage && messageId !== undefined ? { messageId } : {}),
         messages: requestMessages
       })
       if (requestTokenRef.current !== requestToken) return
@@ -85,9 +92,23 @@ export function AiAssistant({
     }
   }
 
-  const contextLabel = messageId
-    ? messageSubject?.trim() || t('common.noSubject')
-    : t('ai.chat.noContext')
+  function sendQuickPrompt(prompt: string): void {
+    setAttachCurrentMessage(true)
+    void sendMessage(prompt, true)
+  }
+
+  const hasCurrentMessage = messageId !== undefined
+  const currentMessageSubject = messageSubject?.trim() || t('common.noSubject')
+  const contextLabel = !hasCurrentMessage
+    ? t('ai.chat.noContext')
+    : attachCurrentMessage
+      ? t('ai.chat.contextAttached', { subject: currentMessageSubject })
+      : t('ai.chat.contextDetached')
+  const attachMessageDescription = !hasCurrentMessage
+    ? t('ai.chat.attachUnavailable')
+    : attachCurrentMessage
+      ? t('ai.chat.attachEnabled', { subject: currentMessageSubject })
+      : t('ai.chat.attachDisabled')
   const serviceHost = getServiceHost(settings.baseUrl)
 
   function handleOpenChange(nextOpen: boolean): void {
@@ -129,11 +150,34 @@ export function AiAssistant({
         bodyClassName="h-full min-h-0 overflow-hidden"
       >
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]">
-          <div className="border-b bg-muted/25 px-4 py-2 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{t('ai.chat.context')}</span>{' '}
-            <span className="break-words" title={contextLabel}>
-              {contextLabel}
-            </span>
+          <div className="grid gap-2 border-b bg-muted/25 px-4 py-2 text-xs text-muted-foreground">
+            <div aria-live="polite">
+              <span className="font-medium text-foreground">{t('ai.chat.context')}</span>{' '}
+              <span className="break-words" title={contextLabel}>
+                {contextLabel}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <label
+                  className="font-medium text-foreground"
+                  htmlFor={attachMessageSwitchId}
+                >
+                  {t('ai.chat.attachCurrentMessage')}
+                </label>
+                <p id={`${attachMessageSwitchId}-description`} className="break-words">
+                  {attachMessageDescription}
+                </p>
+              </div>
+              <Switch
+                id={attachMessageSwitchId}
+                size="sm"
+                checked={attachCurrentMessage}
+                disabled={!hasCurrentMessage || pending}
+                aria-describedby={`${attachMessageSwitchId}-description`}
+                onCheckedChange={setAttachCurrentMessage}
+              />
+            </div>
           </div>
 
           <div
@@ -149,7 +193,9 @@ export function AiAssistant({
                 </div>
                 <div className="text-sm font-medium">{t('ai.chat.emptyTitle')}</div>
                 <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-                  {messageId ? t('ai.chat.emptyWithContext') : t('ai.chat.emptyDescription')}
+                  {attachCurrentMessage
+                    ? t('ai.chat.emptyWithContext')
+                    : t('ai.chat.emptyDescription')}
                 </p>
                 <p className="max-w-sm text-[11px] leading-relaxed text-muted-foreground">
                   {t('ai.chat.privacyNotice')}
@@ -182,18 +228,18 @@ export function AiAssistant({
             <div className="flex flex-wrap gap-1.5" aria-label={t('ai.chat.quickActions')}>
               <QuickPromptButton
                 label={t('ai.chat.quickSummary')}
-                disabled={!messageId || pending}
-                onClick={() => void sendMessage(t('ai.chat.quickSummaryPrompt'))}
+                disabled={!hasCurrentMessage || pending}
+                onClick={() => sendQuickPrompt(t('ai.chat.quickSummaryPrompt'))}
               />
               <QuickPromptButton
                 label={t('ai.chat.quickTasks')}
-                disabled={!messageId || pending}
-                onClick={() => void sendMessage(t('ai.chat.quickTasksPrompt'))}
+                disabled={!hasCurrentMessage || pending}
+                onClick={() => sendQuickPrompt(t('ai.chat.quickTasksPrompt'))}
               />
               <QuickPromptButton
                 label={t('ai.chat.quickReply')}
-                disabled={!messageId || pending}
-                onClick={() => void sendMessage(t('ai.chat.quickReplyPrompt'))}
+                disabled={!hasCurrentMessage || pending}
+                onClick={() => sendQuickPrompt(t('ai.chat.quickReplyPrompt'))}
               />
             </div>
             {error ? (

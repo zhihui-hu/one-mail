@@ -172,7 +172,7 @@ impl OAuthProvider for MicrosoftOAuthProvider {
     fn authorization_parameters(&self, params: &mut Serializer<String>) {
         params.append_pair("response_type", "code");
         params.append_pair("response_mode", "query");
-        params.append_pair("prompt", "consent");
+        params.append_pair("prompt", "select_account");
     }
 
     async fn mailbox_email(&self, token: &OAuthToken) -> Result<String, String> {
@@ -760,7 +760,16 @@ fn decrypt_secret<T: for<'de> Deserialize<'de>>(
 
 #[cfg(test)]
 mod tests {
-    use super::{is_email, normalize_scope};
+    use super::{is_email, normalize_scope, MicrosoftOAuthProvider, OAuthProvider, Serializer};
+
+    #[test]
+    fn microsoft_authorization_prompts_for_account_selection() {
+        let provider = MicrosoftOAuthProvider;
+        let mut params = Serializer::new(String::new());
+        provider.authorization_parameters(&mut params);
+
+        assert!(params.finish().contains("prompt=select_account"));
+    }
 
     #[test]
     fn validates_mailbox_claims_without_accepting_non_emails() {

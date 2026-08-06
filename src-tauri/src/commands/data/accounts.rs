@@ -398,18 +398,11 @@ pub async fn accounts_reauthorize(
         return Err("当前账号不是 OAuth 认证账号。".to_string());
     }
     let authorized = oauth::authorize(&provider_key, Some(&current_email), Some(&app)).await?;
-    let normalized_email = authorized.email.to_lowercase();
+    validate_reauthorization_email(&current_email, &authorized.email)?;
     let provider = oauth::provider_for(&provider_key)?;
     let refresh_lock = state.oauth_refresh_lock(account_id)?;
     let _refresh_guard = refresh_lock.lock().await;
     let connection = db::open(&state)?;
-    connection
-        .execute(
-            "UPDATE onemail_mail_accounts SET email=?2,normalized_email=?3,credential_state='pending',
-               status='active',last_error=NULL,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE account_id=?1",
-            params![account_id, authorized.email, normalized_email],
-        )
-        .map_err(|error| format!("更新授权账号失败：{error}"))?;
     oauth::save_token(
         &state,
         account_id,
@@ -418,6 +411,18 @@ pub async fn accounts_reauthorize(
         provider.scopes(),
     )?;
     get_account(&connection, account_id)?.ok_or_else(|| format!("账号不存在：{account_id}"))
+}
+
+fn validate_reauthorization_email(
+    current_email: &str,
+    authorized_email: &str,
+) -> Result<(), String> {
+    let expected_email = current_email.trim();
+    if expected_email.eq_ignore_ascii_case(authorized_email.trim()) {
+        return Ok(());
+    }
+
+    Err(format!("请使用 {expected_email} 完成授权。"))
 }
 
 fn list_accounts(connection: &Connection) -> Result<Vec<Value>, String> {
@@ -490,8 +495,17 @@ fn map_account(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
 
 #[cfg(test)]
 mod tests {
-    use super::{persist_sync_folders, SyncFolderInput};
+    use super::{persist_sync_folders, validate_reauthorization_email, SyncFolderInput};
     use rusqlite::Connection;
+
+    #[test]
+    fn reauthorization_requires_the_same_mailbox() {
+        assert!(validate_reauthorization_email("Owner@Example.com", " owner@example.com ").is_ok());
+        assert_eq!(
+            validate_reauthorization_email("owner@example.com", "other@example.com"),
+            Err("请使用 owner@example.com 完成授权。".to_string())
+        );
+    }
 
     #[test]
     fn persists_all_discovered_folders_and_forces_canonical_inbox_sync() {

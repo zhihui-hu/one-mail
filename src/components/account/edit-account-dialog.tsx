@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { KeyRound } from 'lucide-react'
 import * as React from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
@@ -22,19 +23,22 @@ type EditAccountDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (input: AccountUpdateInput) => Promise<void>
+  onReauthorize: (account: Account) => Promise<void>
 }
 
 export function EditAccountDialog({
   account,
   open,
   onOpenChange,
-  onSubmit
+  onSubmit,
+  onReauthorize
 }: EditAccountDialogProps): React.JSX.Element {
   const { t } = useI18n()
   const editAccountSchema = React.useMemo(() => createEditAccountSchema(t), [t])
-  const [pending, setPending] = React.useState(false)
+  const [pendingAction, setPendingAction] = React.useState<'save' | 'reauthorize' | null>(null)
   const [error, setError] = React.useState<string | null>(null)
   const isOAuthAccount = account.authType === 'oauth2'
+  const pending = pendingAction !== null
   const form = useForm<EditAccountValues>({
     resolver: zodResolver(editAccountSchema),
     defaultValues: {
@@ -63,13 +67,13 @@ export function EditAccountDialog({
   async function handleSubmit(values: EditAccountValues): Promise<void> {
     if (!account.accountId) return
 
-    setPending(true)
+    setPendingAction('save')
     setError(null)
 
     const password = optionalText(values.password)
     if (!isOAuthAccount && account.credentialState !== 'stored' && !password) {
       setError(t('account.edit.missingCredentialError'))
-      setPending(false)
+      setPendingAction(null)
       return
     }
 
@@ -82,7 +86,27 @@ export function EditAccountDialog({
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : t('account.add.saveError'))
     } finally {
-      setPending(false)
+      setPendingAction(null)
+    }
+  }
+
+  async function handleReauthorize(): Promise<void> {
+    if (!account.accountId) return
+
+    setPendingAction('reauthorize')
+    setError(null)
+
+    try {
+      await onReauthorize(account)
+      onOpenChange(false)
+    } catch (reauthorizeError) {
+      setError(
+        reauthorizeError instanceof Error
+          ? reauthorizeError.message
+          : t('account.warning.reauthorizeError')
+      )
+    } finally {
+      setPendingAction(null)
     }
   }
 
@@ -103,8 +127,22 @@ export function EditAccountDialog({
           <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={pending}>
             {t('common.cancel')}
           </Button>
+          {isOAuthAccount ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                void handleReauthorize()
+              }}
+              disabled={pending || !account.accountId}
+            >
+              <KeyRound data-icon="inline-start" />
+              {pendingAction === 'reauthorize'
+                ? t('account.warning.authorizing')
+                : t('account.warning.primaryReauthorize')}
+            </Button>
+          ) : null}
           <Button type="submit" form="edit-account-form" disabled={pending || !account.accountId}>
-            {pending
+            {pendingAction === 'save'
               ? isOAuthAccount
                 ? t('common.saving')
                 : t('common.testing')

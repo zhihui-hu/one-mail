@@ -31,8 +31,6 @@ export function getAccountWarning(account: Account, t: Translate): AccountWarnin
     (account.connectionStatus === 'reauthorize' ||
       (lastError ? isMicrosoftReauthorizationError(lastError) : false))
 
-  if (status === 'syncing') return null
-
   if (isOAuthAccount && lastError && isMicrosoftImapAccessError(lastError)) {
     return withTooltip(t, {
       label: t('account.warning.label'),
@@ -81,6 +79,8 @@ export function getAccountWarning(account: Account, t: Translate): AccountWarnin
           ]
     })
   }
+
+  if (status === 'syncing') return null
 
   if (status === 'network_error') {
     return withTooltip(t, {

@@ -117,6 +117,7 @@ export function MailboxWorkspace(): React.JSX.Element {
   const [accounts, setAccounts] = React.useState<Account[]>([])
   const [settings, setSettings] = React.useState<AppSettings | null>(null)
   const [aiSettings, setAiSettings] = React.useState<AiSettings | null>(null)
+  const [aiSessionEpoch, setAiSessionEpoch] = React.useState(0)
   const [systemInfo, setSystemInfo] = React.useState<SystemInfo | null>(null)
   const [updateStatus, setUpdateStatus] = React.useState<AppUpdateStatus | null>(null)
   const [selectedAccountId, setSelectedAccountId] = React.useState('all')
@@ -285,6 +286,11 @@ export function MailboxWorkspace(): React.JSX.Element {
     clearSelection()
     replaceMessages(data.messages, { selectFirst: true })
   }, [clearSelection, replaceMessages, setLocale])
+
+  const reloadAfterBackupImport = React.useCallback(async () => {
+    await reloadInitialData()
+    setAiSessionEpoch((current) => current + 1)
+  }, [reloadInitialData])
 
   React.useEffect(() => {
     let cancelled = false
@@ -675,7 +681,7 @@ export function MailboxWorkspace(): React.JSX.Element {
     result: BackupImportResult | BackupSyncDownloadResult,
     source: BackupImportSource
   ): Promise<void> {
-    await reloadInitialData()
+    await reloadAfterBackupImport()
     toast.success(formatImportResultMessage(result, source, t))
   }
 
@@ -1005,6 +1011,7 @@ export function MailboxWorkspace(): React.JSX.Element {
           if (!open) setDialogAccountId(null)
         }}
         onSubmit={handleUpdateAccount}
+        onReauthorize={handleReauthorizeAccount}
       />
       <RemoveAccountDialog
         account={dialogAccount ?? selectedAccount}
@@ -1048,10 +1055,11 @@ export function MailboxWorkspace(): React.JSX.Element {
         onSubmit={handleUpdateSettings}
         onVerifyAi={handleVerifyAiSettings}
         onClearAi={handleClearAiSettings}
-        onImported={reloadInitialData}
+        onImported={reloadAfterBackupImport}
       />
       {aiSettings?.verified ? (
         <AiAssistant
+          key={aiSessionEpoch}
           settings={aiSettings}
           launcherHidden={composerOpen}
           messageId={selectedMessage?.messageId}
